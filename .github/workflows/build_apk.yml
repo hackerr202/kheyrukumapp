@@ -23,11 +23,12 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate Android project scaffolding if missing
+      - name: Generate clean modern Android v2 scaffolding
         run: |
-          if [ ! -d "android" ]; then
-            flutter create . --platforms=android --org=com.kheyrukum.portal
-          fi
+          rm -rf android
+          flutter create . --platforms=android --org=com.kheyrukum.portal
+          # Add system notification permissions for off-app push alerts
+          sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.VIBRATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>' android/app/src/main/AndroidManifest.xml
 
       - name: Install dependencies
         run: flutter pub get
