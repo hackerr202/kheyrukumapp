@@ -30,6 +30,19 @@ jobs:
           # Add system notification and internet permissions for background push alerts
           sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.VIBRATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>' android/app/src/main/AndroidManifest.xml
 
+          # Force AndroidX dependencies to compileSdk 34 compatible versions
+          cat << 'EOF' >> android/build.gradle
+          allprojects {
+              configurations.all {
+                  resolutionStrategy {
+                      force 'androidx.browser:browser:1.8.0'
+                      force 'androidx.core:core:1.13.1'
+                      force 'androidx.core:core-ktx:1.13.1'
+                  }
+              }
+          }
+          EOF
+
       - name: Install dependencies
         run: flutter pub get
 
