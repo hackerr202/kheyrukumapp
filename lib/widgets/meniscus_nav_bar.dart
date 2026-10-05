@@ -101,17 +101,34 @@ class _MeniscusNavBarState extends State<MeniscusNavBar>
     super.dispose();
   }
 
+  double _getSidePadding(double totalWidth) {
+    // Provides room for dock rounded corners (20px) + shoulder reach (~31px)
+    return (totalWidth * 0.15).clamp(50.0, 56.0);
+  }
+
   double _getTabCenterX(int index, double totalWidth) {
-    final tabWidth = totalWidth / widget.items.length;
-    return tabWidth * index + (tabWidth / 2);
+    if (widget.items.length <= 1) return totalWidth / 2;
+    final sidePadding = _getSidePadding(totalWidth);
+    final availableTrack = totalWidth - (sidePadding * 2);
+    final step = availableTrack / (widget.items.length - 1);
+    return sidePadding + (step * index);
   }
 
   int _getNearestTabIndex(double x) {
     if (_barWidth <= 0) return widget.selectedIndex;
-    final tabWidth = _barWidth / widget.items.length;
-    int index = (x / tabWidth).floor();
-    return index.clamp(0, widget.items.length - 1);
+    int nearest = 0;
+    double minDiff = double.infinity;
+    for (int i = 0; i < widget.items.length; i++) {
+      final cx = _getTabCenterX(i, _barWidth);
+      final diff = (cx - x).abs();
+      if (diff < minDiff) {
+        minDiff = diff;
+        nearest = i;
+      }
+    }
+    return nearest;
   }
+
 
   void _snapToIndex(int targetIndex, {double velocity = 0.0}) {
     if (_barWidth <= 0) return;
@@ -253,44 +270,41 @@ class _MeniscusNavBarState extends State<MeniscusNavBar>
                   ),
                 ),
 
-                // 2. INACTIVE TAB ICONS (Only icons, NO text labels!)
-                Positioned(
-                  top: topOverflow,
-                  left: 0,
-                  right: 0,
-                  height: dockHeight,
-                  child: Row(
-                    children: List.generate(widget.items.length, (index) {
-                      final item = widget.items[index];
-                      final tabCenterX = _getTabCenterX(index, totalWidth);
-                      final distFromBead = (currentBeadX - tabCenterX).abs();
+                // 2. INACTIVE TAB ICONS (Positioned at exact tabCenterX coordinates)
+                ...List.generate(widget.items.length, (index) {
+                  final item = widget.items[index];
+                  final tabCenterX = _getTabCenterX(index, totalWidth);
+                  final distFromBead = (currentBeadX - tabCenterX).abs();
 
-                      // Fade out icon completely when active or near bead
-                      final iconOpacity = (distFromBead / 32.0).clamp(0.0, 1.0);
+                  // Fade out icon completely when active or near bead
+                  final iconOpacity = (distFromBead / 32.0).clamp(0.0, 1.0);
 
-                      return Expanded(
-                        child: InkWell(
-                          onTap: () => _onTabTapped(index),
-                          splashColor: Colors.transparent,
-                          highlightColor: Colors.transparent,
-                          child: Center(
-                            child: Padding(
-                              padding: const EdgeInsets.only(top: 2.0),
-                              child: Opacity(
-                                opacity: iconOpacity * 0.7,
-                                child: Icon(
-                                  item.icon,
-                                  size: 22,
-                                  color: const Color(0xFF8E8E9F),
-                                ),
-                              ),
+                  return Positioned(
+                    left: tabCenterX - 24,
+                    top: topOverflow,
+                    width: 48,
+                    height: dockHeight,
+                    child: InkWell(
+                      onTap: () => _onTabTapped(index),
+                      splashColor: Colors.transparent,
+                      highlightColor: Colors.transparent,
+                      child: Center(
+                        child: Padding(
+                          padding: const EdgeInsets.only(top: 2.0),
+                          child: Opacity(
+                            opacity: iconOpacity * 0.7,
+                            child: Icon(
+                              item.icon,
+                              size: 22,
+                              color: const Color(0xFF8E8E9F),
                             ),
                           ),
                         ),
-                      );
-                    }),
-                  ),
-                ),
+                      ),
+                    ),
+                  );
+                }),
+
 
                 // 3. ACTIVE TAB LABEL (Directly underneath the bead inside the dock)
                 Positioned(

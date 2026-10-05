@@ -2,7 +2,9 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/announcement.dart';
+import 'push_notification_service.dart';
 import 'supabase_service.dart';
+
 
 /// Service to handle real-time announcement broadcasting, streaming,
 /// and instant notification delivery for Kheyrukum.
@@ -101,11 +103,20 @@ class AnnouncementService {
       final res = await client.from('announcements').insert(newRecord).select().single();
       final announcement = Announcement.fromJson(res);
       _incomingAlertController.add(announcement);
+
+      // Trigger off-app background push notifications to all users' devices
+      await PushNotificationService.instance.dispatchPushNotificationToAll(
+        title: title,
+        body: content,
+        data: {'announcement_id': announcement.id, 'category': category},
+      );
+
       return {'success': true, 'data': announcement};
     } catch (e) {
       debugPrint('[AnnouncementService] Error posting announcement: $e');
       return {'success': false, 'error': e.toString()};
     }
+
   }
 
   /// 3. Delete an announcement (Admin)

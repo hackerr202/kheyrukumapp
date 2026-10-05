@@ -448,4 +448,27 @@ EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
 
+-- ------------------------------------------------------------------------------
+-- 13. USER DEVICE TOKENS (FOR OFF-APP CLOSED-APP PUSH NOTIFICATIONS)
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.user_device_tokens (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    device_token TEXT NOT NULL,
+    device_type TEXT DEFAULT 'android', -- 'android' or 'ios'
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    updated_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(user_id, device_token)
+);
+
+ALTER TABLE public.user_device_tokens ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can manage their own device tokens"
+    ON public.user_device_tokens FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+
 

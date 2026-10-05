@@ -49,11 +49,13 @@ class MeniscusPainter extends CustomPainter {
     final reachL = math.sqrt(math.max(1.0, math.pow(sL + rb, 2) - math.pow(sL - by, 2)));
     final reachR = math.sqrt(math.max(1.0, math.pow(sR + rb, 2) - math.pow(sR - by, 2)));
 
-    final minX = r + reachL + 4;
-    final maxX = w - r - reachR - 4;
+    // Clamp beadX strictly within valid track so socket never penetrates rounded corners
+    final minX = r + reachL;
+    final maxX = w - r - reachR;
     final clampedX = beadX.clamp(minX, maxX);
 
     // Tangency calculations
+
     final alphaL = math.atan2(sL - by, reachL);
     final alphaR = math.atan2(sR - by, reachR);
 

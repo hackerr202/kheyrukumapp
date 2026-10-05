@@ -539,8 +539,9 @@
     ];
 
     const numTabs = tabs.length;
-    const tabWidth = width / numTabs;
-    const tabCenters = tabs.map((_, i) => tabWidth * i + tabWidth / 2);
+    const sidePadding = Math.min(56, Math.max(50, width * 0.15));
+    const step = (width - 2 * sidePadding) / (numTabs - 1);
+    const tabCenters = tabs.map((_, i) => sidePadding + i * step);
 
     let activeIndex = 0;
     let beadX = tabCenters[0];
@@ -580,11 +581,12 @@
       const reachL = Math.sqrt(Math.max(1, Math.pow(sL + rb, 2) - Math.pow(sL - by, 2)));
       const reachR = Math.sqrt(Math.max(1, Math.pow(sR + rb, 2) - Math.pow(sR - by, 2)));
 
-      const minX = cornerRadius + reachL + 4;
-      const maxX = width - cornerRadius - reachR - 4;
+      const minX = cornerRadius + reachL;
+      const maxX = width - cornerRadius - reachR;
       const clampedX = Math.max(minX, Math.min(maxX, beadX));
 
       const c1x = clampedX - reachL;
+
       const c1y = topOverflow + sL;
 
       const c2x = clampedX;
