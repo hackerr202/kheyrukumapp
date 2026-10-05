@@ -2,7 +2,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 /// Service class to manage Supabase Cloud initialization, authentication,
-/// and the Admin Invitation Code registration workflow for Kheyrukum.
+/// email verification, and the Admin Invitation Code registration workflow for Kheyrukum.
 class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
@@ -10,7 +10,6 @@ class SupabaseService {
   // Project credentials: Supabase Cloud
   static const String supabaseUrl = 'https://tjhqpzvjzmpyrridtpsj.supabase.co';
   static const String supabaseAnonKey = 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g';
-
 
   static bool _isInitialized = false;
 
@@ -39,37 +38,51 @@ class SupabaseService {
 
   bool get isAuthenticated => currentUser != null;
 
+  /// Fetch user profile from public.profiles
+  Future<Map<String, dynamic>?> getUserProfile() async {
+    if (!_isInitialized || currentUser == null) return null;
+    try {
+      final res = await client!
+          .from('profiles')
+          .select('id, role, full_name, email, phone, avatar_url')
+          .eq('id', currentUser!.id)
+          .maybeSingle();
+      return res;
+    } catch (e) {
+      debugPrint('[SupabaseService] Failed to load profile: $e');
+      return null;
+    }
+  }
+
   /// 1. Validate Admin-Generated Invitation Code before signup
   Future<Map<String, dynamic>> checkInviteCode(String code) async {
+    final clean = code.trim().toUpperCase();
+    if (clean.isEmpty) {
+      return {'valid': false, 'message': 'Please enter an invitation code.'};
+    }
+
     if (!_isInitialized) {
-      // Mock validation for local development/preview testing
-      final clean = code.trim().toUpperCase();
-      if (clean.startsWith('PAR-') || clean.startsWith('KHY-P')) {
-        return {'valid': true, 'role': 'parent', 'message': 'Valid Parent Invitation Code'};
-      } else if (clean.startsWith('TEA-') || clean.startsWith('KHY-T')) {
-        return {'valid': true, 'role': 'teacher', 'message': 'Valid Teacher Invitation Code'};
-      }
-      return {'valid': false, 'message': 'Invalid invitation code'};
+      return {'valid': false, 'message': 'Supabase service is not initialized.'};
     }
 
     try {
       final response = await client!
           .from('invitation_codes')
           .select('id, code, role, is_used, expires_at, target_email')
-          .ilike('code', code.trim())
+          .ilike('code', clean)
           .eq('is_used', false)
-          .gt('expires_at', DateTime.now().toIso8601String())
+          .gt('expires_at', DateTime.now().toUtc().toIso8601String())
           .maybeSingle();
 
       if (response == null) {
-        return {'valid': false, 'message': 'Code is invalid, expired, or already used.'};
+        return {'valid': false, 'message': 'Invite code is invalid, expired, or already used.'};
       }
 
       return {
         'valid': true,
         'role': response['role'],
         'target_email': response['target_email'],
-        'message': 'Valid ${response['role']} invitation code.',
+        'message': 'Code verified for ${response['role']} role.',
       };
     } catch (e) {
       return {'valid': false, 'message': 'Error validating code: $e'};
@@ -77,6 +90,7 @@ class SupabaseService {
   }
 
   /// 2. Register new Parent or Teacher using an Invitation Code + Email + Password
+  /// Enforces Email Verification requirement
   Future<Map<String, dynamic>> registerWithInviteCode({
     required String code,
     required String fullName,
@@ -85,11 +99,7 @@ class SupabaseService {
     String? phone,
   }) async {
     if (!_isInitialized) {
-      // Offline / unconfigured mock response
-      return {
-        'success': true,
-        'message': 'Account registered successfully (Demo Mode)',
-      };
+      return {'success': false, 'message': 'Supabase is not initialized.'};
     }
 
     try {
@@ -106,30 +116,36 @@ class SupabaseService {
 
       // Step B: Atomically consume invitation code and link profile
       final result = await client!.rpc('consume_invitation_code', params: {
-        'p_code': code.trim(),
+        'p_code': code.trim().toUpperCase(),
         'p_user_id': user.id,
         'p_full_name': fullName.trim(),
         'p_email': email.trim(),
         'p_phone': phone?.trim(),
       });
 
+      final bool isConfirmed = user.emailConfirmedAt != null;
+
       return {
         'success': result['success'] ?? true,
+        'requiresEmailVerification': !isConfirmed,
         'role': result['role'],
-        'message': result['message'] ?? 'Registration complete.',
+        'email': email.trim(),
+        'message': !isConfirmed
+            ? 'Account created! Please check your email inbox to verify your account before logging in.'
+            : 'Registration complete. You can now log in.',
       };
     } catch (e) {
       return {'success': false, 'message': e.toString()};
     }
   }
 
-  /// 3. Sign In with Email & Password
+  /// 3. Sign In with Email & Password (with Email Verification check)
   Future<Map<String, dynamic>> signIn({
     required String email,
     required String password,
   }) async {
     if (!_isInitialized) {
-      return {'success': true, 'message': 'Logged in (Demo Mode)'};
+      return {'success': false, 'message': 'Supabase service is offline.'};
     }
 
     try {
@@ -138,12 +154,38 @@ class SupabaseService {
         password: password,
       );
 
-      if (response.user != null) {
-        return {'success': true, 'user': response.user};
+      final user = response.user;
+      if (user != null) {
+        // Enforce email verification check for non-admin accounts
+        final isConfirmed = user.emailConfirmedAt != null;
+        if (!isConfirmed && email.trim().toLowerCase() != 'admin@kheyrukum.com') {
+          await client?.auth.signOut();
+          return {
+            'success': false,
+            'requiresEmailVerification': true,
+            'email': email.trim(),
+            'message': 'Please verify your email before signing in. Check your inbox for the confirmation link.',
+          };
+        }
+        return {'success': true, 'user': user};
       }
-      return {'success': false, 'message': 'Invalid credentials.'};
+      return {'success': false, 'message': 'Invalid email or password.'};
     } catch (e) {
       return {'success': false, 'message': e.toString()};
+    }
+  }
+
+  /// Resend verification email
+  Future<Map<String, dynamic>> resendVerificationEmail(String email) async {
+    if (!_isInitialized) return {'success': false, 'message': 'Service unavailable.'};
+    try {
+      await client?.auth.resend(
+        type: OtpType.signup,
+        email: email.trim(),
+      );
+      return {'success': true, 'message': 'Verification email sent! Please check your inbox.'};
+    } catch (e) {
+      return {'success': false, 'message': 'Failed to resend email: $e'};
     }
   }
 

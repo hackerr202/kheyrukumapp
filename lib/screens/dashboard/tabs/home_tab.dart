@@ -1,15 +1,45 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 
-class HomeTab extends StatelessWidget {
+/// Home Tab connected to live Supabase profile data with clean empty states
+/// ready for real student and halaqah records.
+class HomeTab extends StatefulWidget {
   const HomeTab({super.key});
 
   @override
+  State<HomeTab> createState() => _HomeTabState();
+}
+
+class _HomeTabState extends State<HomeTab> {
+  Map<String, dynamic>? _userProfile;
+  bool _isLoading = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadProfile();
+  }
+
+  Future<void> _loadProfile() async {
+    final profile = await SupabaseService.instance.getUserProfile();
+    if (mounted) {
+      setState(() {
+        _userProfile = profile;
+        _isLoading = false;
+      });
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final userName = _userProfile?['full_name'] ?? 'Ustaz Muhammed';
+    final userRole = (_userProfile?['role'] ?? 'Admin').toString().toUpperCase();
+
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        // Parent-Student Welcome Header
+        // Parent / Teacher Welcome Header
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
@@ -31,9 +61,9 @@ class HomeTab extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 4),
-                const Text(
-                  'Ahmed & Zayd',
-                  style: TextStyle(
+                Text(
+                  _isLoading ? 'Loading...' : userName,
+                  style: const TextStyle(
                     fontSize: 22,
                     fontWeight: FontWeight.bold,
                     color: Colors.white,
@@ -41,17 +71,20 @@ class HomeTab extends StatelessWidget {
                 ),
               ],
             ),
-            // Student Avatar Badge with Halqah Level
+            // User Role Avatar Badge
             Container(
               padding: const EdgeInsets.all(2.5),
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 border: Border.all(color: AppColors.accentAmber, width: 2),
               ),
-              child: const CircleAvatar(
+              child: CircleAvatar(
                 radius: 22,
                 backgroundColor: AppColors.surfaceLight,
-                child: Text('Z', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                child: Text(
+                  userName.isNotEmpty ? userName[0].toUpperCase() : 'K',
+                  style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                ),
               ),
             ),
           ],
@@ -59,7 +92,7 @@ class HomeTab extends StatelessWidget {
 
         const SizedBox(height: 24),
 
-        // Quran Memorization Hero Card
+        // Quran Memorization / Portal Status Card
         Container(
           padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
@@ -90,77 +123,68 @@ class HomeTab extends StatelessWidget {
                       color: AppColors.accentAmber.withOpacity(0.15),
                       borderRadius: BorderRadius.circular(12),
                     ),
-                    child: const Row(
+                    child: Row(
                       mainAxisSize: MainAxisSize.min,
                       children: [
-                        Icon(Icons.stars, color: AppColors.accentAmber, size: 14),
-                        SizedBox(width: 4),
+                        const Icon(Icons.verified_user_rounded, color: AppColors.accentAmber, size: 14),
+                        const SizedBox(width: 4),
                         Text(
-                          'Current Surah',
-                          style: TextStyle(
+                          '$userRole PORTAL',
+                          style: const TextStyle(
                             color: AppColors.accentAmber,
+                            fontWeight: FontWeight.bold,
                             fontSize: 11,
-                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
                           ),
                         ),
                       ],
                     ),
                   ),
                   const Text(
-                    '18-Day Streak 🔥',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 12,
-                      fontWeight: FontWeight.w500,
-                    ),
+                    'Real-Time Synced',
+                    style: TextStyle(color: AppColors.accentTeal, fontSize: 11, fontWeight: FontWeight.w600),
                   ),
                 ],
               ),
-              const SizedBox(height: 14),
-              const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Surah Al-Mulk',
-                    style: TextStyle(
-                      fontSize: 22,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                  Text(
-                    'سُورَةُ المُلْكِ',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.w600,
-                      color: AppColors.accentAmber,
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 6),
-              const Text(
-                'Ayat 1 - 15 • Tajweed Accuracy: 94%',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
-              ),
+
               const SizedBox(height: 16),
 
-              // Progress Bar
+              const Text(
+                'Quranic Hifz & Recitation Track',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 18),
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Live database connected. Ready for student enrollments, daily Sabaq records, and Halaqah milestones.',
+                style: TextStyle(color: Colors.white.withOpacity(0.7), fontSize: 12.5, height: 1.4),
+              ),
+
+              const SizedBox(height: 18),
+
+              // Progress Bar (Empty State)
               ClipRRect(
-                borderRadius: BorderRadius.circular(6),
+                borderRadius: BorderRadius.circular(8),
                 child: LinearProgressIndicator(
-                  value: 0.75,
+                  value: 0.0,
                   minHeight: 8,
                   backgroundColor: Colors.white.withOpacity(0.1),
                   valueColor: const AlwaysStoppedAnimation<Color>(AppColors.accentTeal),
                 ),
               ),
-              const SizedBox(height: 12),
+
+              const SizedBox(height: 10),
+
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  const Text('Class Pace: Excellent', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
-                  Text('75% Complete', style: TextStyle(color: AppColors.accentTeal, fontSize: 12, fontWeight: FontWeight.bold)),
+                  Text(
+                    '0 Students Enrolled',
+                    style: TextStyle(color: Colors.white.withOpacity(0.6), fontSize: 11),
+                  ),
+                  const Text(
+                    'Ready for Real Data',
+                    style: TextStyle(color: AppColors.accentAmber, fontSize: 11, fontWeight: FontWeight.w600),
+                  ),
                 ],
               ),
             ],
@@ -169,107 +193,39 @@ class HomeTab extends StatelessWidget {
 
         const SizedBox(height: 24),
 
-        // Section Title: Today's Halaqah
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              "Today's Halaqah Session",
-              style: TextStyle(
-                fontSize: 17,
-                fontWeight: FontWeight.bold,
-                color: Colors.white,
-              ),
-            ),
-            TextButton(
-              onPressed: () {},
-              child: const Text('View Schedule', style: TextStyle(color: AppColors.accentAmber, fontSize: 12)),
-            ),
-          ],
-        ),
-
-        const SizedBox(height: 8),
-
-        // Session Item Card
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: AppColors.surfaceCard,
-            borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.borderSubtle),
-          ),
-          child: Row(
-            children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: AppColors.accentTeal.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: const Icon(Icons.cast_for_education, color: AppColors.accentTeal, size: 24),
-              ),
-              const SizedBox(width: 14),
-              const Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Live Recitation & Tajweed',
-                      style: TextStyle(color: Colors.white, fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
-                    SizedBox(height: 4),
-                    Text(
-                      'Sheikh Abdullah Al-Madani • 4:30 PM (45 min)',
-                      style: TextStyle(color: AppColors.textSecondary, fontSize: 12),
-                    ),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.accentEmerald.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: const Text(
-                  'Join Room',
-                  style: TextStyle(color: AppColors.accentEmerald, fontSize: 11, fontWeight: FontWeight.bold),
-                ),
-              ),
-            ],
+        // Section Title: Quick Actions
+        const Text(
+          'Halaqah Management',
+          style: TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+            color: Colors.white,
+            letterSpacing: 0.2,
           ),
         ),
+        const SizedBox(height: 12),
 
-        const SizedBox(height: 20),
-
-        // Teacher Feedback Highlight
+        // Clean Empty State Container
         Container(
-          padding: const EdgeInsets.all(16),
+          padding: const EdgeInsets.all(20),
           decoration: BoxDecoration(
             color: AppColors.surfaceCard,
-            borderRadius: BorderRadius.circular(18),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: AppColors.borderSubtle),
           ),
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Row(
-                children: [
-                  const Icon(Icons.record_voice_over, color: AppColors.accentAmber, size: 18),
-                  const SizedBox(width: 8),
-                  const Text(
-                    'Ustadh Feedback Note',
-                    style: TextStyle(color: AppColors.accentAmber, fontWeight: FontWeight.w600, fontSize: 13),
-                  ),
-                  const Spacer(),
-                  Text('2 hours ago', style: TextStyle(color: AppColors.textMuted, fontSize: 11)),
-                ],
-              ),
+              Icon(Icons.menu_book_rounded, size: 40, color: AppColors.accentTeal.withOpacity(0.6)),
               const SizedBox(height: 10),
               const Text(
-                '“MashaAllah! Zayd showed great improvement in Qalqalah on Ayah 5. Encourage him to sustain the Ghunnah on Ayah 12 for 2 Harakat.”',
-                style: TextStyle(color: Colors.white70, fontSize: 13, height: 1.4, fontStyle: FontStyle.italic),
+                'No Student Recitation Logs Yet',
+                style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 14),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                'Generate signup invitation codes for teachers and parents to link students and begin logging daily revision.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white.withOpacity(0.55), fontSize: 11.5, height: 1.4),
               ),
             ],
           ),

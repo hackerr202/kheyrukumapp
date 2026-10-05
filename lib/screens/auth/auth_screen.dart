@@ -1,10 +1,10 @@
+import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/supabase_service.dart';
-import '../../core/theme/app_colors.dart';
 
-/// Authentication Screen supporting Admin-Generated Invitation Codes
-/// for new Parents and Teachers, plus Email/Password Sign-In.
+/// Neumorphic (Soft UI) Login & Sign-Up Screen with a true 3D perspective flip
+/// and a two-step school invitation verification workflow.
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -12,105 +12,91 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateMixin {
-  late TabController _tabController;
+class _AuthScreenState extends State<AuthScreen>
+    with SingleTickerProviderStateMixin {
+  // 3D Flip animation controller
+  late AnimationController _flipController;
+  late Animation<double> _flipAnimation;
 
-  // Invite Registration controllers
+  // Sign-in controllers
+  final _loginEmailController = TextEditingController();
+  final _loginPasswordController = TextEditingController();
+  bool _rememberMe = true;
+  bool _isSignInPressed = false;
+
+  // Sign-up controllers
   final _inviteCodeController = TextEditingController();
   final _regNameController = TextEditingController();
   final _regEmailController = TextEditingController();
   final _regPasswordController = TextEditingController();
+  bool _isVerifyPressed = false;
+  bool _isCreatePressed = false;
 
-  // Sign In controllers
-  final _loginEmailController = TextEditingController();
-  final _loginPasswordController = TextEditingController();
-
-  bool _isCheckingCode = false;
-  String? _verifiedRole;
-  String? _codeValidationMessage;
+  // State Management
+  bool _isInviteVerified = false;
   bool _isLoading = false;
   String? _errorMessage;
+  String? _verifiedRole;
+
+  // Neumorphic Soft UI Palette
+  static const Color bgColor = Color(0xFFE0E5EC);
+  static const Color darkShadow = Color(0xFFA3B1C6);
+  static const Color lightShadow = Colors.white;
+  static const Color primaryNavy = Color(0xFF1E293B);
+  static const Color accentCoral = Color(0xFFFF4B72);
+  static const Color subtitleGray = Color(0xFF64748B);
 
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 2, vsync: this);
+    _flipController = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 650),
+    );
+
+    _flipAnimation = Tween<double>(begin: 0.0, end: math.pi).animate(
+      CurvedAnimation(parent: _flipController, curve: Curves.easeInOutCubic),
+    );
+
+    _flipController.addStatusListener((status) {
+      if (status == AnimationStatus.dismissed) {
+        // Automatically reset two-step invite state when card flips back to Login
+        setState(() {
+          _isInviteVerified = false;
+          _errorMessage = null;
+        });
+      }
+    });
   }
 
   @override
   void dispose() {
-    _tabController.dispose();
+    _flipController.dispose();
+    _loginEmailController.dispose();
+    _loginPasswordController.dispose();
     _inviteCodeController.dispose();
     _regNameController.dispose();
     _regEmailController.dispose();
     _regPasswordController.dispose();
-    _loginEmailController.dispose();
-    _loginPasswordController.dispose();
     super.dispose();
   }
 
-  Future<void> _verifyCode() async {
-    final code = _inviteCodeController.text.trim();
-    if (code.length < 4) return;
-
-    setState(() {
-      _isCheckingCode = true;
-      _codeValidationMessage = null;
-      _errorMessage = null;
-    });
-
-    final res = await SupabaseService.instance.checkInviteCode(code);
-
-    setState(() {
-      _isCheckingCode = false;
-      if (res['valid'] == true) {
-        _verifiedRole = res['role'];
-        _codeValidationMessage = res['message'] ?? 'Valid Invitation Code';
-        if (res['target_email'] != null && _regEmailController.text.isEmpty) {
-          _regEmailController.text = res['target_email'];
-        }
-      } else {
-        _verifiedRole = null;
-        _codeValidationMessage = res['message'] ?? 'Invalid code';
-      }
-    });
+  void _flipToSignUp() {
+    setState(() => _errorMessage = null);
+    _flipController.forward();
   }
 
-  Future<void> _handleRegister() async {
-    if (_inviteCodeController.text.isEmpty ||
-        _regNameController.text.isEmpty ||
-        _regEmailController.text.isEmpty ||
-        _regPasswordController.text.isEmpty) {
-      setState(() => _errorMessage = 'Please fill in all fields.');
-      return;
-    }
-
-    setState(() {
-      _isLoading = true;
-      _errorMessage = null;
-    });
-
-    final res = await SupabaseService.instance.registerWithInviteCode(
-      code: _inviteCodeController.text,
-      fullName: _regNameController.text,
-      email: _regEmailController.text,
-      password: _regPasswordController.text,
-    );
-
-    setState(() => _isLoading = false);
-
-    if (res['success'] == true) {
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-      }
-    } else {
-      setState(() => _errorMessage = res['message'] ?? 'Registration failed.');
-    }
+  void _flipToLogin() {
+    setState(() => _errorMessage = null);
+    _flipController.reverse();
   }
 
   Future<void> _handleSignIn() async {
-    if (_loginEmailController.text.isEmpty || _loginPasswordController.text.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your email and password.');
+    final email = _loginEmailController.text.trim();
+    final password = _loginPasswordController.text;
+
+    if (email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your username/email and password.');
       return;
     }
 
@@ -120,8 +106,8 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     });
 
     final res = await SupabaseService.instance.signIn(
-      email: _loginEmailController.text,
-      password: _loginPasswordController.text,
+      email: email,
+      password: password,
     );
 
     setState(() => _isLoading = false);
@@ -131,309 +117,756 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
     } else {
-      setState(() => _errorMessage = res['message'] ?? 'Invalid email or password.');
+      if (res['requiresEmailVerification'] == true) {
+        _showEmailVerificationDialog(email);
+      } else {
+        setState(() => _errorMessage = res['message'] ?? 'Sign in failed.');
+      }
     }
+  }
+
+  Future<void> _handleVerifyCode() async {
+    final code = _inviteCodeController.text.trim().toUpperCase();
+    if (code.isEmpty) {
+      setState(() => _errorMessage = 'Please enter your school invite code.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final res = await SupabaseService.instance.checkInviteCode(code);
+
+    setState(() => _isLoading = false);
+
+    if (res['valid'] == true) {
+      setState(() {
+        _isInviteVerified = true;
+        _verifiedRole = res['role'];
+        if (res['target_email'] != null && _regEmailController.text.isEmpty) {
+          _regEmailController.text = res['target_email'];
+        }
+      });
+    } else {
+      setState(() => _errorMessage = res['message'] ?? 'Invalid code.');
+    }
+  }
+
+  Future<void> _handleCreateAccount() async {
+    final name = _regNameController.text.trim();
+    final email = _regEmailController.text.trim();
+    final password = _regPasswordController.text;
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+      setState(() => _errorMessage = 'Please complete all fields.');
+      return;
+    }
+
+    if (password.length < 6) {
+      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    final res = await SupabaseService.instance.registerWithInviteCode(
+      code: _inviteCodeController.text.trim(),
+      fullName: name,
+      email: email,
+      password: password,
+    );
+
+    setState(() => _isLoading = false);
+
+    if (res['success'] == true) {
+      if (res['requiresEmailVerification'] == true) {
+        _showEmailVerificationDialog(email, onConfirmed: () {
+          _flipToLogin();
+        });
+      } else {
+        if (mounted) {
+          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
+        }
+      }
+    } else {
+      setState(() => _errorMessage = res['message'] ?? 'Account creation failed.');
+    }
+  }
+
+  void _showEmailVerificationDialog(String email, {VoidCallback? onConfirmed}) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: bgColor,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Row(
+          children: [
+            Icon(Icons.mark_email_read_rounded, color: accentCoral),
+            SizedBox(width: 8),
+            Text(
+              'Verify Your Email',
+              style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'A verification email has been sent to:\n$email',
+              style: const TextStyle(color: primaryNavy, fontSize: 14),
+            ),
+            const SizedBox(height: 12),
+            const Text(
+              'Please check your inbox and verify your email before logging in.',
+              style: TextStyle(color: subtitleGray, fontSize: 12),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () async {
+              await SupabaseService.instance.resendVerificationEmail(email);
+              if (mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Verification email resent.')),
+                );
+              }
+            },
+            child: const Text('Resend Email', style: TextStyle(color: subtitleGray)),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              if (onConfirmed != null) {
+                onConfirmed();
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: accentCoral,
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            ),
+            child: const Text('Proceed to Login'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
+    final screenSize = MediaQuery.of(context).size;
+    final cardDiameter = (math.min(screenSize.width * 0.94, 430.0)).clamp(340.0, 440.0);
+
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: bgColor,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              const SizedBox(height: 16),
+        child: Center(
+          child: SingleChildScrollView(
+            physics: const BouncingScrollPhysics(),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                // 3D Flipping Circular Card
+                AnimatedBuilder(
+                  animation: _flipAnimation,
+                  builder: (context, child) {
+                    final angle = _flipAnimation.value;
+                    final isFront = angle < (math.pi / 2);
 
-              // Official Logo & Emblem
-              Image.asset(
-                'assets/images/logo.png',
-                height: 84,
-                fit: BoxFit.contain,
-                errorBuilder: (_, __, ___) => const Icon(
-                  Icons.menu_book_rounded,
-                  size: 64,
-                  color: Color(0xFF00BCD4),
-                ),
-              ),
-
-              const SizedBox(height: 12),
-              const Text(
-                'ኸይሩኩም ኢስላማዊ ማዕከል',
-                style: TextStyle(
-                  color: Color(0xFF00BCD4),
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const Text(
-                'Kheyrukum Portal',
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 24),
-
-              // Tab Selector
-              Container(
-                decoration: BoxDecoration(
-                  color: const Color(0xFF1E293B),
-                  borderRadius: BorderRadius.circular(14),
-                ),
-                child: TabBar(
-                  controller: _tabController,
-                  indicator: BoxDecoration(
-                    borderRadius: BorderRadius.circular(12),
-                    color: const Color(0xFF00BCD4).withOpacity(0.2),
-                    border: Border.all(color: const Color(0xFF00BCD4), width: 1.2),
-                  ),
-                  labelColor: const Color(0xFF00BCD4),
-                  unselectedLabelColor: const Color(0xFF94A3B8),
-                  labelStyle: const TextStyle(fontWeight: FontWeight.w700, fontSize: 13),
-                  tabs: const [
-                    Tab(text: 'Invite Signup'),
-                    Tab(text: 'Sign In'),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 24),
-
-              // Error Alert
-              if (_errorMessage != null)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 16),
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.red.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                    border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.error_outline, color: Colors.redAccent, size: 20),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          _errorMessage!,
-                          style: const TextStyle(color: Colors.redAccent, fontSize: 12),
+                    return Transform(
+                      alignment: Alignment.center,
+                      transform: Matrix4.identity()
+                        ..setEntry(3, 2, 0.001) // 3D Perspective Depth
+                        ..rotateY(angle),
+                      child: Container(
+                        width: cardDiameter,
+                        height: cardDiameter,
+                        decoration: const BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: bgColor,
+                          boxShadow: [
+                            BoxShadow(
+                              color: lightShadow,
+                              offset: Offset(-9, -9),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                            BoxShadow(
+                              color: darkShadow,
+                              offset: Offset(9, 9),
+                              blurRadius: 18,
+                              spreadRadius: 1,
+                            ),
+                          ],
+                        ),
+                        child: ClipOval(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+                            child: isFront
+                                ? _buildFrontLogin()
+                                : Transform(
+                                    // Mirror back side so text reads correctly
+                                    alignment: Alignment.center,
+                                    transform: Matrix4.identity()..rotateY(math.pi),
+                                    child: _buildBackSignUp(),
+                                  ),
+                          ),
                         ),
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
-
-              // Tab Content Area
-              SizedBox(
-                height: 480,
-                child: TabBarView(
-                  controller: _tabController,
-                  children: [
-                    _buildInviteSignupTab(),
-                    _buildSignInTab(),
-                  ],
-                ),
-              ),
-            ],
+              ],
+            ),
           ),
         ),
       ),
     );
   }
 
-  Widget _buildInviteSignupTab() {
-    final roleColor = _verifiedRole == 'teacher'
-        ? const Color(0xFFFFA000)
-        : const Color(0xFF00BCD4);
-
+  // ===========================================================================
+  // FRONT SIDE (LOGIN)
+  // ===========================================================================
+  Widget _buildFrontLogin() {
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        // 1. Invitation Code Field with Verify button
+        const SizedBox(height: 12),
+        // Header
         const Text(
-          'Admin Invitation Code',
-          style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
+          'Login',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: primaryNavy,
+            letterSpacing: -0.5,
+          ),
         ),
-        const SizedBox(height: 6),
+        const SizedBox(height: 2),
+        const Text(
+          'Sign in to your account',
+          style: TextStyle(
+            fontSize: 12,
+            color: subtitleGray,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 16),
+
+        // Error message if any
+        if (_errorMessage != null) ...[
+          Text(
+            _errorMessage!,
+            style: const TextStyle(color: accentCoral, fontSize: 11, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+            maxLines: 2,
+          ),
+          const SizedBox(height: 6),
+        ],
+
+        // Recessed Field: Username
+        _buildRecessedTextField(
+          controller: _loginEmailController,
+          hintText: 'Username or Email',
+          icon: Icons.person_outline_rounded,
+        ),
+        const SizedBox(height: 12),
+
+        // Recessed Field: Password
+        _buildRecessedTextField(
+          controller: _loginPasswordController,
+          hintText: 'Password',
+          icon: Icons.lock_outline_rounded,
+          isPassword: true,
+        ),
+        const SizedBox(height: 10),
+
+        // Tactile Toggle Switch: Remember Me
         Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Expanded(
-              child: TextField(
-                controller: _inviteCodeController,
-                textCapitalization: TextCapitalization.characters,
-                style: const TextStyle(color: Colors.white, letterSpacing: 1.5, fontWeight: FontWeight.bold),
-                decoration: InputDecoration(
-                  hintText: 'e.g. KHY-7842-PAR',
-                  hintStyle: const TextStyle(color: Color(0xFF64748B), letterSpacing: 0),
-                  filled: true,
-                  fillColor: const Color(0xFF1E293B),
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(10),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-                onChanged: (_) {
-                  if (_verifiedRole != null) {
-                    setState(() {
-                      _verifiedRole = null;
-                      _codeValidationMessage = null;
-                    });
-                  }
-                },
+            const Text(
+              'Remember me',
+              style: TextStyle(
+                fontSize: 12,
+                color: primaryNavy,
+                fontWeight: FontWeight.w600,
               ),
             ),
-            const SizedBox(width: 8),
-            ElevatedButton(
-              onPressed: _isCheckingCode ? null : _verifyCode,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF334155),
-                foregroundColor: const Color(0xFF00BCD4),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
-              ),
-              child: _isCheckingCode
-                  ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
-                  : const Text('Verify'),
+            _buildTactileSwitch(
+              value: _rememberMe,
+              onChanged: (val) => setState(() => _rememberMe = val),
             ),
           ],
         ),
+        const SizedBox(height: 14),
 
-        // Verified Status Badge
-        if (_codeValidationMessage != null)
-          Padding(
-            padding: const EdgeInsets.only(top: 6, bottom: 8),
-            child: Row(
-              children: [
-                Icon(
-                  _verifiedRole != null ? Icons.check_circle : Icons.cancel,
-                  size: 16,
-                  color: _verifiedRole != null ? roleColor : Colors.redAccent,
-                ),
-                const SizedBox(width: 6),
-                Text(
-                  _codeValidationMessage!,
-                  style: TextStyle(
-                    color: _verifiedRole != null ? roleColor : Colors.redAccent,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+        // Raised Neumorphic Button: SIGN IN
+        _buildRaisedButton(
+          text: 'SIGN IN',
+          isPressed: _isSignInPressed,
+          isLoading: _isLoading,
+          onTapDown: () => setState(() => _isSignInPressed = true),
+          onTapUp: () => setState(() => _isSignInPressed = false),
+          onTap: _handleSignIn,
+        ),
+        const SizedBox(height: 10),
+
+        // Footer Text
+        GestureDetector(
+          onTap: _flipToSignUp,
+          child: const Padding(
+            padding: EdgeInsets.all(4.0),
+            child: Text.rich(
+              TextSpan(
+                text: "Don't have an account? ",
+                style: TextStyle(fontSize: 11.5, color: subtitleGray),
+                children: [
+                  TextSpan(
+                    text: 'Sign up',
+                    style: TextStyle(
+                      color: accentCoral,
+                      fontWeight: FontWeight.bold,
+                    ),
                   ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // BACK SIDE (SIGN UP - TWO STEP FLOW)
+  // ===========================================================================
+  Widget _buildBackSignUp() {
+    return AnimatedSwitcher(
+      duration: const Duration(milliseconds: 280),
+      transitionBuilder: (child, animation) {
+        return FadeTransition(opacity: animation, child: child);
+      },
+      child: _isInviteVerified ? _buildSignUpStep2() : _buildSignUpStep1(),
+    );
+  }
+
+  // Step 1: Invite Code Verification
+  Widget _buildSignUpStep1() {
+    return Column(
+      key: const ValueKey('step1_invite'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(height: 20),
+        const Text(
+          'Sign Up',
+          style: TextStyle(
+            fontSize: 26,
+            fontWeight: FontWeight.w800,
+            color: primaryNavy,
+            letterSpacing: -0.5,
+          ),
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Enter your school invite code',
+          style: TextStyle(
+            fontSize: 12,
+            color: subtitleGray,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 22),
+
+        if (_errorMessage != null) ...[
+          Text(
+            _errorMessage!,
+            style: const TextStyle(color: accentCoral, fontSize: 11, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+        ],
+
+        // Recessed Field: Invite Code
+        _buildRecessedTextField(
+          controller: _inviteCodeController,
+          hintText: 'Invite Code (e.g. KHY-7842)',
+          icon: Icons.confirmation_number_outlined,
+          textCapitalization: TextCapitalization.characters,
+        ),
+        const SizedBox(height: 20),
+
+        // Raised Neumorphic Button: VERIFY CODE
+        _buildRaisedButton(
+          text: 'VERIFY CODE',
+          isPressed: _isVerifyPressed,
+          isLoading: _isLoading,
+          onTapDown: () => setState(() => _isVerifyPressed = true),
+          onTapUp: () => setState(() => _isVerifyPressed = false),
+          onTap: _handleVerifyCode,
+        ),
+        const SizedBox(height: 18),
+
+        // Footer: Flip back to login
+        GestureDetector(
+          onTap: _flipToLogin,
+          child: const Padding(
+            padding: EdgeInsets.all(4.0),
+            child: Text.rich(
+              TextSpan(
+                text: 'Already have an account? ',
+                style: TextStyle(fontSize: 11.5, color: subtitleGray),
+                children: [
+                  TextSpan(
+                    text: 'Login',
+                    style: TextStyle(
+                      color: accentCoral,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 10),
+      ],
+    );
+  }
+
+  // Step 2: User Information
+  Widget _buildSignUpStep2() {
+    return Column(
+      key: const ValueKey('step2_profile'),
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Text(
+              'Welcome',
+              style: TextStyle(
+                fontSize: 24,
+                fontWeight: FontWeight.w800,
+                color: primaryNavy,
+                letterSpacing: -0.5,
+              ),
+            ),
+            if (_verifiedRole != null) ...[
+              const SizedBox(width: 6),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accentCoral.withOpacity(0.15),
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: Text(
+                  _verifiedRole!.toUpperCase(),
+                  style: const TextStyle(
+                    color: accentCoral,
+                    fontSize: 9,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+        const SizedBox(height: 2),
+        const Text(
+          'Complete your profile',
+          style: TextStyle(
+            fontSize: 11.5,
+            color: subtitleGray,
+            fontWeight: FontWeight.w500,
+          ),
+        ),
+        const SizedBox(height: 10),
+
+        if (_errorMessage != null) ...[
+          Text(
+            _errorMessage!,
+            style: const TextStyle(color: accentCoral, fontSize: 10.5, fontWeight: FontWeight.w600),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 4),
+        ],
+
+        // Recessed Field: Full name
+        _buildRecessedTextField(
+          controller: _regNameController,
+          hintText: 'Full name',
+          icon: Icons.badge_outlined,
+        ),
+        const SizedBox(height: 8),
+
+        // Recessed Field: Email
+        _buildRecessedTextField(
+          controller: _regEmailController,
+          hintText: 'Email',
+          icon: Icons.alternate_email_rounded,
+          keyboardType: TextInputType.emailAddress,
+        ),
+        const SizedBox(height: 8),
+
+        // Recessed Field: Password
+        _buildRecessedTextField(
+          controller: _regPasswordController,
+          hintText: 'Password',
+          icon: Icons.lock_outline_rounded,
+          isPassword: true,
+        ),
+        const SizedBox(height: 12),
+
+        // Raised Neumorphic Button: CREATE ACCOUNT
+        _buildRaisedButton(
+          text: 'CREATE ACCOUNT',
+          isPressed: _isCreatePressed,
+          isLoading: _isLoading,
+          onTapDown: () => setState(() => _isCreatePressed = true),
+          onTapUp: () => setState(() => _isCreatePressed = false),
+          onTap: _handleCreateAccount,
+        ),
+        const SizedBox(height: 8),
+
+        // Footer: Cancel Sign Up
+        GestureDetector(
+          onTap: () {
+            setState(() => _isInviteVerified = false);
+            _flipToLogin();
+          },
+          child: const Padding(
+            padding: EdgeInsets.all(4.0),
+            child: Text(
+              'Cancel Sign Up',
+              style: TextStyle(
+                fontSize: 11,
+                color: subtitleGray,
+                fontWeight: FontWeight.w600,
+                decoration: TextDecoration.underline,
+              ),
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+      ],
+    );
+  }
+
+  // ===========================================================================
+  // NEUMORPHIC RECESSED TEXT FIELD (INSET SHADOW EFFECT)
+  // ===========================================================================
+  Widget _buildRecessedTextField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData icon,
+    bool isPassword = false,
+    TextInputType keyboardType = TextInputType.text,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
+    return Container(
+      height: 42,
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(12),
+        // Inset/Recessed shadow simulation
+        boxShadow: const [
+          BoxShadow(
+            color: darkShadow,
+            offset: Offset(2, 2),
+            blurRadius: 4,
+            spreadRadius: 0.5,
+          ),
+          BoxShadow(
+            color: lightShadow,
+            offset: Offset(-2, -2),
+            blurRadius: 4,
+            spreadRadius: 0.5,
+          ),
+        ],
+      ),
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          gradient: LinearGradient(
+            colors: [
+              darkShadow.withOpacity(0.18),
+              lightShadow.withOpacity(0.35),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+        ),
+        padding: const EdgeInsets.symmetric(horizontal: 10),
+        child: Row(
+          children: [
+            Icon(icon, size: 18, color: primaryNavy.withOpacity(0.7)),
+            const SizedBox(width: 8),
+            Expanded(
+              child: TextField(
+                controller: controller,
+                obscureText: isPassword,
+                keyboardType: keyboardType,
+                textCapitalization: textCapitalization,
+                style: const TextStyle(
+                  fontSize: 12.5,
+                  color: primaryNavy,
+                  fontWeight: FontWeight.w600,
+                ),
+                decoration: InputDecoration(
+                  hintText: hintText,
+                  hintStyle: TextStyle(
+                    fontSize: 12,
+                    color: subtitleGray.withOpacity(0.75),
+                    fontWeight: FontWeight.w500,
+                  ),
+                  border: InputBorder.none,
+                  isDense: true,
+                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // RAISED NEUMORPHIC BUTTON
+  // ===========================================================================
+  Widget _buildRaisedButton({
+    required String text,
+    required bool isPressed,
+    required bool isLoading,
+    required VoidCallback onTapDown,
+    required VoidCallback onTapUp,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTapDown: (_) => onTapDown(),
+      onTapUp: (_) => onTapUp(),
+      onTapCancel: () => onTapUp(),
+      onTap: isLoading ? null : onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 100),
+        width: double.infinity,
+        height: 42,
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(12),
+          boxShadow: isPressed
+              ? [
+                  const BoxShadow(
+                    color: darkShadow,
+                    offset: Offset(2, 2),
+                    blurRadius: 3,
+                  ),
+                  const BoxShadow(
+                    color: lightShadow,
+                    offset: Offset(-2, -2),
+                    blurRadius: 3,
+                  ),
+                ]
+              : const [
+                  BoxShadow(
+                    color: darkShadow,
+                    offset: Offset(4, 4),
+                    blurRadius: 8,
+                  ),
+                  BoxShadow(
+                    color: lightShadow,
+                    offset: Offset(-4, -4),
+                    blurRadius: 8,
+                  ),
+                ],
+        ),
+        child: Center(
+          child: isLoading
+              ? const SizedBox(
+                  width: 18,
+                  height: 18,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    valueColor: AlwaysStoppedAnimation<Color>(accentCoral),
+                  ),
+                )
+              : Text(
+                  text,
+                  style: const TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 1.1,
+                    color: primaryNavy,
+                  ),
+                ),
+        ),
+      ),
+    );
+  }
+
+  // ===========================================================================
+  // TACTILE TOGGLE SWITCH
+  // ===========================================================================
+  Widget _buildTactileSwitch({
+    required bool value,
+    required ValueChanged<bool> onChanged,
+  }) {
+    return GestureDetector(
+      onTap: () => onChanged(!value),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        width: 44,
+        height: 24,
+        padding: const EdgeInsets.all(2.5),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          color: bgColor,
+          boxShadow: const [
+            BoxShadow(
+              color: darkShadow,
+              offset: Offset(1.5, 1.5),
+              blurRadius: 3,
+            ),
+            BoxShadow(
+              color: lightShadow,
+              offset: Offset(-1.5, -1.5),
+              blurRadius: 3,
+            ),
+          ],
+        ),
+        child: AnimatedAlign(
+          duration: const Duration(milliseconds: 180),
+          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
+          child: Container(
+            width: 19,
+            height: 19,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: value ? accentCoral : darkShadow,
+              boxShadow: const [
+                BoxShadow(
+                  color: Colors.black12,
+                  offset: Offset(1, 1),
+                  blurRadius: 2,
                 ),
               ],
             ),
           ),
-
-        const SizedBox(height: 12),
-
-        // 2. Full Name
-        _buildTextField('Full Name', _regNameController, Icons.person_outline, 'e.g. Fatima Ahmed'),
-
-        const SizedBox(height: 12),
-
-        // 3. Email
-        _buildTextField('Email Address', _regEmailController, Icons.email_outlined, 'parent@example.com',
-            keyboardType: TextInputType.emailAddress),
-
-        const SizedBox(height: 12),
-
-        // 4. Password
-        _buildTextField('Create Password', _regPasswordController, Icons.lock_outline, '••••••••',
-            isPassword: true),
-
-        const SizedBox(height: 20),
-
-        // Submit Button
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleRegister,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00BCD4),
-              foregroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 4,
-            ),
-            child: _isLoading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)))
-                : const Text('Register & Activate Profile', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          ),
         ),
-      ],
-    );
-  }
-
-  Widget _buildSignInTab() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const SizedBox(height: 12),
-        _buildTextField('Email Address', _loginEmailController, Icons.email_outlined, 'yourname@example.com',
-            keyboardType: TextInputType.emailAddress),
-        const SizedBox(height: 16),
-        _buildTextField('Password', _loginPasswordController, Icons.lock_outline, '••••••••',
-            isPassword: true),
-        const SizedBox(height: 28),
-        SizedBox(
-          width: double.infinity,
-          height: 48,
-          child: ElevatedButton(
-            onPressed: _isLoading ? null : _handleSignIn,
-            style: ElevatedButton.styleFrom(
-              backgroundColor: const Color(0xFF00BCD4),
-              foregroundColor: const Color(0xFF0F172A),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-              elevation: 4,
-            ),
-            child: _isLoading
-                ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)))
-                : const Text('Sign In', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-          ),
-        ),
-      ],
-    );
-  }
-
-  Widget _buildTextField(
-    String label,
-    TextEditingController controller,
-    IconData icon,
-    String hint, {
-    bool isPassword = false,
-    TextInputType keyboardType = TextInputType.text,
-  }) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
-        ),
-        const SizedBox(height: 6),
-        TextField(
-          controller: controller,
-          obscureText: isPassword,
-          keyboardType: keyboardType,
-          style: const TextStyle(color: Colors.white, fontSize: 14),
-          decoration: InputDecoration(
-            prefixIcon: Icon(icon, color: const Color(0xFF64748B), size: 20),
-            hintText: hint,
-            hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 13),
-            filled: true,
-            fillColor: const Color(0xFF1E293B),
-            contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-            border: OutlineInputBorder(
-              borderRadius: BorderRadius.circular(10),
-              borderSide: BorderSide.none,
-            ),
-          ),
-        ),
-      ],
+      ),
     );
   }
 }
