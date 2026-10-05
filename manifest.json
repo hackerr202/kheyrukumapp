@@ -1,0 +1,18 @@
+{
+  "name": "Kheyrukum Islamic Center",
+  "short_name": "Kheyrukum",
+  "description": "Parent & Teacher Quranic Collaborative Portal",
+  "start_url": "/preview.html",
+  "display": "standalone",
+  "background_color": "#0F172A",
+  "theme_color": "#0F172A",
+  "orientation": "portrait",
+  "icons": [
+    {
+      "src": "assets/images/logo.png",
+      "sizes": "192x192 512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
