@@ -345,3 +345,48 @@ WITH CHECK (bucket_id = 'recitations');
 CREATE POLICY "Users read recitations"
 ON storage.objects FOR SELECT TO authenticated
 USING (bucket_id IN ('recitations', 'voice-feedback', 'avatars'));
+
+-- ------------------------------------------------------------------------------
+-- 11. INITIAL SEED DATA (SAMPLE HALAQAH, STUDENT, & INVITATION CODES)
+-- ------------------------------------------------------------------------------
+-- Sample Halaqah
+INSERT INTO public.halaqahs (id, name, description)
+VALUES (
+    'a0000000-0000-0000-0000-000000000001',
+    'Halaqah Abu Bakr Al-Siddiq (حلقة أبي بكر)',
+    'Intermediate Quran Recitation & Tajweed Circle'
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Sample Student
+INSERT INTO public.students (id, full_name, halaqah_id, current_juz, current_surah, current_ayah)
+VALUES (
+    'b0000000-0000-0000-0000-000000000001',
+    'Abdur-Rahman Muhammed',
+    'a0000000-0000-0000-0000-000000000001',
+    30,
+    67,
+    1
+)
+ON CONFLICT (id) DO NOTHING;
+
+-- Active Parent Invitation Code (linked to student Abdur-Rahman)
+INSERT INTO public.invitation_codes (code, role, linked_student_id, is_used)
+VALUES (
+    'KHY-7842-PAR',
+    'parent',
+    'b0000000-0000-0000-0000-000000000001',
+    false
+)
+ON CONFLICT (code) DO NOTHING;
+
+-- Active Teacher Invitation Code (linked to Halaqah Abu Bakr)
+INSERT INTO public.invitation_codes (code, role, target_halaqah_id, is_used)
+VALUES (
+    'KHY-9102-TEA',
+    'teacher',
+    'a0000000-0000-0000-0000-000000000001',
+    false
+)
+ON CONFLICT (code) DO NOTHING;
+

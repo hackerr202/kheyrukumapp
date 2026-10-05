@@ -7,10 +7,10 @@ class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
 
-  // Project credentials: Replace with your Supabase Cloud URL and anon Key
-  // (Found in Supabase Dashboard -> Project Settings -> API)
-  static const String supabaseUrl = 'YOUR_SUPABASE_URL';
-  static const String supabaseAnonKey = 'YOUR_SUPABASE_ANON_KEY';
+  // Project credentials: Supabase Cloud
+  static const String supabaseUrl = 'https://tjhqpzvjzmpyrridtpsj.supabase.co';
+  static const String supabaseAnonKey = 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g';
+
 
   static bool _isInitialized = false;
 
