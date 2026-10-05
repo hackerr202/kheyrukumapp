@@ -56,14 +56,14 @@ jobs:
 
       - name: Build Release APK
         run: |
-          flutter build apk --release -v > build_log.txt 2>&1 || (cat build_log.txt | tail -n 150 && exit 1)
-
-      - name: Upload Build Log on Failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: build-failure-log
-          path: build_log.txt
+          chmod +x android/gradlew
+          cd android
+          ./gradlew assembleRelease --no-daemon
+          cd ..
+          mkdir -p build/app/outputs/flutter-apk
+          find android/ -name "*.apk" -exec cp {} build/app/outputs/flutter-apk/ \;
+          echo "=== Built APK Artifacts ==="
+          ls -lh build/app/outputs/flutter-apk/
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4
