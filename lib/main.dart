@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'core/routes/app_routes.dart';
+import 'core/services/supabase_service.dart';
 import 'core/theme/app_theme.dart';
 
-void main() {
+
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await SupabaseService.initialize();
   runApp(const KheyrukumApp());
 }
+
 
 class KheyrukumApp extends StatelessWidget {
   const KheyrukumApp({super.key});

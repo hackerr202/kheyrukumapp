@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../core/routes/app_routes.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import 'widgets/kheyrukum_logo_painter.dart';
+
 
 /// Animated Splash Screen matching the official Kheyrukum Islamic Center Logo.
 ///
@@ -117,8 +120,12 @@ class _SplashScreenState extends State<SplashScreen>
 
   void _navigateToDashboard() {
     if (!mounted) return;
-    Navigator.of(context).pushReplacementNamed('/dashboard');
+    final targetRoute = SupabaseService.instance.isAuthenticated
+        ? AppRoutes.dashboard
+        : AppRoutes.auth;
+    Navigator.of(context).pushReplacementNamed(targetRoute);
   }
+
 
   @override
   void dispose() {
