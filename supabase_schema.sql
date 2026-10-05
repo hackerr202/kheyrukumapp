@@ -390,3 +390,62 @@ VALUES (
 )
 ON CONFLICT (code) DO NOTHING;
 
+-- ------------------------------------------------------------------------------
+-- 12. ANNOUNCEMENTS & REALTIME NOTIFICATIONS
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.announcements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    title TEXT NOT NULL,
+    content TEXT NOT NULL,
+    category TEXT DEFAULT 'general' CHECK (category IN ('general', 'urgent', 'event', 'quran_halaqah', 'holiday')),
+    target_audience TEXT DEFAULT 'all' CHECK (target_audience IN ('all', 'parents', 'teachers')),
+    author_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    author_name TEXT NOT NULL DEFAULT 'Center Administration',
+    is_pinned BOOLEAN DEFAULT FALSE,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+CREATE TABLE IF NOT EXISTS public.announcement_reads (
+    announcement_id UUID REFERENCES public.announcements(id) ON DELETE CASCADE,
+    user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    read_at TIMESTAMPTZ DEFAULT NOW(),
+    PRIMARY KEY (announcement_id, user_id)
+);
+
+ALTER TABLE public.announcements ENABLE ROW LEVEL SECURITY;
+ALTER TABLE public.announcement_reads ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Authenticated users can read announcements"
+    ON public.announcements FOR SELECT TO authenticated
+    USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins or creators can insert announcements"
+    ON public.announcements FOR INSERT TO authenticated
+    WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins can update announcements"
+    ON public.announcements FOR UPDATE TO authenticated
+    USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins can delete announcements"
+    ON public.announcements FOR DELETE TO authenticated
+    USING (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can manage their read receipts"
+    ON public.announcement_reads FOR ALL TO authenticated
+    USING (auth.uid() = user_id)
+    WITH CHECK (auth.uid() = user_id);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
+
+

@@ -10,6 +10,8 @@
   <link rel="manifest" href="manifest.json">
   <title>Kheyrukum - Interactive Meniscus & Splash Engine</title>
   <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet">
@@ -133,16 +135,53 @@
       <!-- ============================================== -->
       <div id="dashboard-view" class="relative flex-1 flex flex-col justify-between overflow-hidden">
         
-        <!-- Header styled like the video -->
-        <div class="pt-4 px-6 text-center z-10">
-          <div class="inline-flex items-center space-x-2">
-            <div id="header-dot" class="w-2 h-2 rounded-full bg-[#c9f24a] shadow-[0_0_8px_#c9f24a]"></div>
-            <span class="text-[10px] font-semibold text-slate-400 tracking-[0.2em] uppercase">KHEYRUKUM PORTAL</span>
+        <!-- Live Announcement Notification Banner (drops down from top) -->
+        <div id="announcement-toast" class="absolute top-2 left-3 right-3 z-50 transition-all duration-500 -translate-y-28 opacity-0 pointer-events-none">
+          <div class="p-3.5 rounded-2xl bg-[#1E293B] border border-amber-400/50 shadow-[0_10px_25px_rgba(245,166,35,0.25)] flex items-start gap-3 pointer-events-auto">
+            <div class="w-8 h-8 rounded-full bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+            </div>
+            <div class="flex-1 min-w-0">
+              <div class="flex items-center gap-2">
+                <span id="toast-badge" class="px-1.5 py-0.5 rounded bg-amber-400/20 text-amber-300 text-[9px] font-extrabold uppercase">NOTICE</span>
+                <span id="toast-author" class="text-[10px] text-slate-400 truncate">Administration</span>
+              </div>
+              <h5 id="toast-title" class="text-xs font-bold text-white truncate mt-0.5">New Announcement</h5>
+              <p id="toast-content" class="text-[11px] text-slate-300 line-clamp-2 mt-0.5">Announcement content</p>
+            </div>
+            <button onclick="dismissToast()" class="text-slate-400 hover:text-white p-1">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+            </button>
           </div>
-          
-          <h1 id="header-title" class="text-4xl font-extrabold text-white tracking-tight mt-1 transition-all">Home</h1>
+        </div>
+
+        <!-- Top Header Action Bar -->
+        <div class="pt-3 px-4 flex items-center justify-between z-10">
+          <!-- Post Notice Button (Admin) -->
+          <button id="btn-open-post-modal" class="px-2.5 py-1 rounded-lg bg-amber-400/15 hover:bg-amber-400/25 border border-amber-400/40 text-amber-400 text-[11px] font-semibold flex items-center gap-1.5 transition">
+            <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v16m8-8H4"></path></svg>
+            Post Notice
+          </button>
+
+          <!-- Center Indicator -->
+          <div class="inline-flex items-center space-x-1.5">
+            <div id="header-dot" class="w-2 h-2 rounded-full bg-[#c9f24a] shadow-[0_0_8px_#c9f24a]"></div>
+            <span class="text-[9px] font-semibold text-slate-400 tracking-[0.15em] uppercase">KHEYRUKUM</span>
+          </div>
+
+          <!-- Notification Bell with Unread Badge -->
+          <button id="btn-open-announcements-modal" class="relative p-1.5 rounded-lg bg-slate-800/80 hover:bg-slate-700 text-slate-300 transition">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+            <span id="unread-announcements-badge" class="hidden absolute -top-1 -right-1 w-4 h-4 rounded-full bg-[#FF4B72] text-white text-[9px] font-bold flex items-center justify-center">1</span>
+          </button>
+        </div>
+
+        <!-- Hero Title (Dynamic by Tab) -->
+        <div class="px-6 text-center z-10 mt-1">
+          <h1 id="header-title" class="text-4xl font-extrabold text-white tracking-tight transition-all">Home</h1>
           <p id="header-subtitle" class="text-xs text-slate-400 mt-1 font-normal">Everything, on one surface.</p>
         </div>
+
 
         <!-- Dynamic Body Content -->
         <div id="tab-content" class="flex-1 overflow-y-auto custom-scroll px-5 py-3 pb-28">
@@ -868,6 +907,304 @@
     });
 
     drawMeniscus();
+
+    // ==============================================================
+    // SUPABASE REALTIME ANNOUNCEMENTS & BROADCAST ENGINE
+    // ==============================================================
+    const SUPABASE_URL = 'https://tjhqpzvjzmpyrridtpsj.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g';
+    let supabaseClient = null;
+    let announcementsList = [];
+    let unreadCount = 0;
+    let toastTimeout = null;
+
+    if (window.supabase) {
+      try {
+        supabaseClient = window.supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
+        console.log('✓ Supabase JS Client initialized');
+        initRealtimeAnnouncements();
+      } catch (err) {
+        console.error('Supabase init error:', err);
+      }
+    }
+
+    // Modal Triggers
+    const modalPost = document.getElementById('modal-post-announcement');
+    const modalList = document.getElementById('modal-announcements-list');
+
+    document.getElementById('btn-open-post-modal').addEventListener('click', () => {
+      modalPost.classList.remove('hidden');
+    });
+
+    document.getElementById('btn-open-announcements-modal').addEventListener('click', () => {
+      unreadCount = 0;
+      updateUnreadBadge();
+      modalList.classList.remove('hidden');
+      renderAnnouncementsList();
+    });
+
+    function closeModals() {
+      modalPost.classList.add('hidden');
+      modalList.classList.add('hidden');
+    }
+
+    function showAnnouncementToast(ann) {
+      const toast = document.getElementById('announcement-toast');
+      const badge = document.getElementById('toast-badge');
+      const author = document.getElementById('toast-author');
+      const title = document.getElementById('toast-title');
+      const content = document.getElementById('toast-content');
+
+      badge.textContent = (ann.category || 'NOTICE').toUpperCase();
+      author.textContent = ann.author_name || 'Administration';
+      title.textContent = ann.title || 'New Announcement';
+      content.textContent = ann.content || '';
+
+      toast.classList.remove('-translate-y-28', 'opacity-0', 'pointer-events-none');
+      toast.classList.add('translate-y-0', 'opacity-100');
+
+      if (toastTimeout) clearTimeout(toastTimeout);
+      toastTimeout = setTimeout(() => {
+        dismissToast();
+      }, 6000);
+    }
+
+    function dismissToast() {
+      const toast = document.getElementById('announcement-toast');
+      toast.classList.remove('translate-y-0', 'opacity-100');
+      toast.classList.add('-translate-y-28', 'opacity-0', 'pointer-events-none');
+    }
+
+    function updateUnreadBadge() {
+      const badge = document.getElementById('unread-announcements-badge');
+      if (unreadCount > 0) {
+        badge.textContent = unreadCount;
+        badge.classList.remove('hidden');
+      } else {
+        badge.classList.add('hidden');
+      }
+    }
+
+    async function initRealtimeAnnouncements() {
+      if (!supabaseClient) return;
+
+      // 1. Initial Fetch
+      try {
+        const { data, error } = await supabaseClient
+          .from('announcements')
+          .select('*')
+          .order('is_pinned', { ascending: false })
+          .order('created_at', { ascending: false });
+
+        if (!error && data) {
+          announcementsList = data;
+          unreadCount = data.length > 0 ? 1 : 0;
+          updateUnreadBadge();
+        }
+      } catch (e) {
+        console.error('Error fetching announcements:', e);
+      }
+
+      // 2. Subscribe to live Postgres INSERT events
+      supabaseClient
+        .channel('public:announcements')
+        .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'announcements' }, (payload) => {
+          console.log('⚡ [Realtime] New announcement received:', payload.new);
+          announcementsList.unshift(payload.new);
+          unreadCount++;
+          updateUnreadBadge();
+          showAnnouncementToast(payload.new);
+          renderAnnouncementsList();
+        })
+        .subscribe((status) => {
+          console.log('⚡ Supabase Realtime Channel Status:', status);
+        });
+    }
+
+    async function handleBroadcastSubmit(e) {
+      e.preventDefault();
+      const title = document.getElementById('post-title').value.trim();
+      const content = document.getElementById('post-content').value.trim();
+      const category = document.getElementById('post-category').value;
+      const targetAudience = document.getElementById('post-audience').value;
+      const author = document.getElementById('post-author').value.trim() || 'Ustaz Muhammed Yakut (Director)';
+      const isPinned = document.getElementById('post-pinned').checked;
+      const submitBtn = document.getElementById('btn-broadcast-submit');
+
+      if (!title || !content) return;
+
+      submitBtn.disabled = true;
+      submitBtn.textContent = 'Broadcasting...';
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('announcements')
+            .insert({
+              title,
+              content,
+              category,
+              target_audience: targetAudience,
+              author_name: author,
+              is_pinned: isPinned
+            })
+            .select()
+            .single();
+
+          if (error) throw error;
+          console.log('Broadcasted:', data);
+        } catch (err) {
+          alert('Error broadcasting: ' + err.message);
+        }
+      } else {
+        // Mock fallback
+        const mock = {
+          id: 'mock-' + Date.now(),
+          title,
+          content,
+          category,
+          target_audience: targetAudience,
+          author_name: author,
+          is_pinned: isPinned,
+          created_at: new Date().toISOString()
+        };
+        announcementsList.unshift(mock);
+        showAnnouncementToast(mock);
+      }
+
+      submitBtn.disabled = false;
+      submitBtn.textContent = 'Broadcast Announcement';
+      document.getElementById('post-title').value = '';
+      document.getElementById('post-content').value = '';
+      closeModals();
+    }
+
+    function renderAnnouncementsList() {
+      const container = document.getElementById('announcements-feed-container');
+      if (!container) return;
+
+      if (announcementsList.length === 0) {
+        container.innerHTML = '<p class="text-center text-slate-500 py-8 text-xs">No announcements broadcasted yet.</p>';
+        return;
+      }
+
+      container.innerHTML = announcementsList.map(a => {
+        let badgeColor = 'bg-teal-500/20 text-teal-300 border-teal-500/30';
+        if (a.category === 'urgent') badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+        if (a.category === 'event') badgeColor = 'bg-amber-400/20 text-amber-300 border-amber-400/30';
+        if (a.category === 'quran_halaqah') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+
+        return `
+          <div class="p-3.5 rounded-2xl bg-slate-800/80 border ${a.is_pinned ? 'border-amber-400/60 shadow-[0_4px_15px_rgba(245,166,35,0.1)]' : 'border-slate-700/70'} space-y-2">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${badgeColor}">
+                  ${a.category || 'GENERAL'}
+                </span>
+                ${a.is_pinned ? '<span class="px-1.5 py-0.5 rounded text-[9px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">PINNED</span>' : ''}
+              </div>
+              <span class="text-[10px] text-slate-400">${new Date(a.created_at).toLocaleDateString()}</span>
+            </div>
+            <h4 class="text-xs font-bold text-white">${a.title}</h4>
+            <p class="text-[11px] text-slate-300 leading-relaxed">${a.content}</p>
+            <div class="flex items-center text-[10px] text-slate-400 gap-1 pt-1">
+              <svg class="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+              <span>${a.author_name || 'Ustaz Muhammed Yakut'}</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
   </script>
-</body>
-</html>
+
+  <!-- ============================================== -->
+  <!-- MODAL: POST ANNOUNCEMENT (ADMIN)               -->
+  <!-- ============================================== -->
+  <div id="modal-post-announcement" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="relative w-full max-w-sm bg-[#161927] border border-slate-700 rounded-3xl p-5 shadow-2xl text-white">
+      <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-amber-400/20 text-amber-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5.882V19.24a1.76 1.76 0 01-3.417.592l-2.147-6.15M18 13a3 3 0 100-6M5.436 13.683A4.001 4.001 0 017 6h1.832c4.1 0 7.625-1.234 9.168-3v14c-1.543-1.766-5.067-3-9.168-3H7a3.988 3.988 0 01-1.564-.317z"></path></svg>
+          </div>
+          <div>
+            <h3 class="text-sm font-bold text-white">Broadcast Announcement</h3>
+            <p class="text-[10px] text-slate-400">Pushes instantly to all users via Realtime</p>
+          </div>
+        </div>
+        <button onclick="closeModals()" class="text-slate-400 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <form onsubmit="handleBroadcastSubmit(event)" class="space-y-3">
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Category</label>
+          <select id="post-category" class="w-full bg-[#1E293B] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400">
+            <option value="general">General Notice</option>
+            <option value="urgent">Urgent Alert</option>
+            <option value="event">Quran Event</option>
+            <option value="quran_halaqah">Halaqah Update</option>
+            <option value="holiday">Holiday Notice</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Target Audience</label>
+          <select id="post-audience" class="w-full bg-[#1E293B] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400">
+            <option value="all">All Members (Parents & Teachers)</option>
+            <option value="parents">Parents Only</option>
+            <option value="teachers">Teachers Only</option>
+          </select>
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Title</label>
+          <input id="post-title" type="text" required placeholder="e.g. Ramadan Recitation Competition" class="w-full bg-[#1E293B] border border-slate-700 rounded-xl px-3 py-2 text-xs text-white focus:outline-none focus:border-amber-400">
+        </div>
+
+        <div>
+          <label class="block text-[11px] font-semibold text-slate-300 mb-1">Content</label>
+          <textarea id="post-content" required rows="3" placeholder="Write full announcement details..." class="w-full bg-[#1E293B] border border-slate-700 rounded-xl p-3 text-xs text-white focus:outline-none focus:border-amber-400 resize-none"></textarea>
+        </div>
+
+        <input id="post-author" type="hidden" value="Ustaz Muhammed Yakut (Director)">
+
+        <div class="flex items-center justify-between pt-1">
+          <label class="flex items-center gap-2 text-xs text-slate-300 cursor-pointer">
+            <input id="post-pinned" type="checkbox" class="rounded bg-[#1E293B] border-slate-700 text-amber-400 focus:ring-0">
+            <span>Pin to top of feed</span>
+          </label>
+        </div>
+
+        <button id="btn-broadcast-submit" type="submit" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-amber-400 to-[#F5A623] text-slate-950 text-xs font-bold shadow-lg hover:brightness-110 transition flex items-center justify-center gap-1.5 mt-2">
+          Broadcast Announcement
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ============================================== -->
+  <!-- MODAL: ANNOUNCEMENTS LIST (FEED)               -->
+  <!-- ============================================== -->
+  <div id="modal-announcements-list" class="hidden fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-sm">
+    <div class="relative w-full max-w-sm bg-[#161927] border border-slate-700 rounded-3xl p-5 shadow-2xl text-white max-h-[85vh] flex flex-col">
+      <div class="flex items-center justify-between pb-3 border-b border-slate-800">
+        <div class="flex items-center gap-2">
+          <div class="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center">
+            <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"></path></svg>
+          </div>
+          <h3 class="text-sm font-bold text-white">Center Announcements</h3>
+        </div>
+        <button onclick="closeModals()" class="text-slate-400 hover:text-white">
+          <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path></svg>
+        </button>
+      </div>
+
+      <!-- Scrollable Announcements Feed -->
+      <div id="announcements-feed-container" class="flex-1 overflow-y-auto custom-scroll py-3 space-y-3">
+        <!-- Rendered via JS -->
+      </div>
+    </div>
+  </div>
+

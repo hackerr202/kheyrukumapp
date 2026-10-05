@@ -1,12 +1,19 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/models/announcement.dart';
+import '../../core/services/announcement_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/announcement_banner.dart';
 import '../../widgets/meniscus_nav_bar.dart';
+import '../announcements/announcements_sheet.dart';
+import '../announcements/post_announcement_dialog.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/homework_tab.dart';
 import 'tabs/messages_tab.dart';
 import 'tabs/settings_tab.dart';
 
-/// Main Dashboard Screen styled precisely after the reference Meniscus demonstration.
+/// Main Dashboard Screen styled precisely after the reference Meniscus demonstration,
+/// integrated with Supabase Realtime announcement broadcasts and immediate notifications.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -16,6 +23,47 @@ class DashboardScreen extends StatefulWidget {
 
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTabIndex = 0;
+  int _unreadAnnouncementsCount = 0;
+  Announcement? _activeAlertAnnouncement;
+  Timer? _alertDismissTimer;
+  StreamSubscription<Announcement>? _alertSub;
+  StreamSubscription<List<Announcement>>? _announcementsSub;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // 1. Listen for immediate popup alerts when a new announcement arrives
+    _alertSub = AnnouncementService.instance.onNewAnnouncementAlert.listen((announcement) {
+      if (!mounted) return;
+      _triggerAlertToast(announcement);
+    });
+
+    // 2. Stream unread announcements count from Supabase Realtime
+    _announcementsSub = AnnouncementService.instance.streamAnnouncements().listen((list) {
+      if (!mounted) return;
+      final unread = list.where((a) => !AnnouncementService.instance.isRead(a.id)).length;
+      setState(() => _unreadAnnouncementsCount = unread);
+    });
+  }
+
+  void _triggerAlertToast(Announcement announcement) {
+    _alertDismissTimer?.cancel();
+    setState(() => _activeAlertAnnouncement = announcement);
+
+    // Auto-dismiss notification toast after 6 seconds
+    _alertDismissTimer = Timer(const Duration(seconds: 6), () {
+      if (mounted) setState(() => _activeAlertAnnouncement = null);
+    });
+  }
+
+  @override
+  void dispose() {
+    _alertDismissTimer?.cancel();
+    _alertSub?.cancel();
+    _announcementsSub?.cancel();
+    super.dispose();
+  }
 
   // 5 Tabs with distinct accent colors matching the video aesthetic
   final List<MeniscusNavItem> _navItems = const [
@@ -98,38 +146,133 @@ class _DashboardScreenState extends State<DashboardScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.center,
               children: [
-                const SizedBox(height: 12),
+                const SizedBox(height: 8),
 
-                // Top Header Pill: "● MENISCUS / KHEYRUKUM"
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Container(
-                      width: 7,
-                      height: 7,
-                      decoration: BoxDecoration(
-                        color: activeItem.accentColor,
-                        shape: BoxShape.circle,
-                        boxShadow: [
-                          BoxShadow(
-                            color: activeItem.accentColor.withOpacity(0.6),
-                            blurRadius: 6,
+                // Top Header Bar: Admin Broadcast + Title + Notification Bell
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      // Admin Broadcast Button
+                      InkWell(
+                        onTap: () {
+                          showDialog(
+                            context: context,
+                            builder: (_) => const PostAnnouncementDialog(),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(10),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF1E293B),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.4)),
+                          ),
+                          child: const Row(
+                            children: [
+                              Icon(Icons.campaign_rounded, size: 14, color: Color(0xFFFFA000)),
+                              SizedBox(width: 4),
+                              Text(
+                                'Post Notice',
+                                style: TextStyle(
+                                  color: Color(0xFFFFA000),
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+
+                      // Center Pill
+                      Row(
+                        children: [
+                          Container(
+                            width: 7,
+                            height: 7,
+                            decoration: BoxDecoration(
+                              color: activeItem.accentColor,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: activeItem.accentColor.withOpacity(0.6),
+                                  blurRadius: 6,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'KHEYRUKUM PORTAL',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 1.2,
+                              color: Colors.white.withOpacity(0.7),
+                            ),
                           ),
                         ],
                       ),
-                    ),
-                    const SizedBox(width: 8),
-                    Text(
-                      'KHEYRUKUM PORTAL',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w600,
-                        letterSpacing: 1.5,
-                        color: Colors.white.withOpacity(0.6),
+
+                      // Notification Bell with Unread Count Badge
+                      Stack(
+                        clipBehavior: Clip.none,
+                        children: [
+                          InkWell(
+                            onTap: () {
+                              setState(() => _unreadAnnouncementsCount = 0);
+                              AnnouncementsSheet.show(context);
+                            },
+                            borderRadius: BorderRadius.circular(10),
+                            child: Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF1E293B),
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(color: const Color(0xFF334155)),
+                              ),
+                              child: const Icon(
+                                Icons.notifications_none_rounded,
+                                size: 18,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          if (_unreadAnnouncementsCount > 0)
+                            Positioned(
+                              top: -4,
+                              right: -4,
+                              child: Container(
+                                padding: const EdgeInsets.all(4),
+                                decoration: const BoxDecoration(
+                                  color: Color(0xFFFF4B72),
+                                  shape: BoxShape.circle,
+                                ),
+                                constraints: const BoxConstraints(
+                                  minWidth: 16,
+                                  minHeight: 16,
+                                ),
+                                child: Center(
+                                  child: Text(
+                                    '$_unreadAnnouncementsCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 9,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
+
 
                 const SizedBox(height: 10),
 
@@ -194,19 +337,26 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
 
           // Top Right Replay Splash Button
-          Positioned(
-            top: 48,
-            right: 18,
-            child: IconButton(
-              icon: Icon(Icons.replay_rounded, color: activeItem.accentColor.withOpacity(0.8), size: 20),
-              tooltip: 'Replay Splash Intro',
-              onPressed: () {
-                Navigator.of(context).pushReplacementNamed('/splash');
-              },
+          // Real-time Incoming Announcement Notification Banner (drops down from top)
+          if (_activeAlertAnnouncement != null)
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: AnnouncementBanner(
+                announcement: _activeAlertAnnouncement!,
+                onTap: () {
+                  setState(() => _activeAlertAnnouncement = null);
+                  AnnouncementsSheet.show(context);
+                },
+                onDismiss: () {
+                  setState(() => _activeAlertAnnouncement = null);
+                },
+              ),
             ),
-          ),
 
           // Floating Meniscus Bottom Navigation Bar
+
           Positioned(
             left: 20,
             right: 20,
