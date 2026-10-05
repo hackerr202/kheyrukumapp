@@ -60,6 +60,77 @@
         padding-top: env(safe-area-inset-top, 10px) !important;
       }
     }
+
+    /* NEUMORPHIC SOFT UI & 3D FLIP STYLES */
+    .neu-bg {
+      background-color: #E0E5EC;
+    }
+    .neu-circle-card {
+      width: 326px;
+      height: 326px;
+      border-radius: 50%;
+      background: #E0E5EC;
+      box-shadow: -9px -9px 18px #ffffff, 9px 9px 18px #a3b1c6;
+    }
+    .neu-inset {
+      background: #E0E5EC;
+      box-shadow: inset 4px 4px 7px #cbced1, inset -4px -4px 7px #ffffff;
+      border: 1px solid rgba(255, 255, 255, 0.4);
+    }
+    .neu-raised-btn {
+      background: #E0E5EC;
+      box-shadow: -4px -4px 9px #ffffff, 4px 4px 9px #a3b1c6;
+      transition: all 0.15s ease;
+    }
+    .neu-raised-btn:active {
+      box-shadow: inset 3px 3px 6px #a3b1c6, inset -3px -3px 6px #ffffff;
+      transform: translateY(1px);
+    }
+    .neu-coral-btn {
+      background: linear-gradient(135deg, #FF4B72, #e0385e);
+      box-shadow: -3px -3px 8px #ffffff, 3px 3px 10px rgba(255, 75, 114, 0.45);
+      transition: all 0.15s ease;
+    }
+    .neu-coral-btn:active {
+      box-shadow: inset 2px 2px 5px rgba(0,0,0,0.3);
+      transform: scale(0.98);
+    }
+    .neu-toggle-track {
+      background: #E0E5EC;
+      box-shadow: inset 3px 3px 5px #cbced1, inset -3px -3px 5px #ffffff;
+    }
+    .neu-toggle-thumb {
+      background: #E0E5EC;
+      box-shadow: -2px -2px 5px #ffffff, 2px 2px 5px #a3b1c6;
+    }
+    .flip-perspective {
+      perspective: 1200px;
+    }
+    .flip-card-inner {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      transition: transform 0.65s cubic-bezier(0.4, 0.0, 0.2, 1.0);
+      transform-style: preserve-3d;
+    }
+    .flip-card-inner.is-flipped {
+      transform: rotateY(180deg);
+    }
+    .flip-face {
+      position: absolute;
+      inset: 0;
+      -webkit-backface-visibility: hidden;
+      backface-visibility: hidden;
+      border-radius: 50%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      padding: 22px;
+    }
+    .flip-face-back {
+      transform: rotateY(180deg);
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
@@ -68,15 +139,19 @@
   <div id="top-action-bar" class="w-full max-w-md flex items-center justify-between mb-3 px-2">
     <div class="flex items-center space-x-2">
       <div id="status-dot" class="w-2.5 h-2.5 rounded-full bg-[#c9f24a] animate-pulse"></div>
-      <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">Kheyrukum · Meniscus Engine</span>
+      <span class="text-[11px] font-semibold text-slate-300 uppercase tracking-widest">Kheyrukum · Soft UI Engine</span>
     </div>
     <div class="flex space-x-2">
-      <button id="btn-replay-splash" class="px-3 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-amber-400 border border-amber-400/30 transition flex items-center gap-1.5">
+      <button id="btn-replay-splash" class="px-2.5 py-1 rounded-lg bg-slate-800 hover:bg-slate-700 text-xs font-medium text-amber-400 border border-amber-400/30 transition flex items-center gap-1">
         <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"></path></svg>
-        Replay Splash
+        Splash
       </button>
-      <button id="btn-mode-dashboard" class="px-3 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-xs font-medium text-teal-300 border border-teal-500/40 transition">
-        Skip to App
+      <button id="btn-mode-auth" class="px-2.5 py-1 rounded-lg bg-pink-500/20 hover:bg-pink-500/30 text-xs font-medium text-pink-300 border border-pink-500/40 transition flex items-center gap-1">
+        <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+        3D Auth Flip
+      </button>
+      <button id="btn-mode-dashboard" class="px-2.5 py-1 rounded-lg bg-teal-500/20 hover:bg-teal-500/30 text-xs font-medium text-teal-300 border border-teal-500/40 transition">
+        App
       </button>
     </div>
   </div>
@@ -128,6 +203,143 @@
           </div>
           <span id="splash-status" class="text-[10px] text-slate-400 mt-2 font-mono">Drawing Crescent...</span>
         </div>
+      </div>
+
+      <!-- ============================================== -->
+      <!-- 1.5 NEUMORPHIC AUTH SCREEN (3D FLIP CARD)     -->
+      <!-- ============================================== -->
+      <div id="auth-view" class="absolute inset-0 z-20 neu-bg hidden flex flex-col items-center justify-center p-4">
+        <!-- Center Circular Neumorphic Card with 3D Flip -->
+        <div class="flip-perspective w-[326px] h-[326px]">
+          <div id="auth-flip-card" class="flip-card-inner neu-circle-card relative">
+            
+            <!-- FRONT FACE: LOGIN -->
+            <div class="flip-face">
+              <div class="text-center mb-3">
+                <h2 class="text-xl font-bold text-[#1E293B] tracking-tight">Login</h2>
+                <p class="text-[11px] text-slate-500 font-medium">Sign in to your account</p>
+              </div>
+
+              <!-- Recessed Username Input -->
+              <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-2 flex items-center gap-2 mb-2.5">
+                <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                <input id="login-username" type="text" placeholder="Username" value="admin@kheyrukum.com" class="w-full bg-transparent text-xs text-[#1E293B] font-medium placeholder-slate-400 focus:outline-none">
+              </div>
+
+              <!-- Recessed Password Input -->
+              <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-2 flex items-center gap-2 mb-2.5">
+                <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                <input id="login-password" type="password" placeholder="Password" value="UstazYakut2026!" class="w-full bg-transparent text-xs text-[#1E293B] font-medium placeholder-slate-400 focus:outline-none">
+              </div>
+
+              <!-- Tactile Remember Me Toggle -->
+              <div class="w-full max-w-[260px] flex items-center justify-between px-1 mb-3">
+                <span class="text-[11px] font-medium text-[#1E293B]/80">Remember me</span>
+                <button type="button" id="btn-neu-remember" onclick="toggleRememberMe()" class="w-10 h-5 neu-toggle-track rounded-full p-0.5 flex items-center transition">
+                  <div id="neu-toggle-knob" class="w-4 h-4 neu-toggle-thumb rounded-full translate-x-5 bg-[#FF4B72] transition-transform"></div>
+                </button>
+              </div>
+
+              <!-- Raised SIGN IN Button -->
+              <button onclick="handleNeumorphicSignIn()" class="w-full max-w-[260px] py-2.5 rounded-2xl neu-coral-btn text-white text-xs font-bold tracking-wider shadow-md hover:brightness-105 active:scale-98 transition flex items-center justify-center gap-1.5">
+                <span>SIGN IN</span>
+              </button>
+
+              <!-- Footer: Switch to Sign Up (Triggers 3D Flip) -->
+              <button onclick="flipToSignUp()" class="mt-3 text-[11px] text-[#1E293B]/70 hover:text-[#FF4B72] transition font-medium">
+                Don't have an account? <span class="font-bold text-[#FF4B72]">Sign up</span>
+              </button>
+            </div>
+
+            <!-- BACK FACE: SIGN UP (TWO-STEP FLOW) -->
+            <div class="flip-face flip-face-back">
+              
+              <!-- STEP 1: INVITE CODE -->
+              <div id="signup-step-1" class="w-full flex flex-col items-center transition-all duration-300">
+                <div class="text-center mb-3">
+                  <h2 class="text-xl font-bold text-[#1E293B] tracking-tight">Sign Up</h2>
+                  <p class="text-[11px] text-slate-500 font-medium">Enter your school invite code</p>
+                </div>
+
+                <!-- Recessed Invite Code Input -->
+                <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-2 flex items-center gap-2 mb-3">
+                  <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                  <input id="signup-invite-code" type="text" placeholder="Invite Code" value="SCH-2026" class="w-full bg-transparent text-xs text-[#1E293B] font-mono tracking-widest placeholder-slate-400 focus:outline-none uppercase">
+                </div>
+
+                <!-- Raised VERIFY CODE Button -->
+                <button id="btn-verify-invite" onclick="handleVerifyInviteCode()" class="w-full max-w-[260px] py-2.5 rounded-2xl neu-coral-btn text-white text-xs font-bold tracking-wider shadow-md hover:brightness-105 active:scale-98 transition flex items-center justify-center gap-1.5">
+                  <span id="btn-verify-text">VERIFY CODE</span>
+                </button>
+
+                <!-- Footer: Return to Login -->
+                <button onclick="flipToLogin()" class="mt-4 text-[11px] text-[#1E293B]/70 hover:text-[#FF4B72] transition font-medium">
+                  Already have an account? <span class="font-bold text-[#FF4B72]">Login</span>
+                </button>
+              </div>
+
+              <!-- STEP 2: USER INFORMATION -->
+              <div id="signup-step-2" class="w-full hidden flex-col items-center transition-all duration-300">
+                <div class="text-center mb-2">
+                  <h2 class="text-lg font-bold text-[#1E293B] tracking-tight">Welcome</h2>
+                  <p class="text-[10px] text-slate-500 font-medium">Complete your profile</p>
+                </div>
+
+                <!-- Recessed Full Name Input -->
+                <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-1.5 flex items-center gap-2 mb-2">
+                  <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"></path></svg>
+                  <input id="signup-name" type="text" placeholder="Full name" value="Parent User" class="w-full bg-transparent text-xs text-[#1E293B] font-medium placeholder-slate-400 focus:outline-none">
+                </div>
+
+                <!-- Recessed Email Input -->
+                <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-1.5 flex items-center gap-2 mb-2">
+                  <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+                  <input id="signup-email" type="email" placeholder="Email" value="parent@example.com" class="w-full bg-transparent text-xs text-[#1E293B] font-medium placeholder-slate-400 focus:outline-none">
+                </div>
+
+                <!-- Recessed Password Input -->
+                <div class="w-full max-w-[260px] neu-inset rounded-2xl px-3 py-1.5 flex items-center gap-2 mb-2">
+                  <svg class="w-4 h-4 text-[#1E293B]/60 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z"></path></svg>
+                  <input id="signup-password" type="password" placeholder="Password" value="SecurePass123!" class="w-full bg-transparent text-xs text-[#1E293B] font-medium placeholder-slate-400 focus:outline-none">
+                </div>
+
+                <!-- Raised CREATE ACCOUNT Button -->
+                <button id="btn-create-account" onclick="handleCreateAccount()" class="w-full max-w-[260px] py-2 rounded-2xl neu-coral-btn text-white text-xs font-bold tracking-wider shadow-md hover:brightness-105 active:scale-98 transition flex items-center justify-center gap-1.5">
+                  <span id="btn-create-text">CREATE ACCOUNT</span>
+                </button>
+
+                <!-- Footer: Cancel Sign Up (Resets state & flips to Login) -->
+                <button onclick="cancelSignUp()" class="mt-2 text-[11px] text-slate-500 hover:text-[#FF4B72] transition font-medium">
+                  Cancel Sign Up
+                </button>
+              </div>
+
+            </div>
+
+          </div>
+        </div>
+
+        <!-- Soft UI Email Verification Modal -->
+        <div id="modal-email-verification" class="hidden absolute inset-0 z-50 flex items-center justify-center p-6 bg-slate-900/40 backdrop-blur-xs">
+          <div class="w-full max-w-[300px] neu-bg rounded-3xl p-5 shadow-[0_20px_40px_rgba(0,0,0,0.25)] border border-white/60 flex flex-col items-center text-center">
+            <div class="w-14 h-14 neu-circle-card flex items-center justify-center mb-3">
+              <svg class="w-7 h-7 text-[#FF4B72]" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z"></path></svg>
+            </div>
+            <h3 class="text-base font-bold text-[#1E293B]">Check Your Email</h3>
+            <p class="text-xs text-slate-600 mt-1.5 leading-relaxed">
+              We sent a verification link to your email. Please click the link to confirm your account before logging in.
+            </p>
+            <div class="w-full space-y-2 mt-4">
+              <button onclick="resendVerificationMock()" class="w-full py-2 rounded-xl neu-raised-btn text-xs font-semibold text-[#1E293B] hover:text-[#FF4B72]">
+                Resend Email
+              </button>
+              <button onclick="dismissEmailModal()" class="w-full py-2 rounded-xl neu-coral-btn text-xs font-bold text-white shadow-sm">
+                Return to Login
+              </button>
+            </div>
+          </div>
+        </div>
+
       </div>
 
       <!-- ============================================== -->
@@ -512,10 +724,133 @@
       ctx.restore();
     }
 
-    document.getElementById('btn-replay-splash').addEventListener('click', startSplash);
-    document.getElementById('btn-mode-dashboard').addEventListener('click', () => {
-      splashView.classList.add('opacity-0', 'pointer-events-none');
+    document.getElementById('btn-replay-splash').addEventListener('click', () => {
+      authView.classList.add('hidden');
+      startSplash();
     });
+
+    const authView = document.getElementById('auth-view');
+    const authFlipCard = document.getElementById('auth-flip-card');
+    const signupStep1 = document.getElementById('signup-step-1');
+    const signupStep2 = document.getElementById('signup-step-2');
+    const modalEmailVerification = document.getElementById('modal-email-verification');
+    let isRememberMe = true;
+    let isInviteVerified = false;
+
+    function showAuthView() {
+      splashView.classList.add('opacity-0', 'pointer-events-none');
+      authView.classList.remove('hidden');
+    }
+
+    function showDashboardView() {
+      splashView.classList.add('opacity-0', 'pointer-events-none');
+      authView.classList.add('hidden');
+    }
+
+    document.getElementById('btn-mode-auth').addEventListener('click', showAuthView);
+    document.getElementById('btn-mode-dashboard').addEventListener('click', showDashboardView);
+
+    function toggleRememberMe() {
+      isRememberMe = !isRememberMe;
+      const knob = document.getElementById('neu-toggle-knob');
+      if (isRememberMe) {
+        knob.classList.add('translate-x-5', 'bg-[#FF4B72]');
+        knob.classList.remove('translate-x-0', 'bg-slate-400');
+      } else {
+        knob.classList.remove('translate-x-5', 'bg-[#FF4B72]');
+        knob.classList.add('translate-x-0', 'bg-slate-400');
+      }
+    }
+
+    function flipToSignUp() {
+      authFlipCard.classList.add('is-flipped');
+    }
+
+    function flipToLogin() {
+      authFlipCard.classList.remove('is-flipped');
+      // Automatic state reset when flipping back to Login
+      resetSignUpState();
+    }
+
+    function cancelSignUp() {
+      flipToLogin();
+    }
+
+    function resetSignUpState() {
+      setTimeout(() => {
+        isInviteVerified = false;
+        signupStep1.classList.remove('hidden');
+        signupStep2.classList.add('hidden');
+        signupStep2.classList.remove('flex');
+        signupStep1.classList.add('flex');
+        const codeInput = document.getElementById('signup-invite-code');
+        if (codeInput) codeInput.value = '';
+      }, 350);
+    }
+
+    function handleVerifyInviteCode() {
+      const code = document.getElementById('signup-invite-code').value.trim();
+      const btn = document.getElementById('btn-verify-invite');
+      const text = document.getElementById('btn-verify-text');
+
+      if (!code) {
+        alert('Please enter an invite code.');
+        return;
+      }
+
+      text.innerHTML = '<svg class="animate-spin h-3.5 w-3.5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...';
+
+      setTimeout(() => {
+        text.textContent = 'VERIFY CODE';
+        isInviteVerified = true;
+        signupStep1.classList.add('hidden');
+        signupStep1.classList.remove('flex');
+        signupStep2.classList.remove('hidden');
+        signupStep2.classList.add('flex');
+      }, 600);
+    }
+
+    function handleCreateAccount() {
+      const name = document.getElementById('signup-name').value.trim();
+      const email = document.getElementById('signup-email').value.trim();
+      const pass = document.getElementById('signup-password').value.trim();
+
+      if (!name || !email || !pass) {
+        alert('Please complete all profile fields.');
+        return;
+      }
+
+      const text = document.getElementById('btn-create-text');
+      text.innerHTML = '<svg class="animate-spin h-3.5 w-3.5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Creating...';
+
+      setTimeout(() => {
+        text.textContent = 'CREATE ACCOUNT';
+        // Show Email Verification prompt!
+        modalEmailVerification.classList.remove('hidden');
+      }, 700);
+    }
+
+    function dismissEmailModal() {
+      modalEmailVerification.classList.add('hidden');
+      flipToLogin();
+    }
+
+    function resendVerificationMock() {
+      alert('Verification link resent to your email address!');
+    }
+
+    function handleNeumorphicSignIn() {
+      const email = document.getElementById('login-username').value.trim();
+      const pass = document.getElementById('login-password').value.trim();
+
+      if (!email || !pass) {
+        alert('Please enter your credentials.');
+        return;
+      }
+
+      // Enter dashboard
+      showDashboardView();
+    }
 
     startSplash();
 
@@ -1209,4 +1544,7 @@
       </div>
     </div>
   </div>
+
+</body>
+</html>
 
