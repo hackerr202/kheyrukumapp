@@ -25,13 +25,18 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       height: MediaQuery.of(context).size.height * 0.85,
-      decoration: const BoxDecoration(
-        color: Color(0xFF0F172A),
-        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         border: Border(
-          top: BorderSide(color: Color(0xFF2E334D), width: 1.5),
+          top: BorderSide(
+            color: isDark ? const Color(0xFF2E334D) : const Color(0xFFCBD5E1),
+            width: 1.5,
+          ),
         ),
       ),
       child: Column(
@@ -202,14 +207,18 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
         break;
     }
 
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: const Color(0xFF161927),
+        color: isDark ? const Color(0xFF161927) : Colors.white,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(
-          color: item.isPinned ? const Color(0xFFFFA000).withOpacity(0.6) : const Color(0xFF23283E),
+          color: item.isPinned
+              ? const Color(0xFFFFA000).withOpacity(0.6)
+              : (isDark ? const Color(0xFF23283E) : const Color(0xFFE2E8F0)),
           width: item.isPinned ? 1.4 : 1,
         ),
       ),
@@ -272,8 +281,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           const SizedBox(height: 10),
           Text(
             item.title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: isDark ? Colors.white : const Color(0xFF0F172A),
               fontSize: 15,
               fontWeight: FontWeight.bold,
             ),
@@ -281,8 +290,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           const SizedBox(height: 6),
           Text(
             item.content,
-            style: const TextStyle(
-              color: Color(0xFFCBD5E1),
+            style: TextStyle(
+              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
               fontSize: 12,
               height: 1.4,
             ),

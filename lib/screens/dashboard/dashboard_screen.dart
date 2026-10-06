@@ -114,9 +114,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     final activeItem = _navItems[_currentTabIndex];
     final headerInfo = _tabHeaders[_currentTabIndex];
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final titleColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+    final subtitleColor = isDark ? Colors.white.withOpacity(0.55) : AppColors.textSecondaryLight;
+    final headerBtnBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final headerBorderColor = isDark ? const Color(0xFF334155) : AppColors.borderSubtleLight;
 
     return Scaffold(
-      backgroundColor: const Color(0xFF0F172A),
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
       body: Stack(
         children: [
           // Ambient Radial Glow responding to active tab color
@@ -133,7 +138,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     center: const Alignment(0, -0.4),
                     radius: 0.8,
                     colors: [
-                      activeItem.accentColor.withOpacity(0.12),
+                      activeItem.accentColor.withOpacity(isDark ? 0.12 : 0.08),
                       Colors.transparent,
                     ],
                   ),
@@ -166,9 +171,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         child: Container(
                           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
                           decoration: BoxDecoration(
-                            color: const Color(0xFF1E293B),
+                            color: headerBtnBg,
                             borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.4)),
+                            border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.5)),
+                            boxShadow: [
+                              BoxShadow(
+                                color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                                blurRadius: 4,
+                                offset: const Offset(0, 2),
+                              ),
+                            ],
                           ),
                           child: const Row(
                             children: [
@@ -211,7 +223,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               fontSize: 10,
                               fontWeight: FontWeight.w600,
                               letterSpacing: 1.2,
-                              color: Colors.white.withOpacity(0.7),
+                              color: isDark ? Colors.white.withOpacity(0.7) : AppColors.textSecondaryLight,
                             ),
                           ),
                         ],
@@ -230,14 +242,21 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             child: Container(
                               padding: const EdgeInsets.all(7),
                               decoration: BoxDecoration(
-                                color: const Color(0xFF1E293B),
+                                color: headerBtnBg,
                                 borderRadius: BorderRadius.circular(10),
-                                border: Border.all(color: const Color(0xFF334155)),
+                                border: Border.all(color: headerBorderColor),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
                               ),
-                              child: const Icon(
+                              child: Icon(
                                 Icons.notifications_none_rounded,
                                 size: 18,
-                                color: Colors.white,
+                                color: isDark ? Colors.white : AppColors.textPrimaryLight,
                               ),
                             ),
                           ),
@@ -276,16 +295,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                 const SizedBox(height: 10),
 
-                // Hero Title (Huge bold white typography like the video)
+                // Hero Title (Huge bold typography like the video)
                 AnimatedSwitcher(
                   duration: const Duration(milliseconds: 200),
                   child: Text(
                     headerInfo['title']!,
                     key: ValueKey<String>(headerInfo['title']!),
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 38,
                       fontWeight: FontWeight.w800,
-                      color: Colors.white,
+                      color: titleColor,
                       letterSpacing: -0.8,
                       fontFamily: 'Poppins',
                     ),
@@ -302,7 +321,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     key: ValueKey<String>(headerInfo['subtitle']!),
                     style: TextStyle(
                       fontSize: 13,
-                      color: Colors.white.withOpacity(0.55),
+                      color: subtitleColor,
                       fontWeight: FontWeight.normal,
                     ),
                   ),

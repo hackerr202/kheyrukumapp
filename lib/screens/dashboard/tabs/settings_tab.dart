@@ -2,8 +2,14 @@ import 'package:flutter/material.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/theme/app_theme.dart';
+import '../../../widgets/invite_code_dialog.dart';
 
 /// Settings & Profile Tab connected to authenticated Supabase user profile.
+/// Includes:
+/// 1. Functional Light/Dark theme toggle
+/// 2. Admin Realtime Invite Code generator for Teachers and Parents
+/// 3. Notification & reminder preferences
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
@@ -42,6 +48,12 @@ class _SettingsTabState extends State<SettingsTab> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
+    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
+    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+
     final user = SupabaseService.instance.currentUser;
     final fullName = _userProfile?['full_name'] ?? 'Ustaz Muhammed Yakut';
     final userRole = (_userProfile?['role'] ?? 'admin').toString().toUpperCase();
@@ -50,9 +62,9 @@ class _SettingsTabState extends State<SettingsTab> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
       children: [
-        const Text(
+        Text(
           'Portal Settings',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.white),
+          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
         ),
         const SizedBox(height: 16),
 
@@ -60,9 +72,16 @@ class _SettingsTabState extends State<SettingsTab> {
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
-            color: AppColors.surfaceCard,
+            color: cardBg,
             borderRadius: BorderRadius.circular(18),
-            border: Border.all(color: AppColors.borderSubtle),
+            border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
           ),
           child: Row(
             children: [
@@ -81,12 +100,12 @@ class _SettingsTabState extends State<SettingsTab> {
                   children: [
                     Text(
                       _isLoading ? 'Loading...' : fullName,
-                      style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold, fontSize: 15),
+                      style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15),
                     ),
                     const SizedBox(height: 2),
                     Text(
                       userEmail,
-                      style: const TextStyle(color: AppColors.textSecondary, fontSize: 12),
+                      style: TextStyle(color: subtextColor, fontSize: 12),
                     ),
                     const SizedBox(height: 4),
                     Container(
@@ -113,34 +132,173 @@ class _SettingsTabState extends State<SettingsTab> {
 
         const SizedBox(height: 20),
 
-        // Notification Preferences
-        const Text(
-          'Notifications & Reminders',
-          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: AppColors.textSecondary),
+        // =====================================================================
+        // REQUIREMENT 2: FUNCTIONAL LIGHT THEME TOGGLE IN SETTINGS
+        // =====================================================================
+        Text(
+          'Appearance & Display',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
         ),
         const SizedBox(height: 10),
 
         Container(
           decoration: BoxDecoration(
-            color: AppColors.surfaceCard,
+            color: cardBg,
             borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: AppColors.borderSubtle),
+            border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: ValueListenableBuilder<ThemeMode>(
+            valueListenable: AppTheme.themeModeNotifier,
+            builder: (context, currentMode, _) {
+              final isLight = currentMode == ThemeMode.light;
+
+              return SwitchListTile(
+                value: isLight,
+                onChanged: (val) {
+                  AppTheme.setThemeMode(val ? ThemeMode.light : ThemeMode.dark);
+                },
+                secondary: Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: (isLight ? const Color(0xFFD97706) : AppColors.accentAmber).withOpacity(0.15),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isLight ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
+                    color: isLight ? const Color(0xFFD97706) : AppColors.accentAmber,
+                    size: 22,
+                  ),
+                ),
+                title: Text(
+                  'Light Theme Mode',
+                  style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600),
+                ),
+                subtitle: Text(
+                  isLight
+                      ? 'Bright daylight mode active'
+                      : 'Midnight dark aesthetic active',
+                  style: TextStyle(color: subtextColor, fontSize: 12),
+                ),
+                activeColor: const Color(0xFFD97706),
+              );
+            },
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // =====================================================================
+        // REQUIREMENT 3: ADMIN INVITATION CODES MANAGER IN SETTINGS
+        // =====================================================================
+        Text(
+          'Administration & Access Control',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
+        ),
+        const SizedBox(height: 10),
+
+        Container(
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                blurRadius: 8,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentTeal.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.vpn_key_rounded, color: AppColors.accentTeal, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Invite Codes Generator',
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
+                        ),
+                        Text(
+                          'Generate realtime signup codes for Teachers and Parents',
+                          style: TextStyle(fontSize: 11.5, color: subtextColor),
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () => InviteCodeDialog.show(context),
+                  icon: const Icon(Icons.add_rounded, size: 16, color: Colors.black),
+                  label: const Text(
+                    'Manage & Generate Invite Codes',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black),
+                  ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppColors.accentTeal,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        const SizedBox(height: 20),
+
+        // Notification Preferences
+        Text(
+          'Notifications & Reminders',
+          style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
+        ),
+        const SizedBox(height: 10),
+
+        Container(
+          decoration: BoxDecoration(
+            color: cardBg,
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: borderColor),
           ),
           child: Column(
             children: [
               SwitchListTile(
                 value: _dailyReminder,
                 onChanged: (val) => setState(() => _dailyReminder = val),
-                title: const Text('Daily Quran Revision Reminder', style: TextStyle(color: Colors.white, fontSize: 14)),
-                subtitle: const Text('7:00 AM & 5:00 PM', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                title: Text('Daily Quran Revision Reminder', style: TextStyle(color: textColor, fontSize: 14)),
+                subtitle: Text('7:00 AM & 5:00 PM', style: TextStyle(color: subtextColor, fontSize: 12)),
                 activeColor: AppColors.accentAmber,
               ),
-              const Divider(height: 1, color: AppColors.borderSubtle),
+              Divider(height: 1, color: borderColor),
               SwitchListTile(
                 value: _teacherAlerts,
                 onChanged: (val) => setState(() => _teacherAlerts = val),
-                title: const Text('Instant Halaqah Push Alerts', style: TextStyle(color: Colors.white, fontSize: 14)),
-                subtitle: const Text('Notifications when notices and homework are posted', style: TextStyle(color: AppColors.textMuted, fontSize: 12)),
+                title: Text('Instant Halaqah Push Alerts', style: TextStyle(color: textColor, fontSize: 14)),
+                subtitle: Text('Notifications when notices and homework are posted', style: TextStyle(color: subtextColor, fontSize: 12)),
                 activeColor: AppColors.accentTeal,
               ),
             ],

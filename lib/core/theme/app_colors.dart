@@ -25,6 +25,15 @@ class AppColors {
   static const Color textSecondary = Color(0xFF94A3B8); // Muted slate gray
   static const Color textMuted = Color(0xFF64748B);
 
+  // Light Theme Surfaces & Typography
+  static const Color backgroundLight = Color(0xFFF8FAFC);
+  static const Color surfaceCardLight = Color(0xFFFFFFFF);
+  static const Color surfaceNavLight = Color(0xFFF1F5F9);
+  static const Color borderSubtleLight = Color(0xFFE2E8F0);
+  static const Color textPrimaryLight = Color(0xFF0F172A);
+  static const Color textSecondaryLight = Color(0xFF475569);
+  static const Color textMutedLight = Color(0xFF94A3B8);
+
   // Gradients
   static const LinearGradient journeyGradient = LinearGradient(
     colors: [accentAmber, accentTeal],

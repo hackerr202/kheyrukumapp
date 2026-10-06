@@ -131,6 +131,59 @@
     .flip-face-back {
       transform: rotateY(180deg);
     }
+
+    /* ======================================================== */
+    /* FUNCTIONAL LIGHT THEME STYLES                            */
+    /* ======================================================== */
+    #mobile-simulator-frame.light-theme {
+      background-color: #F8FAFC !important;
+      border-color: #CBD5E1 !important;
+      color: #0F172A !important;
+    }
+    #mobile-simulator-frame.light-theme #status-bar-sim {
+      color: #64748B !important;
+    }
+    #mobile-simulator-frame.light-theme #status-bar-sim div {
+      border-color: #94A3B8 !important;
+    }
+    #mobile-simulator-frame.light-theme #header-title {
+      color: #0F172A !important;
+    }
+    #mobile-simulator-frame.light-theme #header-subtitle {
+      color: #64748B !important;
+    }
+    #mobile-simulator-frame.light-theme #btn-open-post-modal {
+      background-color: #FFFFFF !important;
+      border-color: #F59E0B !important;
+      color: #D97706 !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    }
+    #mobile-simulator-frame.light-theme #btn-open-announcements-modal {
+      background-color: #FFFFFF !important;
+      border-color: #E2E8F0 !important;
+      color: #0F172A !important;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.06) !important;
+    }
+    #mobile-simulator-frame.light-theme .theme-card,
+    #mobile-simulator-frame.light-theme .tab-page > div:not(.theme-exempt) {
+      background-color: #FFFFFF !important;
+      border-color: #E2E8F0 !important;
+      box-shadow: 0 4px 16px rgba(0,0,0,0.06) !important;
+      color: #0F172A !important;
+    }
+    #mobile-simulator-frame.light-theme .theme-title,
+    #mobile-simulator-frame.light-theme .tab-page h5 {
+      color: #0F172A !important;
+    }
+    #mobile-simulator-frame.light-theme .theme-card p,
+    #mobile-simulator-frame.light-theme .tab-page p:not(.font-amiri) {
+      color: #64748B !important;
+    }
+    #mobile-simulator-frame.light-theme input:not(#signup-invite-code):not(#login-username):not(#login-password):not(#signup-name):not(#signup-email):not(#signup-password) {
+      background-color: #F8FAFC !important;
+      border-color: #CBD5E1 !important;
+      color: #0F172A !important;
+    }
   </style>
 </head>
 <body class="min-h-screen flex flex-col items-center justify-center p-4">
@@ -400,7 +453,7 @@
 
           <!-- TAB 0: HOME -->
           <div id="content-0" class="tab-page space-y-4">
-            <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-800/90 to-[#122438] border border-teal-500/30 shadow-lg">
+            <div class="p-4 rounded-2xl bg-gradient-to-br from-slate-800/90 to-[#122438] border border-teal-500/30 shadow-lg theme-exempt">
               <div class="flex justify-between items-center">
                 <span class="text-[11px] px-2.5 py-0.5 rounded-full bg-[#c9f24a]/20 text-[#c9f24a] font-semibold">Active Halaqah</span>
                 <span class="text-xs text-amber-400 font-medium">18-Day Streak 🔥</span>
@@ -415,9 +468,32 @@
               </div>
             </div>
 
-            <div class="p-4 rounded-xl bg-slate-800/70 border border-slate-700/80 flex items-center justify-between">
+            <!-- REQUIREMENT 1: ANNOUNCEMENTS DIRECTLY ON HOME PAGE -->
+            <div class="space-y-2.5">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2">
+                  <div class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse shadow-[0_0_8px_#34d399]"></div>
+                  <h4 class="text-xs font-bold text-slate-200 uppercase tracking-wide theme-title">Center Announcements</h4>
+                </div>
+                <div class="flex items-center gap-2">
+                  <button onclick="document.getElementById('modal-post-announcement').classList.remove('hidden')" class="text-[11px] font-bold text-amber-400 hover:text-amber-300 transition">
+                    + Post
+                  </button>
+                  <button onclick="document.getElementById('btn-open-announcements-modal').click()" class="text-[11px] font-semibold text-teal-400 hover:text-teal-300 transition">
+                    View All
+                  </button>
+                </div>
+              </div>
+
+              <!-- Realtime Home Announcements List Container -->
+              <div id="home-announcements-feed" class="space-y-2.5">
+                <!-- Populated dynamically via renderHomeAnnouncements() -->
+              </div>
+            </div>
+
+            <div class="p-4 rounded-xl bg-slate-800/70 border border-slate-700/80 flex items-center justify-between theme-card">
               <div>
-                <h5 class="text-sm font-semibold text-white">Live Recitation Room</h5>
+                <h5 class="text-sm font-semibold text-white theme-title">Live Recitation Room</h5>
                 <p class="text-xs text-slate-400">Sheikh Abdullah • 4:30 PM (45m)</p>
               </div>
               <button class="px-3 py-1 rounded-full bg-emerald-500/20 text-emerald-400 text-xs font-semibold">Join</button>
@@ -482,14 +558,112 @@
 
           <!-- TAB 4: SETTINGS -->
           <div id="content-4" class="tab-page hidden space-y-3">
-            <div class="p-4 rounded-xl bg-slate-800/80 border border-rose-500/40 space-y-3">
-              <h5 class="text-sm font-bold text-white">Notification Preferences</h5>
+            
+            <!-- User Profile Summary Card -->
+            <div class="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80 flex items-center gap-3.5 theme-card">
+              <div class="w-11 h-11 rounded-full bg-amber-400 text-slate-900 font-bold text-base flex items-center justify-center shrink-0">
+                A
+              </div>
+              <div class="flex-1 min-w-0">
+                <h5 class="text-sm font-bold text-white truncate theme-title">Ustaz Muhammed Yakut</h5>
+                <p class="text-[11px] text-slate-400 truncate">admin@kheyrukum.com</p>
+                <span class="inline-block px-1.5 py-0.2 rounded text-[9px] font-bold bg-teal-500/20 text-teal-400 mt-1 uppercase">ADMIN PORTAL</span>
+              </div>
+            </div>
+
+            <!-- REQUIREMENT 2: LIGHT THEME TOGGLE IN SETTINGS -->
+            <div class="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-3 theme-card">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                  <div id="theme-icon-container" class="w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0">
+                    <svg id="theme-icon" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>
+                    </svg>
+                  </div>
+                  <div>
+                    <h5 class="text-sm font-bold text-white theme-title">Light Theme Mode</h5>
+                    <p id="theme-status-text" class="text-xs text-slate-400">Midnight dark aesthetic active</p>
+                  </div>
+                </div>
+
+                <!-- Functional Switch -->
+                <label class="relative inline-flex items-center cursor-pointer shrink-0">
+                  <input type="checkbox" id="theme-toggle-switch" onchange="handleThemeToggle(this.checked)" class="sr-only peer">
+                  <div class="w-11 h-6 bg-slate-700 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-amber-500"></div>
+                </label>
+              </div>
+            </div>
+
+            <!-- REQUIREMENT 3: ADMIN REALTIME INVITATION CODE GENERATOR -->
+            <div class="p-4 rounded-xl bg-slate-800/80 border border-teal-500/40 space-y-3 theme-card">
+              <div class="flex items-center justify-between">
+                <div class="flex items-center gap-2.5">
+                  <div class="w-7 h-7 rounded-lg bg-teal-500/20 text-teal-400 flex items-center justify-center shrink-0">
+                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z"></path></svg>
+                  </div>
+                  <div>
+                    <h5 class="text-sm font-bold text-white theme-title">Generate Invite Codes</h5>
+                    <p class="text-[10px] text-slate-400">Realtime Teachers & Parents Signup</p>
+                  </div>
+                </div>
+                <span class="px-2 py-0.5 rounded text-[9px] font-extrabold bg-teal-500/20 text-teal-400 border border-teal-500/30">REALTIME</span>
+              </div>
+
+              <!-- Role Selectors -->
+              <div class="grid grid-cols-2 gap-2">
+                <button type="button" id="btn-role-teacher" onclick="selectInviteRole('teacher')" class="py-2 px-2 rounded-xl border border-teal-500 bg-teal-500/20 text-teal-300 text-xs font-bold transition flex items-center justify-center gap-1">
+                  <span>Teacher (حلقة)</span>
+                </button>
+                <button type="button" id="btn-role-parent" onclick="selectInviteRole('parent')" class="py-2 px-2 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 text-xs font-bold transition flex items-center justify-center gap-1">
+                  <span>Parent (ولي أمر)</span>
+                </button>
+              </div>
+
+              <!-- Optional Target Email -->
+              <input id="invite-target-email" type="email" placeholder="Pre-assigned Email (Optional)" class="w-full px-3 py-2 rounded-xl bg-slate-900/80 border border-slate-700 text-xs text-white placeholder-slate-500 focus:outline-none focus:border-teal-500">
+
+              <!-- Generate Button -->
+              <button id="btn-generate-invite" onclick="handleGenerateRealtimeInvite()" class="w-full py-2.5 rounded-xl bg-gradient-to-r from-teal-500 to-cyan-500 hover:from-teal-400 hover:to-cyan-400 text-slate-950 text-xs font-bold transition shadow-md flex items-center justify-center gap-1.5">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 10V3L4 14h7v7l9-11h-7z"></path></svg>
+                Generate Realtime Code
+              </button>
+
+              <!-- Newly Generated Code Alert -->
+              <div id="new-code-banner" class="hidden p-3 rounded-xl bg-emerald-500/15 border border-emerald-500/40 text-xs space-y-1">
+                <div class="flex items-center justify-between">
+                  <span class="text-[10px] font-bold text-emerald-400 uppercase tracking-wider">New Code Ready:</span>
+                  <button onclick="copyGeneratedCode()" class="text-emerald-400 hover:text-emerald-300 font-bold text-[10px] underline">Copy</button>
+                </div>
+                <div class="flex items-center justify-between">
+                  <span id="new-code-text" class="text-sm font-mono font-extrabold text-emerald-300 tracking-wider">KHY-TEA-1234</span>
+                  <button onclick="tryCodeInSignup()" class="px-2 py-0.5 rounded bg-emerald-500/30 text-emerald-200 text-[10px] font-bold hover:bg-emerald-500/50 transition">
+                    Test In Signup →
+                  </button>
+                </div>
+              </div>
+
+              <!-- Live Codes Feed -->
+              <div class="pt-2 border-t border-slate-700/60">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-[11px] font-bold text-slate-300">Live Active Codes</span>
+                  <span id="live-codes-count" class="text-[10px] text-teal-400 font-semibold">0 active</span>
+                </div>
+                <div id="live-invite-codes-list" class="space-y-1.5 max-h-36 overflow-y-auto custom-scroll pr-1">
+                  <!-- Populated dynamically via Realtime -->
+                </div>
+              </div>
+            </div>
+
+            <!-- Notification Preferences -->
+            <div class="p-4 rounded-xl bg-slate-800/80 border border-slate-700/80 space-y-3 theme-card">
+              <h5 class="text-sm font-bold text-white theme-title">Notification Preferences</h5>
               <p class="text-xs text-slate-300">Instant Teacher Audio Feedback alerts enabled.</p>
               <div class="flex justify-between items-center pt-2 border-t border-slate-700 text-xs">
                 <span class="text-slate-400">Language</span>
                 <span class="text-rose-400 font-semibold">English / አማርኛ / العربية</span>
               </div>
             </div>
+
           </div>
 
         </div>
@@ -788,9 +962,8 @@
       }, 350);
     }
 
-    function handleVerifyInviteCode() {
+    async function handleVerifyInviteCode() {
       const code = document.getElementById('signup-invite-code').value.trim();
-      const btn = document.getElementById('btn-verify-invite');
       const text = document.getElementById('btn-verify-text');
 
       if (!code) {
@@ -800,14 +973,46 @@
 
       text.innerHTML = '<svg class="animate-spin h-3.5 w-3.5 text-white inline-block" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg> Verifying...';
 
+      let isValid = true;
+      let roleFound = 'parent';
+
+      if (supabaseClient) {
+        try {
+          const { data, error } = await supabaseClient
+            .from('invitation_codes')
+            .select('*')
+            .ilike('code', code)
+            .eq('is_used', false)
+            .maybeSingle();
+
+          if (error || !data) {
+            const local = liveInviteCodes.find(c => c.code.toUpperCase() === code.toUpperCase() && !c.is_used);
+            if (!local) {
+              isValid = false;
+            } else {
+              roleFound = local.role;
+            }
+          } else {
+            roleFound = data.role;
+          }
+        } catch (e) {
+          console.warn('Verify code error:', e);
+        }
+      }
+
       setTimeout(() => {
         text.textContent = 'VERIFY CODE';
+        if (!isValid) {
+          alert('Invalid, expired, or already used invitation code. Please generate a code from Settings or request one from administration.');
+          return;
+        }
+
         isInviteVerified = true;
         signupStep1.classList.add('hidden');
         signupStep1.classList.remove('flex');
         signupStep2.classList.remove('hidden');
         signupStep2.classList.add('flex');
-      }, 600);
+      }, 500);
     }
 
     function handleCreateAccount() {
@@ -986,17 +1191,24 @@
       mCtx.arcTo(0, topOverflow, cornerRadius, topOverflow, cornerRadius);
       mCtx.closePath();
 
-      // Fill dock plate (#161927 to #0C0E17)
-      const plateGrad = mCtx.createLinearGradient(0, topOverflow, 0, topOverflow + dockHeight);
-      plateGrad.addColorStop(0, '#161927');
-      plateGrad.addColorStop(1, '#0C0E17');
-      mCtx.fillStyle = plateGrad;
-      mCtx.fill();
-
-      // Outer dock rim stroke
-      mCtx.strokeStyle = '#2E334D';
-      mCtx.lineWidth = 1.2;
-      mCtx.stroke();
+      // Fill dock plate
+      const isLightMode = document.getElementById('mobile-simulator-frame').classList.contains('light-theme');
+      if (isLightMode) {
+        mCtx.fillStyle = '#FFFFFF';
+        mCtx.fill();
+        mCtx.strokeStyle = '#E2E8F0';
+        mCtx.lineWidth = 1.4;
+        mCtx.stroke();
+      } else {
+        const plateGrad = mCtx.createLinearGradient(0, topOverflow, 0, topOverflow + dockHeight);
+        plateGrad.addColorStop(0, '#161927');
+        plateGrad.addColorStop(1, '#0C0E17');
+        mCtx.fillStyle = plateGrad;
+        mCtx.fill();
+        mCtx.strokeStyle = '#2E334D';
+        mCtx.lineWidth = 1.2;
+        mCtx.stroke();
+      }
       mCtx.restore();
 
       // 2. Luminous Rim Highlight strictly on the socket bowl arc!
@@ -1023,7 +1235,7 @@
         if (opacity > 0.05) {
           mCtx.save();
           mCtx.globalAlpha = opacity;
-          drawNavIcon(mCtx, tab.icon, cx, iconY, '#8E8E9F');
+          drawNavIcon(mCtx, tab.icon, cx, iconY, isLightMode ? '#64748B' : '#8E8E9F');
           mCtx.restore();
         }
       });
@@ -1337,6 +1549,8 @@
           announcementsList = data;
           unreadCount = data.length > 0 ? 1 : 0;
           updateUnreadBadge();
+          renderAnnouncementsList();
+          renderHomeAnnouncements();
         }
       } catch (e) {
         console.error('Error fetching announcements:', e);
@@ -1352,6 +1566,7 @@
           updateUnreadBadge();
           showAnnouncementToast(payload.new);
           renderAnnouncementsList();
+          renderHomeAnnouncements();
         })
         .subscribe((status) => {
           console.log('⚡ Supabase Realtime Channel Status:', status);
@@ -1390,6 +1605,7 @@
 
           if (error) throw error;
           console.log('Broadcasted:', data);
+          renderHomeAnnouncements();
         } catch (err) {
           alert('Error broadcasting: ' + err.message);
         }
@@ -1407,6 +1623,8 @@
         };
         announcementsList.unshift(mock);
         showAnnouncementToast(mock);
+        renderAnnouncementsList();
+        renderHomeAnnouncements();
       }
 
       submitBtn.disabled = false;
@@ -1452,6 +1670,314 @@
         `;
       }).join('');
     }
+
+    // ==============================================================
+    // REQUIREMENT 1: RENDER ANNOUNCEMENTS DIRECTLY ON HOME PAGE
+    // ==============================================================
+    function renderHomeAnnouncements() {
+      const container = document.getElementById('home-announcements-feed');
+      if (!container) return;
+
+      if (!announcementsList || announcementsList.length === 0) {
+        container.innerHTML = `
+          <div class="p-4 rounded-xl bg-slate-800/50 border border-slate-700/60 text-center theme-card">
+            <p class="text-xs text-slate-400 font-medium">No announcements posted yet.</p>
+            <button onclick="document.getElementById('modal-post-announcement').classList.remove('hidden')" class="mt-2 text-[11px] text-amber-400 hover:underline font-bold">
+              + Post First Notice
+            </button>
+          </div>
+        `;
+        return;
+      }
+
+      // Display top 3 announcements on home screen
+      const topAnnouncements = announcementsList.slice(0, 3);
+      container.innerHTML = topAnnouncements.map(a => {
+        let badgeColor = 'bg-teal-500/20 text-teal-300 border-teal-500/30';
+        if (a.category === 'urgent') badgeColor = 'bg-rose-500/20 text-rose-300 border-rose-500/30';
+        if (a.category === 'event') badgeColor = 'bg-amber-400/20 text-amber-300 border-amber-400/30';
+        if (a.category === 'quran_halaqah') badgeColor = 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30';
+
+        return `
+          <div onclick="document.getElementById('btn-open-announcements-modal').click()" class="p-3.5 rounded-xl bg-slate-800/80 border ${a.is_pinned ? 'border-amber-400/60 shadow-[0_4px_12px_rgba(245,166,35,0.12)]' : 'border-slate-700/70'} space-y-1.5 cursor-pointer hover:border-teal-500/50 transition theme-card">
+            <div class="flex items-center justify-between">
+              <div class="flex items-center gap-1.5">
+                <span class="px-2 py-0.5 rounded text-[9px] font-bold uppercase border ${badgeColor}">
+                  ${a.category || 'GENERAL'}
+                </span>
+                ${a.is_pinned ? '<span class="px-1.5 py-0.5 rounded text-[8.5px] font-bold bg-amber-400/20 text-amber-300 border border-amber-400/40">PINNED</span>' : ''}
+              </div>
+              <span class="text-[10px] text-slate-400">${new Date(a.created_at).toLocaleDateString()}</span>
+            </div>
+            <h5 class="text-xs font-bold text-white leading-tight theme-title">${a.title}</h5>
+            <p class="text-[11px] text-slate-300 line-clamp-2 leading-relaxed">${a.content}</p>
+            <div class="flex items-center justify-between pt-1 text-[10px] text-slate-400">
+              <span class="truncate">${a.author_name || 'Ustaz Muhammed'}</span>
+              <span class="text-teal-400 font-semibold flex items-center gap-0.5">Read →</span>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // ==============================================================
+    // REQUIREMENT 2: FUNCTIONAL LIGHT THEME TOGGLE
+    // ==============================================================
+    function handleThemeToggle(isLight) {
+      const frame = document.getElementById('mobile-simulator-frame');
+      const statusText = document.getElementById('theme-status-text');
+      const iconContainer = document.getElementById('theme-icon-container');
+      const themeIcon = document.getElementById('theme-icon');
+      const toggle = document.getElementById('theme-toggle-switch');
+
+      if (toggle) toggle.checked = isLight;
+
+      if (isLight) {
+        frame.classList.add('light-theme');
+        if (statusText) statusText.textContent = 'Daylight clean mode active';
+        if (iconContainer) iconContainer.className = 'w-8 h-8 rounded-xl bg-amber-500/20 text-amber-600 flex items-center justify-center shrink-0';
+        if (themeIcon) {
+          themeIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 3v1m0 16v1m9-9h-1M4 12H3m15.364 6.364l-.707-.707M6.343 6.343l-.707-.707m12.728 0l-.707.707M6.343 17.657l-.707.707M16 12a4 4 0 11-8 0 4 4 0 018 0z"></path>';
+        }
+        localStorage.setItem('kheyrukum_theme', 'light');
+      } else {
+        frame.classList.remove('light-theme');
+        if (statusText) statusText.textContent = 'Midnight dark aesthetic active';
+        if (iconContainer) iconContainer.className = 'w-8 h-8 rounded-xl bg-amber-400/20 text-amber-400 flex items-center justify-center shrink-0';
+        if (themeIcon) {
+          themeIcon.innerHTML = '<path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20.354 15.354A9 9 0 018.646 3.646 9.003 9.003 0 0012 21a9.003 9.003 0 008.354-5.646z"></path>';
+        }
+        localStorage.setItem('kheyrukum_theme', 'dark');
+      }
+
+      // Redraw Meniscus canvas with matching dock theme
+      drawMeniscus();
+    }
+
+    function initTheme() {
+      const saved = localStorage.getItem('kheyrukum_theme');
+      if (saved === 'light') {
+        handleThemeToggle(true);
+      }
+    }
+
+    // ==============================================================
+    // REQUIREMENT 3: ADMIN REALTIME INVITATION CODE GENERATOR
+    // ==============================================================
+    let selectedInviteRole = 'teacher';
+    let liveInviteCodes = [];
+    let latestGeneratedCode = null;
+
+    function selectInviteRole(role) {
+      selectedInviteRole = role;
+      const btnTeacher = document.getElementById('btn-role-teacher');
+      const btnParent = document.getElementById('btn-role-parent');
+
+      if (role === 'teacher') {
+        btnTeacher.className = 'py-2 px-2.5 rounded-xl border border-teal-500 bg-teal-500/20 text-teal-300 text-xs font-bold transition flex items-center justify-center gap-1';
+        btnParent.className = 'py-2 px-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 text-xs font-bold transition flex items-center justify-center gap-1';
+      } else {
+        btnTeacher.className = 'py-2 px-2.5 rounded-xl border border-slate-700 bg-slate-800/60 text-slate-400 text-xs font-bold transition flex items-center justify-center gap-1';
+        btnParent.className = 'py-2 px-2.5 rounded-xl border border-amber-400 bg-amber-400/20 text-amber-300 text-xs font-bold transition flex items-center justify-center gap-1';
+      }
+    }
+
+    async function handleGenerateRealtimeInvite() {
+      const email = document.getElementById('invite-target-email').value.trim();
+      const btn = document.getElementById('btn-generate-invite');
+      btn.disabled = true;
+      btn.textContent = 'Generating Realtime Code...';
+
+      let newCode = null;
+
+      if (supabaseClient) {
+        try {
+          // 1. Try atomic stored procedure
+          const { data: rpcData, error: rpcErr } = await supabaseClient
+            .rpc('generate_invitation_code', {
+              p_role: selectedInviteRole,
+              p_target_email: email || null
+            });
+
+          if (!rpcErr && rpcData && rpcData.success) {
+            newCode = rpcData.code;
+          } else {
+            // Direct insert fallback
+            const prefix = selectedInviteRole === 'teacher' ? 'KHY-TEA' : 'KHY-PAR';
+            const rnd = Math.floor(1000 + Math.random() * 9000);
+            const genCode = `${prefix}-${rnd}`;
+
+            const { data: insData, error: insErr } = await supabaseClient
+              .from('invitation_codes')
+              .insert({
+                code: genCode,
+                role: selectedInviteRole,
+                target_email: email || null,
+                is_used: false
+              })
+              .select()
+              .single();
+
+            if (insErr) throw insErr;
+            newCode = insData.code;
+          }
+        } catch (err) {
+          console.error('Supabase code generation error:', err);
+          alert('Error generating code: ' + err.message);
+        }
+      }
+
+      // Offline / fallback mock code
+      if (!newCode) {
+        const prefix = selectedInviteRole === 'teacher' ? 'KHY-TEA' : 'KHY-PAR';
+        newCode = `${prefix}-${Math.floor(1000 + Math.random() * 9000)}`;
+        const mockItem = {
+          id: 'local-' + Date.now(),
+          code: newCode,
+          role: selectedInviteRole,
+          target_email: email || null,
+          is_used: false,
+          created_at: new Date().toISOString()
+        };
+        liveInviteCodes.unshift(mockItem);
+        renderLiveInviteCodes();
+      }
+
+      latestGeneratedCode = newCode;
+
+      // Show banner
+      const banner = document.getElementById('new-code-banner');
+      const text = document.getElementById('new-code-text');
+      if (banner && text) {
+        text.textContent = newCode;
+        banner.classList.remove('hidden');
+      }
+
+      // Clear input
+      document.getElementById('invite-target-email').value = '';
+
+      btn.disabled = false;
+      btn.textContent = 'Generate Realtime Code';
+    }
+
+    function copyGeneratedCode() {
+      if (!latestGeneratedCode) return;
+      navigator.clipboard?.writeText(latestGeneratedCode);
+      alert(`Copied "${latestGeneratedCode}" to clipboard!`);
+    }
+
+    function tryCodeInSignup() {
+      if (!latestGeneratedCode) return;
+      // Switch view to Auth
+      showAuthView();
+      // Flip card to signup
+      flipToSignUp();
+      // Fill code
+      const codeInput = document.getElementById('signup-invite-code');
+      if (codeInput) {
+        codeInput.value = latestGeneratedCode;
+      }
+      // Trigger verification
+      handleVerifyInviteCode();
+    }
+
+    async function initRealtimeInviteCodes() {
+      if (!supabaseClient) {
+        // Mock sample codes
+        liveInviteCodes = [
+          { code: 'KHY-TEA-9102', role: 'teacher', is_used: false, created_at: new Date().toISOString() },
+          { code: 'KHY-PAR-7842', role: 'parent', is_used: false, created_at: new Date().toISOString() }
+        ];
+        renderLiveInviteCodes();
+        return;
+      }
+
+      // 1. Initial Fetch
+      try {
+        const { data, error } = await supabaseClient
+          .from('invitation_codes')
+          .select('*')
+          .order('created_at', { ascending: false })
+          .limit(20);
+
+        if (!error && data) {
+          liveInviteCodes = data;
+          renderLiveInviteCodes();
+        }
+      } catch (e) {
+        console.error('Error fetching invite codes:', e);
+      }
+
+      // 2. Realtime listener on invitation_codes
+      supabaseClient
+        .channel('public:invitation_codes')
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'invitation_codes' }, (payload) => {
+          console.log('⚡ [Realtime] Invite codes change:', payload);
+          if (payload.eventType === 'INSERT') {
+            liveInviteCodes.unshift(payload.new);
+          } else if (payload.eventType === 'UPDATE') {
+            const idx = liveInviteCodes.findIndex(c => c.id === payload.new.id);
+            if (idx !== -1) liveInviteCodes[idx] = payload.new;
+          } else if (payload.eventType === 'DELETE') {
+            liveInviteCodes = liveInviteCodes.filter(c => c.id === payload.old.id);
+          }
+          renderLiveInviteCodes();
+        })
+        .subscribe((status) => {
+          console.log('⚡ Invite Codes Realtime Status:', status);
+        });
+    }
+
+    function renderLiveInviteCodes() {
+      const container = document.getElementById('live-invite-codes-list');
+      const countEl = document.getElementById('live-codes-count');
+      if (!container) return;
+
+      const activeCount = liveInviteCodes.filter(c => !c.is_used).length;
+      if (countEl) countEl.textContent = `${activeCount} active`;
+
+      if (liveInviteCodes.length === 0) {
+        container.innerHTML = '<p class="text-[11px] text-slate-500 py-2">No codes generated yet.</p>';
+        return;
+      }
+
+      container.innerHTML = liveInviteCodes.map(item => {
+        const isTeacher = item.role === 'teacher';
+        const badgeClass = isTeacher
+          ? 'bg-teal-500/20 text-teal-300 border-teal-500/30'
+          : 'bg-amber-400/20 text-amber-300 border-amber-400/30';
+
+        return `
+          <div class="p-2 rounded-lg bg-slate-900/80 border border-slate-700/60 flex items-center justify-between text-xs">
+            <div class="flex items-center gap-2">
+              <span class="px-1.5 py-0.5 rounded text-[8.5px] font-bold uppercase border ${badgeClass}">
+                ${item.role}
+              </span>
+              <span class="font-mono font-bold ${item.is_used ? 'line-through text-slate-500' : 'text-slate-200'}">
+                ${item.code}
+              </span>
+            </div>
+            <div class="flex items-center gap-1.5">
+              <span class="text-[9px] font-semibold ${item.is_used ? 'text-slate-500' : 'text-emerald-400'}">
+                ${item.is_used ? 'USED' : 'ACTIVE'}
+              </span>
+              <button onclick="navigator.clipboard?.writeText('${item.code}'); alert('Copied ${item.code}!');" class="p-1 text-slate-400 hover:text-white" title="Copy">
+                <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"></path></svg>
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Call initializers on load
+    window.addEventListener('DOMContentLoaded', () => {
+      initTheme();
+      initRealtimeInviteCodes();
+    });
+    // In case DOM is already ready:
+    initTheme();
+    initRealtimeInviteCodes();
   </script>
 
   <!-- ============================================== -->

@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../models/invitation_code.dart';
 
 /// Service class to manage Supabase Cloud initialization, authentication,
 /// email verification, and the Admin Invitation Code registration workflow for Kheyrukum.
@@ -193,6 +194,131 @@ class SupabaseService {
   Future<void> signOut() async {
     if (_isInitialized) {
       await client?.auth.signOut();
+    }
+  }
+
+  /// 5. Generate Realtime Invitation Code for Teacher or Parent (Admin)
+  Future<Map<String, dynamic>> generateInviteCode({
+    required String role,
+    String? targetEmail,
+    String? linkedStudentId,
+    String? targetHalaqahId,
+    int daysValid = 30,
+  }) async {
+    final cleanRole = role.toLowerCase().trim();
+    if (cleanRole != 'teacher' && cleanRole != 'parent') {
+      return {'success': false, 'message': 'Role must be teacher or parent.'};
+    }
+
+    if (client == null) {
+      // Mock code generation for offline / testing
+      final prefix = cleanRole == 'teacher' ? 'KHY-TEA' : 'KHY-PAR';
+      final randomNum = (1000 + DateTime.now().millisecondsSinceEpoch % 9000);
+      final mockCode = '$prefix-$randomNum';
+      return {
+        'success': true,
+        'code': mockCode,
+        'role': cleanRole,
+        'message': 'Mock invitation code generated.',
+        'data': {
+          'id': 'mock-${DateTime.now().millisecondsSinceEpoch}',
+          'code': mockCode,
+          'role': cleanRole,
+          'target_email': targetEmail,
+          'is_used': false,
+          'expires_at': DateTime.now().add(Duration(days: daysValid)).toIso8601String(),
+          'created_at': DateTime.now().toIso8601String(),
+        }
+      };
+    }
+
+    try {
+      // Step A: Call the atomic stored function with security definer
+      final rpcRes = await client!.rpc('generate_invitation_code', params: {
+        'p_role': cleanRole,
+        'p_target_email': targetEmail?.trim(),
+        'p_linked_student_id': linkedStudentId,
+        'p_target_halaqah_id': targetHalaqahId,
+        'p_days_valid': daysValid,
+      });
+
+      if (rpcRes != null && rpcRes['success'] == true) {
+        return {
+          'success': true,
+          'code': rpcRes['code'],
+          'role': rpcRes['role'],
+          'data': rpcRes,
+          'message': 'Invitation code created successfully: ${rpcRes['code']}',
+        };
+      }
+
+      // Step B: Direct table insert fallback
+      final prefix = cleanRole == 'teacher' ? 'KHY-TEA' : 'KHY-PAR';
+      final randomNum = (1000 + (DateTime.now().microsecondsSinceEpoch % 9000));
+      final generatedCode = '$prefix-$randomNum';
+
+      final res = await client!.from('invitation_codes').insert({
+        'code': generatedCode,
+        'role': cleanRole,
+        'target_email': targetEmail?.trim().isEmpty == true ? null : targetEmail?.trim(),
+        'linked_student_id': linkedStudentId,
+        'target_halaqah_id': targetHalaqahId,
+        'expires_at': DateTime.now().toUtc().add(Duration(days: daysValid)).toIso8601String(),
+        'is_used': false,
+      }).select().single();
+
+      return {
+        'success': true,
+        'code': res['code'],
+        'role': res['role'],
+        'data': res,
+        'message': 'Invitation code created successfully: ${res['code']}',
+      };
+    } catch (e) {
+      debugPrint('[SupabaseService] generateInviteCode error: $e');
+      return {'success': false, 'message': 'Failed to generate code: $e'};
+    }
+  }
+
+  /// 6. Stream Invitation Codes in Real-Time
+  Stream<List<InvitationCode>> streamInviteCodes() {
+    if (client == null) {
+      return Stream.value([
+        InvitationCode(
+          id: 'demo-1',
+          code: 'KHY-TEA-9102',
+          role: 'teacher',
+          isUsed: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 10)),
+          expiresAt: DateTime.now().add(const Duration(days: 30)),
+        ),
+        InvitationCode(
+          id: 'demo-2',
+          code: 'KHY-PAR-7842',
+          role: 'parent',
+          isUsed: false,
+          createdAt: DateTime.now().subtract(const Duration(minutes: 25)),
+          expiresAt: DateTime.now().add(const Duration(days: 30)),
+        ),
+      ]);
+    }
+
+    return client!
+        .from('invitation_codes')
+        .stream(primaryKey: ['id'])
+        .order('created_at', ascending: false)
+        .map((data) => data.map((json) => InvitationCode.fromJson(json)).toList());
+  }
+
+  /// 7. Delete an Invitation Code
+  Future<bool> deleteInviteCode(String id) async {
+    if (client == null) return true;
+    try {
+      await client!.from('invitation_codes').delete().eq('id', id);
+      return true;
+    } catch (e) {
+      debugPrint('[SupabaseService] deleteInviteCode error: $e');
+      return false;
     }
   }
 }

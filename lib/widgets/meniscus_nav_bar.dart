@@ -263,7 +263,9 @@ class _MeniscusNavBarState extends State<MeniscusNavBar>
                       bowlRadius: 22.0,     // 22px bowl (4px clearance around bead)
                       shoulderRadius: 10.0, // 10px smooth shoulder
                       velocityX: _currentVelocity,
-                      dockFillColor: const Color(0xFF161927),
+                      dockFillColor: Theme.of(context).brightness == Brightness.dark
+                          ? const Color(0xFF161927)
+                          : const Color(0xFFFFFFFF),
                       accentColor: activeColor,
                       cornerRadius: 20.0,
                     ),

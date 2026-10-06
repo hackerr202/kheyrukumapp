@@ -446,7 +446,105 @@ DO $$ BEGIN
     WITH CHECK (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- ------------------------------------------------------------------------------
+-- 12.5 ADMIN INVITATION CODE GENERATION STORED PROCEDURE & REALTIME PUBLICATION
+-- ------------------------------------------------------------------------------
+CREATE OR REPLACE FUNCTION public.generate_invitation_code(
+    p_role TEXT,
+    p_code TEXT DEFAULT NULL,
+    p_target_email TEXT DEFAULT NULL,
+    p_linked_student_id UUID DEFAULT NULL,
+    p_target_halaqah_id UUID DEFAULT NULL,
+    p_days_valid INT DEFAULT 30
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+DECLARE
+    v_code TEXT;
+    v_new_id UUID;
+    v_expires_at TIMESTAMPTZ;
+    v_role user_role;
+BEGIN
+    IF LOWER(p_role) NOT IN ('teacher', 'parent') THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Role must be either teacher or parent');
+    END IF;
+    v_role := LOWER(p_role)::user_role;
+
+    IF p_code IS NOT NULL AND TRIM(p_code) <> '' THEN
+        v_code := UPPER(TRIM(p_code));
+    ELSE
+        IF v_role = 'teacher' THEN
+            v_code := 'KHY-TEA-' || LPAD(FLOOR(RANDOM() * 9000 + 1000)::TEXT, 4, '0');
+        ELSE
+            v_code := 'KHY-PAR-' || LPAD(FLOOR(RANDOM() * 9000 + 1000)::TEXT, 4, '0');
+        END IF;
+    END IF;
+
+    v_expires_at := NOW() + (p_days_valid || ' days')::INTERVAL;
+
+    INSERT INTO public.invitation_codes (
+        code,
+        role,
+        target_email,
+        linked_student_id,
+        target_halaqah_id,
+        expires_at,
+        created_by
+    )
+    VALUES (
+        v_code,
+        v_role,
+        NULLIF(TRIM(p_target_email), ''),
+        p_linked_student_id,
+        p_target_halaqah_id,
+        v_expires_at,
+        auth.uid()
+    )
+    RETURNING id INTO v_new_id;
+
+    RETURN jsonb_build_object(
+        'success', true,
+        'id', v_new_id,
+        'code', v_code,
+        'role', v_role,
+        'expires_at', v_expires_at,
+        'target_email', p_target_email,
+        'message', 'Invitation code generated successfully.'
+    );
+EXCEPTION WHEN unique_violation THEN
+    v_code := v_code || '-' || FLOOR(RANDOM() * 90 + 10)::TEXT;
+    INSERT INTO public.invitation_codes (code, role, target_email, linked_student_id, target_halaqah_id, expires_at, created_by)
+    VALUES (v_code, v_role, NULLIF(TRIM(p_target_email), ''), p_linked_student_id, p_target_halaqah_id, v_expires_at, auth.uid())
+    RETURNING id INTO v_new_id;
+    RETURN jsonb_build_object(
+        'success', true,
+        'id', v_new_id,
+        'code', v_code,
+        'role', v_role,
+        'expires_at', v_expires_at,
+        'target_email', p_target_email,
+        'message', 'Invitation code generated successfully.'
+    );
+END;
+$$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins can manage invitation codes"
+    ON public.invitation_codes FOR ALL TO authenticated
+    USING (true)
+    WITH CHECK (true);
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Anyone can check active invite codes"
+    ON public.invitation_codes FOR SELECT TO anon
+    USING (NOT is_used AND expires_at > NOW());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 ALTER PUBLICATION supabase_realtime ADD TABLE public.announcements;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.invitation_codes;
 
 -- ------------------------------------------------------------------------------
 -- 13. USER DEVICE TOKENS (FOR OFF-APP CLOSED-APP PUSH NOTIFICATIONS)

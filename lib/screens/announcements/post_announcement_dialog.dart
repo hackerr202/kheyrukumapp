@@ -79,11 +79,18 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final dialogBg = isDark ? const Color(0xFF161927) : Colors.white;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final borderColor = isDark ? const Color(0xFF2E334D) : const Color(0xFFE2E8F0);
+    final inputBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+
     return Dialog(
-      backgroundColor: const Color(0xFF161927),
+      backgroundColor: dialogBg,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: const BorderSide(color: Color(0xFF2E334D), width: 1.2),
+        side: BorderSide(color: borderColor, width: 1.2),
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
       child: SingleChildScrollView(
@@ -108,14 +115,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   ),
                 ),
                 const SizedBox(width: 12),
-                const Expanded(
+                Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         'Broadcast Announcement',
                         style: TextStyle(
-                          color: Colors.white,
+                          color: textColor,
                           fontSize: 16,
                           fontWeight: FontWeight.bold,
                         ),
@@ -123,7 +130,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                       Text(
                         'Instant push notification to all users',
                         style: TextStyle(
-                          color: Color(0xFF94A3B8),
+                          color: subtextColor,
                           fontSize: 11,
                         ),
                       ),
@@ -204,47 +211,55 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
             const SizedBox(height: 14),
 
             // Title
-            const Text(
+            Text(
               'Announcement Title',
-              style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(color: subtextColor, fontSize: 12, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             TextField(
               controller: _titleController,
-              style: const TextStyle(color: Colors.white, fontSize: 14),
+              style: TextStyle(color: textColor, fontSize: 14),
               decoration: InputDecoration(
                 hintText: 'e.g. Ramadan Recitation Competition 1448H',
-                hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                hintStyle: TextStyle(color: subtextColor.withOpacity(0.7), fontSize: 12),
                 filled: true,
-                fillColor: const Color(0xFF1E293B),
+                fillColor: inputBg,
                 contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: borderColor),
                 ),
               ),
             ),
             const SizedBox(height: 14),
 
             // Content
-            const Text(
+            Text(
               'Announcement Message',
-              style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
+              style: TextStyle(color: subtextColor, fontSize: 12, fontWeight: FontWeight.w600),
             ),
             const SizedBox(height: 6),
             TextField(
               controller: _contentController,
               maxLines: 4,
-              style: const TextStyle(color: Colors.white, fontSize: 13, height: 1.4),
+              style: TextStyle(color: textColor, fontSize: 13, height: 1.4),
               decoration: InputDecoration(
                 hintText: 'Write the complete announcement details here...',
-                hintStyle: const TextStyle(color: Color(0xFF475569), fontSize: 12),
+                hintStyle: TextStyle(color: subtextColor.withOpacity(0.7), fontSize: 12),
                 filled: true,
-                fillColor: const Color(0xFF1E293B),
+                fillColor: inputBg,
                 contentPadding: const EdgeInsets.all(14),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide.none,
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  borderSide: BorderSide(color: borderColor),
                 ),
               ),
             ),
