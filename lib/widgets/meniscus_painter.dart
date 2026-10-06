@@ -15,6 +15,7 @@ class MeniscusPainter extends CustomPainter {
   final double shoulderRadius; // Radius of the convex shoulders
   final double velocityX;      // Velocity for dynamic surface leaning
   final Color dockFillColor;
+  final Color accentColor;
   final double cornerRadius;
   final bool isDark;
 
