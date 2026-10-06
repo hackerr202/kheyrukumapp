@@ -48,7 +48,11 @@ class _StudentsTabState extends State<StudentsTab> {
 
         if (!_isAdmin) {
           // PARENT VIEW: Shows multiple children assigned to this parent
-          final children = StudentService.instance.getStudentsForParent('par-001');
+          final user = SupabaseService.instance.currentUser;
+          final children = StudentService.instance.getStudentsForParent(
+            user?.id ?? '',
+            parentEmail: user?.email,
+          );
           return _buildParentView(
             context: context,
             children: children,
@@ -393,57 +397,107 @@ class _StudentsTabState extends State<StudentsTab> {
 
     return Scaffold(
       backgroundColor: Colors.transparent,
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: () => _showAddStudentDialog(context),
-        backgroundColor: AppColors.accentTeal,
-        foregroundColor: Colors.black,
-        icon: const Icon(Icons.person_add_rounded, size: 18),
-        label: const Text('Add Student', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-      ),
       body: ListView(
         padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
         children: [
-          // Header & Add Button
+          // Header & Add Button (placed in header row away from floating nav bar)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Text(
-                'Student Roster (${allStudents.length})',
-                style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Student Roster (${allStudents.length})',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    'Assigned to Parents',
+                    style: TextStyle(fontSize: 11, color: subtextColor),
+                  ),
+                ],
               ),
-              Text(
-                'Assigned to Parents',
-                style: TextStyle(fontSize: 11, color: subtextColor),
+              ElevatedButton.icon(
+                onPressed: () => _showAddStudentDialog(context),
+                icon: const Icon(Icons.person_add_rounded, size: 16),
+                label: const Text('Add Student', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppColors.accentTeal,
+                  foregroundColor: Colors.black,
+                  elevation: 2,
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                ),
               ),
             ],
           ),
-          const SizedBox(height: 12),
-
-          // Search Bar
-          TextField(
-            onChanged: (val) => setState(() => _searchQuery = val),
-            style: TextStyle(color: textColor, fontSize: 13),
-            decoration: InputDecoration(
-              hintText: 'Search student or parent name...',
-              hintStyle: TextStyle(color: subtextColor, fontSize: 12),
-              prefixIcon: Icon(Icons.search_rounded, size: 18, color: subtextColor),
-              filled: true,
-              fillColor: cardBg,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: borderColor),
-              ),
-              enabledBorder: OutlineInputBorder(
-                borderRadius: BorderRadius.circular(14),
-                borderSide: BorderSide(color: borderColor),
-              ),
-            ),
-          ),
           const SizedBox(height: 14),
 
-          // Student Cards List
-          if (filtered.isEmpty)
+          // Search Bar
+          if (allStudents.isNotEmpty) ...[
+            TextField(
+              onChanged: (val) => setState(() => _searchQuery = val),
+              style: TextStyle(color: textColor, fontSize: 13),
+              decoration: InputDecoration(
+                hintText: 'Search student or parent name...',
+                hintStyle: TextStyle(color: subtextColor, fontSize: 12),
+                prefixIcon: Icon(Icons.search_rounded, size: 18, color: subtextColor),
+                filled: true,
+                fillColor: cardBg,
+                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(14),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+              ),
+            ),
+            const SizedBox(height: 14),
+          ],
+
+          // Student Cards List or Empty State
+          if (allStudents.isEmpty)
+            Container(
+              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(20),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                children: [
+                  Icon(Icons.school_outlined, size: 48, color: AppColors.accentTeal.withOpacity(0.7)),
+                  const SizedBox(height: 14),
+                  Text(
+                    'No Students Enrolled Yet',
+                    style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Add your students to begin logging daily attendance, recording weekly memorization progress, and managing halaqahs.',
+                    textAlign: TextAlign.center,
+                    style: TextStyle(color: subtextColor, fontSize: 12, height: 1.4),
+                  ),
+                  const SizedBox(height: 18),
+                  ElevatedButton.icon(
+                    onPressed: () => _showAddStudentDialog(context),
+                    icon: const Icon(Icons.person_add_rounded, size: 18),
+                    label: const Text('Add First Student', style: TextStyle(fontWeight: FontWeight.bold)),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppColors.accentTeal,
+                      foregroundColor: Colors.black,
+                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                    ),
+                  ),
+                ],
+              ),
+            )
+          else if (filtered.isEmpty)
             Center(
               child: Padding(
                 padding: const EdgeInsets.all(40),
@@ -457,7 +511,7 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  // Admin Card for a student with 1-click attendance, weekly reports, & account suspension
+  // Admin Card for a student with 1-click attendance, weekly reports, & messaging
   Widget _buildAdminStudentCard(
     Student student,
     bool isDark,
@@ -466,17 +520,13 @@ class _StudentsTabState extends State<StudentsTab> {
     Color textColor,
     Color subtextColor,
   ) {
-    final isSuspended = PaymentService.instance.isUserSuspended(student.parentId ?? '');
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isSuspended ? const Color(0xFFEF4444).withOpacity(0.08) : cardBg,
+        color: cardBg,
         borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: isSuspended ? const Color(0xFFEF4444).withOpacity(0.4) : borderColor,
-        ),
+        border: Border.all(color: borderColor),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -500,39 +550,29 @@ class _StudentsTabState extends State<StudentsTab> {
                   ],
                 ),
               ),
-              if (isSuspended)
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFEF4444).withOpacity(0.2),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Text('SUSPENDED', style: TextStyle(color: Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold)),
-                )
-              else
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                decoration: BoxDecoration(
+                  color: student.monthlyFeeStatus == 'paid'
+                      ? AppColors.accentEmerald.withOpacity(0.15)
+                      : (student.monthlyFeeStatus == 'overdue'
+                          ? const Color(0xFFEF4444).withOpacity(0.15)
+                          : const Color(0xFFFFA000).withOpacity(0.15)),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  student.monthlyFeeStatus.toUpperCase(),
+                  style: TextStyle(
                     color: student.monthlyFeeStatus == 'paid'
-                        ? AppColors.accentEmerald.withOpacity(0.15)
+                        ? AppColors.accentEmerald
                         : (student.monthlyFeeStatus == 'overdue'
-                            ? const Color(0xFFEF4444).withOpacity(0.15)
-                            : const Color(0xFFFFA000).withOpacity(0.15)),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Text(
-                    student.monthlyFeeStatus.toUpperCase(),
-                    style: TextStyle(
-                      color: student.monthlyFeeStatus == 'paid'
-                          ? AppColors.accentEmerald
-                          : (student.monthlyFeeStatus == 'overdue'
-                              ? const Color(0xFFEF4444)
-                              : const Color(0xFFFFA000)),
-                      fontSize: 10,
-                      fontWeight: FontWeight.bold,
-                    ),
+                            ? const Color(0xFFEF4444)
+                            : const Color(0xFFFFA000)),
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
                   ),
                 ),
+              ),
             ],
           ),
           const SizedBox(height: 8),
@@ -541,7 +581,7 @@ class _StudentsTabState extends State<StudentsTab> {
             style: TextStyle(fontSize: 11, color: isDark ? Colors.white60 : Colors.black54),
           ),
           const Divider(height: 16),
-          // Action Buttons: Mark Attendance, Weekly Report, Message Parent, Suspend
+          // Action Buttons: Mark Attendance, Weekly Report, Message Parent (Suspend button removed)
           Wrap(
             spacing: 8,
             runSpacing: 6,
@@ -571,21 +611,6 @@ class _StudentsTabState extends State<StudentsTab> {
                     ),
                   );
                 },
-              ),
-              ActionChip(
-                avatar: Icon(
-                  isSuspended ? Icons.replay_rounded : Icons.block_rounded,
-                  size: 14,
-                  color: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-                ),
-                label: Text(
-                  isSuspended ? 'Restore Account' : 'Suspend Account',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-                  ),
-                ),
-                onPressed: () => _showSuspensionDialog(context, student, isSuspended),
               ),
             ],
           ),
@@ -900,70 +925,6 @@ class _StudentsTabState extends State<StudentsTab> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  void _showSuspensionDialog(BuildContext context, Student student, bool isSuspended) {
-    final reasonCtrl = TextEditingController(
-      text: 'Unpaid monthly halaqah tuition for consecutive months.',
-    );
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          isSuspended ? 'Restore Parent Account' : 'Suspend Parent Account',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isSuspended
-                  ? 'Restore access for ${student.parentName}? Account will regain normal access.'
-                  : 'Temporarily suspend ${student.parentName} due to unpaid tuition?',
-              style: const TextStyle(fontSize: 13),
-            ),
-            if (!isSuspended) ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: reasonCtrl,
-                decoration: const InputDecoration(labelText: 'Reason for Suspension'),
-                maxLines: 2,
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (isSuspended) {
-                await PaymentService.instance.restoreUser(student.parentId ?? '');
-              } else {
-                await PaymentService.instance.suspendUser(
-                  userId: student.parentId ?? '',
-                  userName: student.parentName,
-                  reason: reasonCtrl.text.trim(),
-                );
-              }
-              Navigator.pop(ctx);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(
-                  content: Text(isSuspended ? 'Account restored!' : 'Account temporarily suspended.'),
-                ),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
-            child: Text(isSuspended ? 'Confirm Restore' : 'Confirm Suspension'),
-          ),
-        ],
       ),
     );
   }

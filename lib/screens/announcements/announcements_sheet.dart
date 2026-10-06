@@ -312,6 +312,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     } else if (item.type == 'payment_rejection') {
       iconBg = const Color(0xFFEF4444);
       iconData = Icons.error_rounded;
+    } else if (item.type == 'prayer') {
+      iconBg = const Color(0xFF10B981);
+      iconData = Icons.access_time_filled_rounded;
     }
 
     final isPaymentType = item.type.startsWith('payment');

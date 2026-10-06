@@ -41,19 +41,10 @@ class _MessagesTabState extends State<MessagesTab> {
 
         return Scaffold(
           backgroundColor: Colors.transparent,
-          floatingActionButton: _isAdmin
-              ? FloatingActionButton.extended(
-                  onPressed: () => _showAdminActionSheet(context),
-                  backgroundColor: const Color(0xFFFFA000),
-                  foregroundColor: Colors.black,
-                  icon: const Icon(Icons.add_comment_rounded, size: 18),
-                  label: const Text('New Message', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                )
-              : null,
           body: ListView(
             padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
             children: [
-              // Header
+              // Header & New Chat button (placed safely in header away from bottom nav bar)
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
@@ -61,17 +52,19 @@ class _MessagesTabState extends State<MessagesTab> {
                     'Messages & Circles',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
                   ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFFFFA000).withOpacity(0.15),
-                      borderRadius: BorderRadius.circular(12),
+                  if (_isAdmin)
+                    ElevatedButton.icon(
+                      onPressed: () => _showAdminActionSheet(context),
+                      icon: const Icon(Icons.add_comment_rounded, size: 15),
+                      label: const Text('New Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFFFFA000),
+                        foregroundColor: Colors.black,
+                        elevation: 2,
+                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
                     ),
-                    child: Text(
-                      '${conversations.length} Active',
-                      style: const TextStyle(color: Color(0xFFFFA000), fontWeight: FontWeight.bold, fontSize: 11),
-                    ),
-                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -139,7 +132,7 @@ class _MessagesTabState extends State<MessagesTab> {
               // Conversation Items List
               if (conversations.isEmpty)
                 Container(
-                  padding: const EdgeInsets.all(32),
+                  padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
                   decoration: BoxDecoration(
                     color: cardBg,
                     borderRadius: BorderRadius.circular(20),
@@ -148,9 +141,31 @@ class _MessagesTabState extends State<MessagesTab> {
                   child: Center(
                     child: Column(
                       children: [
-                        Icon(Icons.chat_bubble_outline_rounded, size: 40, color: subtextColor),
-                        const SizedBox(height: 10),
-                        Text('No active conversations yet.', style: TextStyle(color: subtextColor, fontSize: 13)),
+                        Icon(Icons.chat_bubble_outline_rounded, size: 44, color: const Color(0xFFFFA000).withOpacity(0.7)),
+                        const SizedBox(height: 12),
+                        Text('No Active Conversations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                        const SizedBox(height: 6),
+                        Text(
+                          _isAdmin
+                              ? 'Start private chats with parents or create a discussion group for halaqah circles.'
+                              : 'Send a message to the Center Director or your child\'s Ustaz using the buttons above.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: subtextColor, fontSize: 12, height: 1.4),
+                        ),
+                        if (_isAdmin) ...[
+                          const SizedBox(height: 18),
+                          ElevatedButton.icon(
+                            onPressed: () => _showAdminActionSheet(context),
+                            icon: const Icon(Icons.add_comment_rounded, size: 16),
+                            label: const Text('Start First Chat', style: TextStyle(fontWeight: FontWeight.bold)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: const Color(0xFFFFA000),
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),

@@ -4,6 +4,7 @@ import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/notification_center_service.dart';
+import '../../core/services/prayer_reminder_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/announcement_banner.dart';
@@ -35,6 +36,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Announcement>? _alertSub;
   StreamSubscription<List<Announcement>>? _announcementsSub;
   StreamSubscription<List<AppNotification>>? _notifsSub;
+  StreamSubscription<Map<String, String>>? _prayerSub;
 
   int get _totalUnreadCount => _unreadAnnouncementsCount + _unreadNotificationsCount;
 
@@ -60,6 +62,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       setState(() => _unreadNotificationsCount = NotificationCenterService.instance.unreadCount);
     });
+
+    // 4. Start 10-minute prayer reminder schedule for all users and admin
+    PrayerReminderService.instance.start();
+    _prayerSub = PrayerReminderService.instance.onPrayerAlert.listen((alert) {
+      if (!mounted) return;
+      _triggerAlertToast(Announcement(
+        id: 'prayer-${DateTime.now().millisecondsSinceEpoch}',
+        title: alert['title'] ?? 'Prayer & Dhikr Reminder 🕌',
+        content: alert['body'] ?? 'Turn your heart towards Allah in prayer and remembrance.',
+        category: 'urgent',
+        targetAudience: 'all',
+        authorName: 'Adhan & Prayer Reminder',
+        isPinned: true,
+        createdAt: DateTime.now(),
+      ));
+    });
   }
 
   void _triggerAlertToast(Announcement announcement) {
@@ -78,6 +96,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _alertSub?.cancel();
     _announcementsSub?.cancel();
     _notifsSub?.cancel();
+    _prayerSub?.cancel();
     super.dispose();
   }
 

@@ -7,9 +7,7 @@ import 'notification_center_service.dart';
 /// - Parent initiating conversations with Admin or child's halaqah Teachers
 /// - Real-time message streaming
 class MessagingService {
-  MessagingService._() {
-    _initSampleConversations();
-  }
+  MessagingService._();
 
   static final MessagingService instance = MessagingService._();
 
@@ -24,121 +22,6 @@ class MessagingService {
   Stream<List<Conversation>> get conversationsStream => _conversationsController.stream;
 
   List<Conversation> get allConversations => List.unmodifiable(_conversations);
-
-  void _initSampleConversations() {
-    // 1. Group conversation created by Admin with all parents
-    final groupConvo = Conversation(
-      id: 'convo-group-01',
-      title: 'Halaqah Abu Bakr - All Parents 📢',
-      isGroup: true,
-      participantIds: ['admin-001', 'par-001', 'par-002'],
-      participantNames: ['Admin Director', 'Muhammed Yakut', 'Khalid Al-Mansoor'],
-      lastMessage: 'As-salamu alaykum parents. Tomorrow will be cumulative Juz 30 review.',
-      lastMessageTime: DateTime.now().subtract(const Duration(hours: 2)),
-      halaqahId: 'hal-001',
-      groupType: 'parent_group',
-    );
-
-    // 2. Direct chat between Admin and Parent (Muhammed Yakut)
-    final directConvo = Conversation(
-      id: 'convo-direct-01',
-      title: 'Direct Chat: Ustaz Muhammed Yakut (Admin)',
-      isGroup: false,
-      participantIds: ['admin-001', 'par-001'],
-      participantNames: ['Admin Director', 'Muhammed Yakut'],
-      lastMessage: 'Abdur-Rahman has shown great progress in Surah Al-Mulk this week.',
-      lastMessageTime: DateTime.now().subtract(const Duration(minutes: 45)),
-      groupType: 'direct_admin',
-    );
-
-    // 3. Direct chat between Parent and Teacher (Ustadha Maryam - Fatima's teacher)
-    final teacherConvo = Conversation(
-      id: 'convo-teacher-01',
-      title: 'Ustadha Maryam (Halaqah Aisha)',
-      isGroup: false,
-      participantIds: ['teach-002', 'par-001'],
-      participantNames: ['Ustadha Maryam', 'Muhammed Yakut'],
-      lastMessage: 'Fatima\'s Tajweed recitation was lovely today. Please practice Ayah 10 at home.',
-      lastMessageTime: DateTime.now().subtract(const Duration(days: 1)),
-      groupType: 'direct_teacher',
-    );
-
-    _conversations.addAll([groupConvo, directConvo, teacherConvo]);
-
-    // Initial messages for group
-    _messagesMap['convo-group-01'] = [
-      ChatMessage(
-        id: 'msg-01',
-        conversationId: 'convo-group-01',
-        senderId: 'admin-001',
-        senderName: 'Admin Director',
-        senderRole: 'admin',
-        content: 'Bismillah. Welcome to the official parents group for Halaqah Abu Bakr.',
-        timestamp: DateTime.now().subtract(const Duration(days: 3)),
-        isRead: true,
-      ),
-      ChatMessage(
-        id: 'msg-02',
-        conversationId: 'convo-group-01',
-        senderId: 'par-001',
-        senderName: 'Muhammed Yakut',
-        senderRole: 'parent',
-        content: 'Jazakumullahu Khayran Ustaz for organizing this.',
-        timestamp: DateTime.now().subtract(const Duration(days: 2)),
-        isRead: true,
-      ),
-      ChatMessage(
-        id: 'msg-03',
-        conversationId: 'convo-group-01',
-        senderId: 'admin-001',
-        senderName: 'Admin Director',
-        senderRole: 'admin',
-        content: 'As-salamu alaykum parents. Tomorrow will be cumulative Juz 30 review.',
-        timestamp: DateTime.now().subtract(const Duration(hours: 2)),
-        isRead: true,
-      ),
-    ];
-
-    // Initial messages for direct admin chat
-    _messagesMap['convo-direct-01'] = [
-      ChatMessage(
-        id: 'msg-04',
-        conversationId: 'convo-direct-01',
-        senderId: 'par-001',
-        senderName: 'Muhammed Yakut',
-        senderRole: 'parent',
-        content: 'As-salamu alaykum Ustaz, how is Abdur-Rahman performing in his daily Sabaq?',
-        timestamp: DateTime.now().subtract(const Duration(hours: 3)),
-        isRead: true,
-      ),
-      ChatMessage(
-        id: 'msg-05',
-        conversationId: 'convo-direct-01',
-        senderId: 'admin-001',
-        senderName: 'Admin Director',
-        senderRole: 'admin',
-        content: 'Abdur-Rahman has shown great progress in Surah Al-Mulk this week.',
-        timestamp: DateTime.now().subtract(const Duration(minutes: 45)),
-        isRead: true,
-      ),
-    ];
-
-    // Initial messages for teacher chat
-    _messagesMap['convo-teacher-01'] = [
-      ChatMessage(
-        id: 'msg-06',
-        conversationId: 'convo-teacher-01',
-        senderId: 'teach-002',
-        senderName: 'Ustadha Maryam',
-        senderRole: 'teacher',
-        content: 'Fatima\'s Tajweed recitation was lovely today. Please practice Ayah 10 at home.',
-        timestamp: DateTime.now().subtract(const Duration(days: 1)),
-        isRead: true,
-      ),
-    ];
-
-    _conversationsController.add(List.from(_conversations));
-  }
 
   /// Get conversations relevant for a user (or all if admin)
   List<Conversation> getConversationsForUser(String userId, {bool isAdmin = false}) {

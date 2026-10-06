@@ -10,9 +10,7 @@ import '../models/app_notification.dart';
 /// - Payment Submission alerts for administrators
 /// - Payment Approval / Rejection (with reason) notifications for parents
 class NotificationCenterService {
-  NotificationCenterService._() {
-    _initSampleNotifications();
-  }
+  NotificationCenterService._();
 
   static final NotificationCenterService instance = NotificationCenterService._();
 
@@ -24,36 +22,6 @@ class NotificationCenterService {
   List<AppNotification> get currentNotifications => List.unmodifiable(_notifications);
 
   int get unreadCount => _notifications.where((n) => !n.isRead).length;
-
-  void _initSampleNotifications() {
-    _notifications.addAll([
-      AppNotification(
-        id: 'notif-1',
-        title: 'Daily Attendance: Present ✅',
-        body: 'Abdur-Rahman arrived on time for Fajr Halaqah. Tajweed recitation was attentive.',
-        type: 'attendance',
-        createdAt: DateTime.now().subtract(const Duration(hours: 3)),
-        data: {'student_name': 'Abdur-Rahman Muhammed', 'status': 'present'},
-      ),
-      AppNotification(
-        id: 'notif-2',
-        title: 'Weekly Quran Progress Report 📜',
-        body: 'Weekly review for Abdur-Rahman completed: Surah Al-Mulk mastered with Excellent rating.',
-        type: 'weekly_report',
-        createdAt: DateTime.now().subtract(const Duration(days: 2)),
-        data: {'student_name': 'Abdur-Rahman Muhammed', 'grade': 'Excellent'},
-      ),
-      AppNotification(
-        id: 'notif-3',
-        title: 'Monthly Tuition Reminder 💳',
-        body: 'Monthly halaqah tuition for October is due. Please upload your payment receipt screenshot.',
-        type: 'payment_reminder',
-        createdAt: DateTime.now().subtract(const Duration(days: 4)),
-        data: {'month': 'October 2026', 'amount': 50.0},
-      ),
-    ]);
-    _controller.add(List.from(_notifications));
-  }
 
   void addNotification({
     required String title,

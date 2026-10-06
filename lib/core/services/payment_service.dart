@@ -10,9 +10,7 @@ import 'notification_center_service.dart';
 /// - Admin overdue notifications
 /// - Account suspension & removal for unpaid accounts
 class PaymentService {
-  PaymentService._() {
-    _initSamplePayments();
-  }
+  PaymentService._();
 
   static final PaymentService instance = PaymentService._();
 
@@ -24,115 +22,54 @@ class PaymentService {
   List<MonthlyPayment> get allPayments => List.unmodifiable(_payments);
 
   // User account status tracking: 'active', 'suspended', 'removed'
-  final Map<String, String> _userAccountStatus = {
-    'par-001': 'active', // Muhammed Yakut (Parent)
-    'par-002': 'suspended', // Khalid Al-Mansoor (Suspended for unpaid tuition)
-  };
+  final Map<String, String> _userAccountStatus = {};
+  final Map<String, String> _suspensionReasons = {};
 
-  final Map<String, String> _suspensionReasons = {
-    'par-002': 'Unpaid monthly halaqah tuition for 2 consecutive months (September & October). Please contact center admin.',
-  };
+  /// Admin issues a monthly tuition fee invoice for a student
+  Future<MonthlyPayment> createPaymentInvoice({
+    required String studentId,
+    required String studentName,
+    required String parentId,
+    required String parentName,
+    required String parentEmail,
+    required String month,
+    required double amount,
+    required DateTime dueDate,
+  }) async {
+    final payment = MonthlyPayment(
+      id: 'pay-${DateTime.now().millisecondsSinceEpoch}',
+      parentId: parentId,
+      parentName: parentName,
+      parentEmail: parentEmail,
+      studentId: studentId,
+      studentName: studentName,
+      month: month,
+      amount: amount,
+      dueDate: dueDate,
+      status: 'pending',
+    );
 
-  void _initSamplePayments() {
-    final now = DateTime.now();
-
-    _payments.addAll([
-      // 1. Approved payment for Abdur-Rahman (September)
-      MonthlyPayment(
-        id: 'pay-001',
-        parentId: 'par-001',
-        parentName: 'Muhammed Yakut (Parent)',
-        parentEmail: 'parent@kheyrukum.com',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        month: 'September 2026',
-        amount: 50.0,
-        dueDate: now.subtract(const Duration(days: 35)),
-        status: 'approved',
-        receiptUrl: 'assets/images/sample_receipt.png',
-        receiptLocalMock: 'cbe_receipt_09',
-        submittedAt: now.subtract(const Duration(days: 33)),
-        reviewedAt: now.subtract(const Duration(days: 32)),
-        reviewedBy: 'Admin Director',
-        notes: 'Bank transfer verified.',
-      ),
-
-      // 2. Pending payment for Abdur-Rahman (October)
-      MonthlyPayment(
-        id: 'pay-002',
-        parentId: 'par-001',
-        parentName: 'Muhammed Yakut (Parent)',
-        parentEmail: 'parent@kheyrukum.com',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        month: 'October 2026',
-        amount: 50.0,
-        dueDate: now.add(const Duration(days: 5)),
-        status: 'pending',
-      ),
-
-      // 3. Submitted payment awaiting admin approval for Fatima
-      MonthlyPayment(
-        id: 'pay-003',
-        parentId: 'par-001',
-        parentName: 'Muhammed Yakut (Parent)',
-        parentEmail: 'parent@kheyrukum.com',
-        studentId: 'stu-002',
-        studentName: 'Fatima Muhammed',
-        month: 'October 2026',
-        amount: 50.0,
-        dueDate: now.add(const Duration(days: 5)),
-        status: 'submitted',
-        receiptUrl: 'assets/images/sample_receipt.png',
-        receiptLocalMock: 'telebirr_receipt_10',
-        submittedAt: now.subtract(const Duration(hours: 4)),
-      ),
-
-      // 4. Overdue payment for Bilal
-      MonthlyPayment(
-        id: 'pay-004',
-        parentId: 'par-002',
-        parentName: 'Khalid Al-Mansoor',
-        parentEmail: 'khalid@example.com',
-        studentId: 'stu-003',
-        studentName: 'Bilal Khalid',
-        month: 'October 2026',
-        amount: 50.0,
-        dueDate: now.subtract(const Duration(days: 10)),
-        status: 'overdue',
-      ),
-
-      // 5. Rejected payment sample with custom reason
-      MonthlyPayment(
-        id: 'pay-005',
-        parentId: 'par-002',
-        parentName: 'Khalid Al-Mansoor',
-        parentEmail: 'khalid@example.com',
-        studentId: 'stu-004',
-        studentName: 'Sumayyah Khalid',
-        month: 'September 2026',
-        amount: 50.0,
-        dueDate: now.subtract(const Duration(days: 20)),
-        status: 'rejected',
-        receiptUrl: 'assets/images/sample_receipt.png',
-        receiptLocalMock: 'blurry_screenshot',
-        rejectionReason: 'The uploaded screenshot is blurry and transaction reference number cannot be read. Please re-upload.',
-        submittedAt: now.subtract(const Duration(days: 19)),
-        reviewedAt: now.subtract(const Duration(days: 18)),
-        reviewedBy: 'Admin Director',
-      ),
-    ]);
-
+    _payments.insert(0, payment);
     _paymentsController.add(List.from(_payments));
+
+    // Notify parent
+    NotificationCenterService.instance.addNotification(
+      title: 'Monthly Tuition Due 💳',
+      body: 'Tuition for $studentName ($month - \$${amount.toStringAsFixed(0)}) is due on ${dueDate.toIso8601String().substring(0, 10)}.',
+      type: 'payment_reminder',
+      data: {'payment_id': payment.id, 'student_id': studentId},
+    );
+
+    return payment;
   }
 
   /// Get payments for a specific parent
-  List<MonthlyPayment> getPaymentsForParent(String parentId) {
-    final list = _payments.where((p) => p.parentId == parentId).toList();
-    if (list.isEmpty) {
-      return _payments.where((p) => p.parentId == 'par-001').toList();
-    }
-    return list;
+  List<MonthlyPayment> getPaymentsForParent(String parentId, {String? parentEmail}) {
+    return _payments.where((p) {
+      if (p.parentId == parentId) return true;
+      if (parentEmail != null && p.parentEmail.toLowerCase() == parentEmail.toLowerCase()) return true;
+      return false;
+    }).toList();
   }
 
   /// Parent uploads a receipt screenshot for verification

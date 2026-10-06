@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/models/payment.dart';
+import '../../core/models/student.dart';
 import '../../core/services/payment_service.dart';
+import '../../core/services/student_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../messages/chat_screen.dart';
 
 /// Payments Screen:
-/// - Parents: View monthly tuition status, upload receipt screenshots for verification,
-///   see admin review decisions, and view clear rejection reasons if rejected.
-/// - Admins: Review submitted receipts, inspect screenshots, approve or reject with custom reason,
-///   track overdue accounts, and temporarily suspend or remove unpaid users.
+/// - Parents: View monthly tuition status, copy payment bank details in 1-click,
+///   upload receipt screenshots for verification, and view clear rejection reasons if rejected.
+/// - Admins: Issue monthly tuition fees to enrolled students, review submitted receipts,
+///   inspect screenshots, approve or reject with custom reason, track overdue accounts.
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
 
@@ -18,7 +21,7 @@ class PaymentsScreen extends StatefulWidget {
 }
 
 class _PaymentsScreenState extends State<PaymentsScreen> {
-  String _selectedFilter = 'all'; // 'all', 'pending', 'submitted', 'approved', 'rejected', 'overdue'
+  String _selectedFilter = 'all';
 
   bool get _isAdmin {
     final user = SupabaseService.instance.currentUser;
@@ -45,20 +48,26 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         elevation: 0,
         centerTitle: false,
         actions: [
-          if (_isAdmin)
+          if (_isAdmin) ...[
             TextButton.icon(
-              onPressed: () {
-                PaymentService.instance.sendMonthlyTuitionReminder('October 2026');
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Monthly tuition reminders broadcasted to all parents!')),
-                );
-              },
-              icon: const Icon(Icons.send_rounded, size: 16, color: Color(0xFFFFA000)),
+              onPressed: () => _showIssueInvoiceDialog(context),
+              icon: const Icon(Icons.add_circle_outline_rounded, size: 16, color: Color(0xFF10B981)),
               label: const Text(
-                'Remind All',
-                style: TextStyle(color: Color(0xFFFFA000), fontWeight: FontWeight.bold, fontSize: 12),
+                '+ Issue Fee',
+                style: TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 12),
               ),
             ),
+            IconButton(
+              icon: const Icon(Icons.notifications_active_outlined, size: 18, color: Color(0xFFFFA000)),
+              tooltip: 'Send Tuition Reminder',
+              onPressed: () {
+                PaymentService.instance.sendMonthlyTuitionReminder('Current Month');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('Monthly tuition reminders broadcasted to parents!')),
+                );
+              },
+            ),
+          ],
         ],
       ),
       body: StreamBuilder<List<MonthlyPayment>>(
@@ -68,8 +77,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           final payments = snapshot.data ?? [];
 
           if (!_isAdmin) {
-            // Parent view
-            final parentPayments = PaymentService.instance.getPaymentsForParent('par-001');
+            // Parent view: Filter for this parent's payments
+            final user = SupabaseService.instance.currentUser;
+            final parentPayments = PaymentService.instance.getPaymentsForParent(
+              user?.id ?? '',
+              parentEmail: user?.email,
+            );
             return _buildParentView(
               context: context,
               payments: parentPayments,
@@ -81,7 +94,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             );
           }
 
-          // Admin view
+          // Admin view: Full administrative controls
           return _buildAdminView(
             context: context,
             payments: payments,
@@ -108,24 +121,27 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     required Color cardBg,
     required Color borderColor,
   }) {
-    // Check if any payment is rejected
-    final rejectedPayment = payments.firstWhere(
-      (p) => p.isRejected,
-      orElse: () => payments.first,
-    );
-    final hasRejection = payments.any((p) => p.isRejected);
+    MonthlyPayment? activePayment;
+    MonthlyPayment? rejectedPayment;
 
-    // Active pending or submitted payments
-    final activePayment = payments.firstWhere(
-      (p) => p.isPending || p.isSubmitted || p.isRejected,
-      orElse: () => payments.first,
-    );
+    for (final p in payments) {
+      if (p.isRejected && rejectedPayment == null) {
+        rejectedPayment = p;
+      }
+      if ((p.isPending || p.isSubmitted || p.isRejected) && activePayment == null) {
+        activePayment = p;
+      }
+    }
+
+    if (activePayment == null && payments.isNotEmpty) {
+      activePayment = payments.first;
+    }
 
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
       children: [
         // 1. REJECTION ALERT BANNER (If rejected by admin)
-        if (hasRejection && rejectedPayment.rejectionReason != null) ...[
+        if (rejectedPayment != null && rejectedPayment.rejectionReason != null) ...[
           Container(
             padding: const EdgeInsets.all(16),
             decoration: BoxDecoration(
@@ -152,7 +168,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Admin feedback: "${rejectedPayment.rejectionReason}"',
+                        'Reason from Administration: "${rejectedPayment.rejectionReason}"',
                         style: TextStyle(
                           color: textColor,
                           fontSize: 12.5,
@@ -161,7 +177,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                       const SizedBox(height: 10),
                       ElevatedButton.icon(
-                        onPressed: () => _showUploadReceiptDialog(context, rejectedPayment),
+                        onPressed: () => _showUploadReceiptDialog(context, rejectedPayment!),
                         icon: const Icon(Icons.upload_file_rounded, size: 16),
                         label: const Text('Re-upload Valid Receipt', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
                         style: ElevatedButton.styleFrom(
@@ -177,144 +193,186 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               ],
             ),
           ),
-          const SizedBox(height: 18),
+          const SizedBox(height: 16),
         ],
 
-        // 2. CURRENT MONTH DUE CARD
+        // 2. CURRENT MONTH DUE CARD (or Empty State)
+        if (activePayment != null)
+          Container(
+            padding: const EdgeInsets.all(18),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+                  blurRadius: 10,
+                  offset: const Offset(0, 4),
+                ),
+              ],
+            ),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Tuition: ${activePayment.month}',
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: textColor),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          'For ${activePayment.studentName}',
+                          style: TextStyle(fontSize: 12, color: subtextColor),
+                        ),
+                      ],
+                    ),
+                    _buildStatusBadge(activePayment.status),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Text(
+                      '\$${activePayment.amount.toStringAsFixed(0)}',
+                      style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      '/ Monthly Rate',
+                      style: TextStyle(fontSize: 12, color: subtextColor),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 14),
+                if (activePayment.isApproved) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentEmerald.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 18),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Payment verified & approved by ${activePayment.reviewedBy ?? "Admin"}.',
+                            style: const TextStyle(color: AppColors.accentEmerald, fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else if (activePayment.isSubmitted) ...[
+                  Container(
+                    padding: const EdgeInsets.all(10),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF00BCD4).withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Row(
+                      children: [
+                        Icon(Icons.hourglass_top_rounded, color: Color(0xFF00BCD4), size: 18),
+                        SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            'Receipt uploaded. Center administration is verifying your payment.',
+                            style: TextStyle(color: Color(0xFF00BCD4), fontSize: 12, fontWeight: FontWeight.w600),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ] else ...[
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () => _showUploadReceiptDialog(context, activePayment!),
+                      icon: const Icon(Icons.cloud_upload_rounded, size: 18),
+                      label: const Text('Upload Payment Receipt Screenshot', style: TextStyle(fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: const Color(0xFF10B981),
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
+                  ),
+                ],
+              ],
+            ),
+          )
+        else
+          Container(
+            padding: const EdgeInsets.all(24),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.receipt_long_outlined, size: 44, color: subtextColor),
+                const SizedBox(height: 10),
+                Text('No Tuition Due At This Time', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: textColor)),
+                const SizedBox(height: 4),
+                Text(
+                  'When center administration issues monthly tuition fees for your student, your invoices and verification options will appear here.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.4),
+                ),
+              ],
+            ),
+          ),
+
+        const SizedBox(height: 20),
+
+        // 3. BANK & DIGITAL PAYMENT CHANNELS WITH 1-CLICK COPY
         Container(
           padding: const EdgeInsets.all(18),
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(20),
+            borderRadius: BorderRadius.circular(18),
             border: Border.all(color: borderColor),
-            boxShadow: [
-              BoxShadow(
-                color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                blurRadius: 10,
-                offset: const Offset(0, 4),
-              ),
-            ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Current Due: ${activePayment.month}',
-                        style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: textColor),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        'For ${activePayment.studentName}',
-                        style: TextStyle(fontSize: 12, color: subtextColor),
-                      ),
-                    ],
-                  ),
-                  _buildStatusBadge(activePayment.status),
-                ],
-              ),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Text(
-                    '\$${activePayment.amount.toStringAsFixed(0)}',
-                    style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                  ),
+                  const Icon(Icons.account_balance_rounded, size: 20, color: Color(0xFF8B5CF6)),
                   const SizedBox(width: 8),
-                  Text(
-                    '/ Monthly Fee',
-                    style: TextStyle(fontSize: 12, color: subtextColor),
-                  ),
+                  Text('Direct Bank & Payment Channels', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
                 ],
               ),
               const SizedBox(height: 14),
-              if (activePayment.isApproved) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentEmerald.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 18),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Payment verified & approved by ${activePayment.reviewedBy ?? "Admin"}.',
-                          style: const TextStyle(color: AppColors.accentEmerald, fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else if (activePayment.isSubmitted) ...[
-                Container(
-                  padding: const EdgeInsets.all(10),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF00BCD4).withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.hourglass_top_rounded, color: Color(0xFF00BCD4), size: 18),
-                      SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Receipt uploaded. Center administration is verifying your payment.',
-                          style: TextStyle(color: Color(0xFF00BCD4), fontSize: 12, fontWeight: FontWeight.w600),
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ] else ...[
-                SizedBox(
-                  width: double.infinity,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showUploadReceiptDialog(context, activePayment),
-                    icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                    label: const Text('Upload Payment Receipt Screenshot', style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFF10B981),
-                      foregroundColor: Colors.white,
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    ),
-                  ),
-                ),
-              ],
-            ],
-          ),
-        ),
-
-        const SizedBox(height: 24),
-
-        // 3. PAYMENT INSTRUCTIONS
-        Container(
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-            borderRadius: BorderRadius.circular(16),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                'Payment Instructions 📌',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+              // CBE Account
+              _buildCopyableAccountRow(
+                context: context,
+                label: 'Commercial Bank of Ethiopia (CBE)',
+                accountNumber: '1000123456789',
+                isDark: isDark,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
               ),
-              const SizedBox(height: 8),
-              Text(
-                '1. Transfer halaqah tuition to Commercial Bank of Ethiopia (CBE) 1000123456789 or Telebirr 0911223344.\n'
-                '2. Capture a clear screenshot of the transaction receipt showing the reference number.\n'
-                '3. Upload the screenshot above. Admin verifies within 24 hours.',
-                style: TextStyle(fontSize: 12, color: subtextColor, height: 1.4),
+              const SizedBox(height: 10),
+              // Telebirr Account
+              _buildCopyableAccountRow(
+                context: context,
+                label: 'Telebirr Mobile Account',
+                accountNumber: '+251 91 123 4567',
+                isDark: isDark,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
               ),
             ],
           ),
@@ -323,12 +381,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         const SizedBox(height: 24),
 
         // 4. PAYMENT HISTORY
-        Text(
-          'Payment History',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
-        ),
-        const SizedBox(height: 12),
-        ...payments.map((p) => _buildPaymentItemCard(p, isDark, cardBg, borderColor, textColor, subtextColor)),
+        if (payments.isNotEmpty) ...[
+          Text(
+            'Payment History (${payments.length})',
+            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+          ),
+          const SizedBox(height: 12),
+          ...payments.map((p) => _buildPaymentItemCard(p, isDark, cardBg, borderColor, textColor, subtextColor)),
+        ],
       ],
     );
   }
@@ -357,7 +417,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     return ListView(
       padding: const EdgeInsets.fromLTRB(20, 10, 20, 40),
       children: [
-        // Summary Cards: Revenue, Pending Reviews, Overdue
+        // Summary Cards: Revenue, Pending Reviews, Invoices
         Row(
           children: [
             _buildAdminStatCard(
@@ -442,29 +502,78 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           const SizedBox(height: 20),
         ],
 
-        // 3. ALL PAYMENTS RECORD
-        Text(
-          'All Monthly Payment Records',
-          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+        // 3. ALL PAYMENTS RECORD / EMPTY STATE
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Tuition Records (${payments.length})',
+              style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+            ),
+            InkWell(
+              onTap: () => _showIssueInvoiceDialog(context),
+              child: const Text(
+                '+ Issue Tuition',
+                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+              ),
+            ),
+          ],
         ),
         const SizedBox(height: 10),
 
-        // Filter chips
-        SingleChildScrollView(
-          scrollDirection: Axis.horizontal,
-          child: Row(
-            children: [
-              _buildFilterChip('All', 'all'),
-              _buildFilterChip('Submitted', 'submitted'),
-              _buildFilterChip('Approved', 'approved'),
-              _buildFilterChip('Rejected', 'rejected'),
-              _buildFilterChip('Overdue', 'overdue'),
-            ],
+        if (payments.isEmpty)
+          Container(
+            padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+            decoration: BoxDecoration(
+              color: cardBg,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: borderColor),
+            ),
+            child: Column(
+              children: [
+                Icon(Icons.payments_outlined, size: 48, color: const Color(0xFF10B981).withOpacity(0.7)),
+                const SizedBox(height: 12),
+                Text('No Tuition Fees Issued Yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                const SizedBox(height: 6),
+                Text(
+                  'Issue monthly tuition fees to enrolled students so parents can make payments and submit receipts.',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(fontSize: 12, color: subtextColor, height: 1.4),
+                ),
+                const SizedBox(height: 18),
+                ElevatedButton.icon(
+                  onPressed: () => _showIssueInvoiceDialog(context),
+                  icon: const Icon(Icons.add_circle_outline_rounded, size: 18),
+                  label: const Text('Issue First Tuition Fee', style: TextStyle(fontWeight: FontWeight.bold)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF10B981),
+                    foregroundColor: Colors.white,
+                    padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                ),
+              ],
+            ),
+          )
+        else ...[
+          // Filter chips
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: [
+                _buildFilterChip('All', 'all'),
+                _buildFilterChip('Submitted', 'submitted'),
+                _buildFilterChip('Approved', 'approved'),
+                _buildFilterChip('Rejected', 'rejected'),
+                _buildFilterChip('Pending', 'pending'),
+                _buildFilterChip('Overdue', 'overdue'),
+              ],
+            ),
           ),
-        ),
-        const SizedBox(height: 12),
+          const SizedBox(height: 12),
 
-        ...filteredList.map((p) => _buildPaymentItemCard(p, isDark, cardBg, borderColor, textColor, subtextColor)),
+          ...filteredList.map((p) => _buildPaymentItemCard(p, isDark, cardBg, borderColor, textColor, subtextColor)),
+        ],
       ],
     );
   }
@@ -588,7 +697,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  // Overdue account card with 1-click Remind, Message, and Suspend/Remove
+  // Overdue account card
   Widget _buildOverdueAccountCard(
     MonthlyPayment payment,
     bool isDark,
@@ -597,13 +706,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     Color textColor,
     Color subtextColor,
   ) {
-    final isSuspended = PaymentService.instance.isUserSuspended(payment.parentId);
-
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: isSuspended ? const Color(0xFFEF4444).withOpacity(0.08) : cardBg,
+        color: cardBg,
         borderRadius: BorderRadius.circular(18),
         border: Border.all(color: const Color(0xFFEF4444).withOpacity(0.4)),
       ),
@@ -635,9 +742,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   color: const Color(0xFFEF4444).withOpacity(0.15),
                   borderRadius: BorderRadius.circular(8),
                 ),
-                child: Text(
-                  isSuspended ? 'SUSPENDED' : 'OVERDUE',
-                  style: const TextStyle(color: Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold),
+                child: const Text(
+                  'OVERDUE',
+                  style: TextStyle(color: Color(0xFFEF4444), fontSize: 10, fontWeight: FontWeight.bold),
                 ),
               ),
             ],
@@ -672,21 +779,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     ),
                   );
                 },
-              ),
-              ActionChip(
-                avatar: Icon(
-                  isSuspended ? Icons.replay_rounded : Icons.block_rounded,
-                  size: 14,
-                  color: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-                ),
-                label: Text(
-                  isSuspended ? 'Restore User' : 'Suspend User',
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-                  ),
-                ),
-                onPressed: () => _showUserSuspensionDialog(context, payment, isSuspended),
               ),
             ],
           ),
@@ -750,6 +842,60 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               style: const TextStyle(fontSize: 11, color: Color(0xFFEF4444), fontStyle: FontStyle.italic),
             ),
           ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildCopyableAccountRow({
+    required BuildContext context,
+    required String label,
+    required String accountNumber,
+    required bool isDark,
+    required Color borderColor,
+    required Color textColor,
+    required Color subtextColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+      decoration: BoxDecoration(
+        color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: borderColor),
+      ),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(label, style: TextStyle(fontSize: 11.5, color: subtextColor)),
+                const SizedBox(height: 2),
+                Text(
+                  accountNumber,
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor, letterSpacing: 0.5),
+                ),
+              ],
+            ),
+          ),
+          ElevatedButton.icon(
+            onPressed: () {
+              Clipboard.setData(ClipboardData(text: accountNumber));
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(content: Text('$label copied to clipboard!')),
+              );
+            },
+            icon: const Icon(Icons.copy_rounded, size: 14),
+            label: const Text('Copy', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8B5CF6).withOpacity(0.15),
+              foregroundColor: const Color(0xFF8B5CF6),
+              elevation: 0,
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+            ),
+          ),
         ],
       ),
     );
@@ -831,8 +977,89 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   // ===========================================================================
-  // INTERACTIVE DIALOGS: Upload Receipt, Receipt Inspector, Reject, Suspend
+  // INTERACTIVE DIALOGS
   // ===========================================================================
+
+  void _showIssueInvoiceDialog(BuildContext context) {
+    final students = StudentService.instance.allStudents;
+    if (students.isEmpty) {
+      showDialog(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: const Text('No Students Enrolled', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          content: const Text('Please add at least one student in the Students tab before issuing tuition fees.'),
+          actions: [
+            ElevatedButton(onPressed: () => Navigator.pop(ctx), child: const Text('Understood')),
+          ],
+        ),
+      );
+      return;
+    }
+
+    Student selectedStudent = students.first;
+    final monthCtrl = TextEditingController(text: 'October 2026');
+    final amountCtrl = TextEditingController(text: '50');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('Issue Monthly Tuition Fee', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                DropdownButtonFormField<Student>(
+                  value: selectedStudent,
+                  items: students.map((s) => DropdownMenuItem(
+                    value: s,
+                    child: Text('${s.fullName} (${s.parentName})', style: const TextStyle(fontSize: 13)),
+                  )).toList(),
+                  onChanged: (val) => setDialogState(() => selectedStudent = val!),
+                  decoration: const InputDecoration(labelText: 'Select Student'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: monthCtrl,
+                  decoration: const InputDecoration(labelText: 'Tuition Month (e.g. October 2026)'),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: amountCtrl,
+                  keyboardType: TextInputType.number,
+                  decoration: const InputDecoration(labelText: 'Fee Amount (\$)'),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () async {
+                final amt = double.tryParse(amountCtrl.text) ?? 50.0;
+                await PaymentService.instance.createPaymentInvoice(
+                  studentId: selectedStudent.id,
+                  studentName: selectedStudent.fullName,
+                  parentId: selectedStudent.parentId ?? 'par-${selectedStudent.id}',
+                  parentName: selectedStudent.parentName,
+                  parentEmail: selectedStudent.parentPhone,
+                  month: monthCtrl.text.trim(),
+                  amount: amt,
+                  dueDate: DateTime.now().add(const Duration(days: 10)),
+                );
+                Navigator.pop(ctx);
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('Tuition issued for ${selectedStudent.fullName}!')),
+                );
+              },
+              child: const Text('Issue Tuition'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 
   void _showUploadReceiptDialog(BuildContext context, MonthlyPayment payment) {
     String selectedMethod = 'Commercial Bank of Ethiopia (CBE)';
@@ -865,7 +1092,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   decoration: const InputDecoration(labelText: 'Payment Gateway / Channel'),
                 ),
                 const SizedBox(height: 12),
-                // Simulated receipt upload box
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -880,7 +1106,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       SizedBox(height: 6),
                       Text('Screenshot Attached: receipt_screenshot.jpg', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
                       SizedBox(height: 2),
-                      Text('Tap to replace image if needed', style: TextStyle(fontSize: 10, color: Colors.grey)),
+                      Text('Receipt attached successfully', style: TextStyle(fontSize: 10, color: Colors.grey)),
                     ],
                   ),
                 ),
@@ -918,7 +1144,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  // Interactive Receipt Inspector Dialog with clear digital screenshot rendering
   void _showReceiptInspectorDialog(BuildContext context, MonthlyPayment payment) {
     showDialog(
       context: context,
@@ -934,7 +1159,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Digital Receipt Slip Representation
               Container(
                 padding: const EdgeInsets.all(18),
                 decoration: BoxDecoration(
@@ -960,7 +1184,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     _buildReceiptRow('Student', payment.studentName),
                     _buildReceiptRow('Month', payment.month),
                     _buildReceiptRow('Amount Paid', '\$${payment.amount.toStringAsFixed(2)}'),
-                    _buildReceiptRow('Reference No.', 'TXN-9847294821'),
+                    _buildReceiptRow('Reference No.', 'TXN-${payment.id.hashCode.abs()}'),
                     _buildReceiptRow('Status', 'SUCCESSFUL / TRANSFERRED'),
                     const Divider(height: 20),
                     const Text('VERIFIED ELECTRONIC RECEIPT', style: TextStyle(fontSize: 9, fontWeight: FontWeight.bold, color: Colors.grey, letterSpacing: 1.5)),
@@ -1017,7 +1241,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  // Reject dialog requesting a mandatory reason to be displayed on parent side
   void _showRejectDialog(BuildContext context, MonthlyPayment payment) {
     final reasonCtrl = TextEditingController(
       text: 'The uploaded screenshot is blurry and transaction reference number cannot be read. Please re-upload.',
@@ -1063,80 +1286,6 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             },
             style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444), foregroundColor: Colors.white),
             child: const Text('Confirm Rejection'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showUserSuspensionDialog(BuildContext context, MonthlyPayment payment, bool isSuspended) {
-    final reasonCtrl = TextEditingController(
-      text: 'Unpaid monthly halaqah tuition for consecutive months.',
-    );
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(
-          isSuspended ? 'Restore Parent Account' : 'Suspend / Remove Account',
-          style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16),
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isSuspended
-                  ? 'Restore access for ${payment.parentName}? Account will regain normal access.'
-                  : 'Temporarily suspend or remove ${payment.parentName} due to unpaid fees?',
-              style: const TextStyle(fontSize: 13),
-            ),
-            if (!isSuspended) ...[
-              const SizedBox(height: 10),
-              TextField(
-                controller: reasonCtrl,
-                decoration: const InputDecoration(labelText: 'Suspension Reason'),
-                maxLines: 2,
-              ),
-            ],
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          if (!isSuspended)
-            TextButton(
-              onPressed: () async {
-                await PaymentService.instance.removeUser(payment.parentId);
-                Navigator.pop(ctx);
-                setState(() {});
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('${payment.parentName} permanently removed from portal.')),
-                );
-              },
-              child: const Text('Remove User', style: TextStyle(color: Color(0xFFEF4444))),
-            ),
-          ElevatedButton(
-            onPressed: () async {
-              if (isSuspended) {
-                await PaymentService.instance.restoreUser(payment.parentId);
-              } else {
-                await PaymentService.instance.suspendUser(
-                  userId: payment.parentId,
-                  userName: payment.parentName,
-                  reason: reasonCtrl.text.trim(),
-                );
-              }
-              Navigator.pop(ctx);
-              setState(() {});
-              ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text(isSuspended ? 'Account restored!' : 'Account temporarily suspended.')),
-              );
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: isSuspended ? AppColors.accentEmerald : const Color(0xFFEF4444),
-              foregroundColor: Colors.white,
-            ),
-            child: Text(isSuspended ? 'Restore Access' : 'Suspend Account'),
           ),
         ],
       ),
