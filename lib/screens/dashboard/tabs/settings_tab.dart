@@ -48,27 +48,24 @@ class _SettingsTabState extends State<SettingsTab> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTheme.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        final isDark = themeMode == ThemeMode.dark;
+        final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+        final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
+        final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
+        final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
-    final user = SupabaseService.instance.currentUser;
-    final fullName = _userProfile?['full_name'] ?? 'Ustaz Muhammed Yakut';
-    final userRole = (_userProfile?['role'] ?? 'admin').toString().toUpperCase();
-    final userEmail = user?.email ?? 'admin@kheyrukum.com';
+        final user = SupabaseService.instance.currentUser;
+        final fullName = _userProfile?['full_name'] ?? 'Ustaz Muhammed Yakut';
+        final userRole = (_userProfile?['role'] ?? 'admin').toString().toUpperCase();
+        final userEmail = user?.email ?? 'admin@kheyrukum.com';
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 100),
-      children: [
-        Text(
-          'Portal Settings',
-          style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
-        ),
-        const SizedBox(height: 16),
-
-        // User Account Card
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+          children: [
+            // User Account Card
         Container(
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
@@ -323,5 +320,7 @@ class _SettingsTabState extends State<SettingsTab> {
         ),
       ],
     );
-  }
+  },
+);
+}
 }

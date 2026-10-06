@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/physics.dart';
+import '../core/theme/app_theme.dart';
 import 'meniscus_painter.dart';
 
 /// Navigation Tab Item Model with specific accent color
@@ -218,171 +219,184 @@ class _MeniscusNavBarState extends State<MeniscusNavBar>
     const double topOverflow = 22.0;
     const double totalHeight = dockHeight + topOverflow;
 
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final totalWidth = constraints.maxWidth;
-        if (_barWidth != totalWidth) {
-          _barWidth = totalWidth;
-          WidgetsBinding.instance.addPostFrameCallback((_) {
-            if (mounted && !_isDragging) {
-              setState(() {
-                _beadX = _getTabCenterX(widget.selectedIndex, totalWidth);
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTheme.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        final isDark = themeMode == ThemeMode.dark;
+
+        return LayoutBuilder(
+          builder: (context, constraints) {
+            final totalWidth = constraints.maxWidth;
+            if (_barWidth != totalWidth) {
+              _barWidth = totalWidth;
+              WidgetsBinding.instance.addPostFrameCallback((_) {
+                if (mounted && !_isDragging) {
+                  setState(() {
+                    _beadX = _getTabCenterX(widget.selectedIndex, totalWidth);
+                  });
+                }
               });
             }
-          });
-        }
 
-        final currentBeadX = _beadX > 0
-            ? _beadX
-            : _getTabCenterX(widget.selectedIndex, totalWidth);
+            final currentBeadX = _beadX > 0
+                ? _beadX
+                : _getTabCenterX(widget.selectedIndex, totalWidth);
 
-        final activeItem = widget.items[widget.selectedIndex];
-        final activeColor = activeItem.accentColor;
+            final activeItem = widget.items[widget.selectedIndex];
+            final activeColor = activeItem.accentColor;
 
-        return SizedBox(
-          width: totalWidth,
-          height: totalHeight,
-          child: GestureDetector(
-            onPanStart: _onPanStart,
-            onPanUpdate: _onPanUpdate,
-            onPanEnd: _onPanEnd,
-            behavior: HitTestBehavior.opaque,
-            child: Stack(
-              clipBehavior: Clip.none,
-              children: [
-                // 1. DOCK CONTAINER WITH EXACT MENISCUS NOTCH
-                Positioned(
-                  top: topOverflow,
-                  left: 0,
-                  right: 0,
-                  height: dockHeight,
-                  child: CustomPaint(
-                    painter: MeniscusPainter(
-                      beadX: currentBeadX,
-                      beadY: 1.0,           // 1px below dock top edge
-                      bowlRadius: 22.0,     // 22px bowl (4px clearance around bead)
-                      shoulderRadius: 10.0, // 10px smooth shoulder
-                      velocityX: _currentVelocity,
-                      dockFillColor: Theme.of(context).brightness == Brightness.dark
-                          ? const Color(0xFF161927)
-                          : const Color(0xFFFFFFFF),
-                      accentColor: activeColor,
-                      cornerRadius: 20.0,
+            return SizedBox(
+              width: totalWidth,
+              height: totalHeight,
+              child: GestureDetector(
+                onPanStart: _onPanStart,
+                onPanUpdate: _onPanUpdate,
+                onPanEnd: _onPanEnd,
+                behavior: HitTestBehavior.opaque,
+                child: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    // 1. DOCK CONTAINER WITH EXACT MENISCUS NOTCH
+                    Positioned(
+                      top: topOverflow,
+                      left: 0,
+                      right: 0,
+                      height: dockHeight,
+                      child: CustomPaint(
+                        painter: MeniscusPainter(
+                          beadX: currentBeadX,
+                          beadY: 1.0,           // 1px below dock top edge
+                          bowlRadius: 22.0,     // 22px bowl (4px clearance around bead)
+                          shoulderRadius: 10.0, // 10px smooth shoulder
+                          velocityX: _currentVelocity,
+                          dockFillColor: isDark
+                              ? const Color(0xFF161927)
+                              : const Color(0xFFFFFFFF),
+                          accentColor: activeColor,
+                          cornerRadius: 20.0,
+                          isDark: isDark,
+                        ),
+                      ),
                     ),
-                  ),
-                ),
 
-                // 2. INACTIVE TAB ICONS (Positioned at exact tabCenterX coordinates)
-                ...List.generate(widget.items.length, (index) {
-                  final item = widget.items[index];
-                  final tabCenterX = _getTabCenterX(index, totalWidth);
-                  final distFromBead = (currentBeadX - tabCenterX).abs();
+                    // 2. INACTIVE TAB ICONS (Positioned at exact tabCenterX coordinates)
+                    ...List.generate(widget.items.length, (index) {
+                      final item = widget.items[index];
+                      final tabCenterX = _getTabCenterX(index, totalWidth);
+                      final distFromBead = (currentBeadX - tabCenterX).abs();
 
-                  // Fade out icon completely when active or near bead
-                  final iconOpacity = (distFromBead / 32.0).clamp(0.0, 1.0);
+                      // Fade out icon completely when active or near bead
+                      final iconOpacity = (distFromBead / 32.0).clamp(0.0, 1.0);
+                      final inactiveIconColor = isDark ? const Color(0xFF8E8E9F) : Colors.black;
 
-                  return Positioned(
-                    left: tabCenterX - 24,
-                    top: topOverflow,
-                    width: 48,
-                    height: dockHeight,
-                    child: InkWell(
-                      onTap: () => _onTabTapped(index),
-                      splashColor: Colors.transparent,
-                      highlightColor: Colors.transparent,
-                      child: Center(
-                        child: Padding(
-                          padding: const EdgeInsets.only(top: 2.0),
-                          child: Opacity(
-                            opacity: iconOpacity * 0.7,
-                            child: Icon(
-                              item.icon,
-                              size: 22,
-                              color: const Color(0xFF8E8E9F),
+                      return Positioned(
+                        left: tabCenterX - 24,
+                        top: topOverflow,
+                        width: 48,
+                        height: dockHeight,
+                        child: InkWell(
+                          onTap: () => _onTabTapped(index),
+                          splashColor: Colors.transparent,
+                          highlightColor: Colors.transparent,
+                          child: Center(
+                            child: Padding(
+                              padding: const EdgeInsets.only(top: 2.0),
+                              child: Opacity(
+                                opacity: isDark ? (iconOpacity * 0.7) : (iconOpacity * 0.9),
+                                child: Icon(
+                                  item.icon,
+                                  size: 22,
+                                  color: inactiveIconColor,
+                                ),
+                              ),
                             ),
+                          ),
+                        ),
+                      );
+                    }),
+
+
+                    // 3. ACTIVE TAB LABEL (Directly underneath the bead inside the dock)
+                    Positioned(
+                      left: currentBeadX - 45,
+                      top: topOverflow + 39,
+                      width: 90,
+                      child: Center(
+                        child: AnimatedDefaultTextStyle(
+                          duration: const Duration(milliseconds: 180),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w800,
+                            color: isDark ? activeColor : Colors.black,
+                            fontFamily: 'Poppins',
+                            letterSpacing: 0.2,
+                          ),
+                          child: Text(
+                            activeItem.label,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
                           ),
                         ),
                       ),
                     ),
-                  );
-                }),
 
-
-                // 3. ACTIVE TAB LABEL (Directly underneath the bead inside the dock)
-                Positioned(
-                  left: currentBeadX - 45,
-                  top: topOverflow + 39,
-                  width: 90,
-                  child: Center(
-                    child: AnimatedDefaultTextStyle(
-                      duration: const Duration(milliseconds: 180),
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: activeColor,
-                        fontFamily: 'Poppins',
-                        letterSpacing: 0.2,
-                      ),
-                      child: Text(
-                        activeItem.label,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ),
-                ),
-
-                // 4. FLOATING GLOWING BEAD (Elevated, resting inside the socket)
-                Positioned(
-                  left: currentBeadX - beadRadius,
-                  top: topOverflow + 1.0 - beadRadius,
-                  child: IgnorePointer(
-                    child: SizedBox(
-                      width: beadDiameter,
-                      height: beadDiameter,
-                      child: Stack(
-                        alignment: Alignment.center,
-                        children: [
-                          // Soft diffuse outer glow
-                          Container(
-                            width: beadDiameter,
-                            height: beadDiameter,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: activeColor.withOpacity(_isDragging ? 0.8 : 0.6),
-                                  blurRadius: _isDragging ? 20 : 14,
-                                  spreadRadius: _isDragging ? 3 : 1,
+                    // 4. FLOATING GLOWING BEAD (Elevated, resting inside the socket)
+                    Positioned(
+                      left: currentBeadX - beadRadius,
+                      top: topOverflow + 1.0 - beadRadius,
+                      child: IgnorePointer(
+                        child: SizedBox(
+                          width: beadDiameter,
+                          height: beadDiameter,
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // Soft diffuse outer glow
+                              Container(
+                                width: beadDiameter,
+                                height: beadDiameter,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: activeColor.withOpacity(
+                                        isDark
+                                            ? (_isDragging ? 0.8 : 0.6)
+                                            : (_isDragging ? 0.45 : 0.3),
+                                      ),
+                                      blurRadius: _isDragging ? 20 : 14,
+                                      spreadRadius: _isDragging ? 3 : 1,
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
-                          ),
+                              ),
 
-                          // Clean solid luminous circular bead
-                          Container(
-                            width: beadDiameter,
-                            height: beadDiameter,
-                            decoration: BoxDecoration(
-                              shape: BoxShape.circle,
-                              color: activeColor,
-                            ),
-                          ),
+                              // Clean solid luminous circular bead
+                              Container(
+                                width: beadDiameter,
+                                height: beadDiameter,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: activeColor,
+                                ),
+                              ),
 
-                          // Active icon inside the bead in dark slate
-                          Icon(
-                            activeItem.icon,
-                            size: 19,
-                            color: const Color(0xFF111827),
+                              // Active icon inside the bead: black
+                              Icon(
+                                activeItem.icon,
+                                size: 19,
+                                color: Colors.black,
+                              ),
+                            ],
                           ),
-                        ],
+                        ),
                       ),
                     ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
+              ),
+            );
+          },
         );
       },
     );

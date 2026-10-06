@@ -96,7 +96,16 @@ class _AuthScreenState extends State<AuthScreen>
     final password = _loginPasswordController.text;
 
     if (email.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your username/email and password.');
+      const msg = 'Please enter your username/email and password.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(msg),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
@@ -120,7 +129,18 @@ class _AuthScreenState extends State<AuthScreen>
       if (res['requiresEmailVerification'] == true) {
         _showEmailVerificationDialog(email);
       } else {
-        setState(() => _errorMessage = res['message'] ?? 'Sign in failed.');
+        final msg = res['message'] ?? 'Sign in failed.';
+        setState(() => _errorMessage = msg);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(msg),
+              backgroundColor: const Color(0xFFDC2626),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 4),
+            ),
+          );
+        }
       }
     }
   }
@@ -128,7 +148,16 @@ class _AuthScreenState extends State<AuthScreen>
   Future<void> _handleVerifyCode() async {
     final code = _inviteCodeController.text.trim().toUpperCase();
     if (code.isEmpty) {
-      setState(() => _errorMessage = 'Please enter your school invite code.');
+      const msg = 'Please enter your school invite code.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(msg),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
@@ -150,7 +179,18 @@ class _AuthScreenState extends State<AuthScreen>
         }
       });
     } else {
-      setState(() => _errorMessage = res['message'] ?? 'Invalid code.');
+      final msg = res['message'] ?? 'Invalid code.';
+      setState(() => _errorMessage = msg);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -160,12 +200,30 @@ class _AuthScreenState extends State<AuthScreen>
     final password = _regPasswordController.text;
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      setState(() => _errorMessage = 'Please complete all fields.');
+      const msg = 'Please complete all fields.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(msg),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
     if (password.length < 6) {
-      setState(() => _errorMessage = 'Password must be at least 6 characters.');
+      const msg = 'Password must be at least 6 characters.';
+      setState(() => _errorMessage = msg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: const Text(msg),
+          backgroundColor: const Color(0xFFDC2626),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 3),
+        ),
+      );
       return;
     }
 
@@ -194,7 +252,18 @@ class _AuthScreenState extends State<AuthScreen>
         }
       }
     } else {
-      setState(() => _errorMessage = res['message'] ?? 'Account creation failed.');
+      final msg = res['message'] ?? 'Account creation failed.';
+      setState(() => _errorMessage = msg);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(msg),
+            backgroundColor: const Color(0xFFDC2626),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 4),
+          ),
+        );
+      }
     }
   }
 
@@ -276,7 +345,11 @@ class _AuthScreenState extends State<AuthScreen>
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                // 3D Flipping Circular Card
+                // 1. Centerpiece Round Logo Placed Just Above Card
+                _buildRoundLogo(size: 64),
+                const SizedBox(height: 14),
+
+                // 2. 3D Flipping Circular Card
                 AnimatedBuilder(
                   animation: _flipAnimation,
                   builder: (context, child) {
@@ -311,7 +384,7 @@ class _AuthScreenState extends State<AuthScreen>
                         ),
                         child: ClipOval(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 24),
+                            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 20),
                             child: isFront
                                 ? _buildFrontLogin()
                                 : Transform(
@@ -334,78 +407,92 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  Widget _buildRoundLogo({double size = 46}) {
+  Widget _buildRoundLogo({double size = 64}) {
     return Container(
       width: size,
       height: size,
-      decoration: BoxDecoration(
+      decoration: const BoxDecoration(
         shape: BoxShape.circle,
-        color: Colors.white,
-        border: Border.all(
-          color: const Color(0xFF007A78).withOpacity(0.3),
-          width: 1.5,
-        ),
-        boxShadow: const [
-          BoxShadow(
-            color: darkShadow,
-            offset: Offset(3, 3),
-            blurRadius: 6,
-          ),
+        color: bgColor,
+        boxShadow: [
           BoxShadow(
             color: lightShadow,
-            offset: Offset(-3, -3),
-            blurRadius: 6,
+            offset: Offset(-5, -5),
+            blurRadius: 10,
+          ),
+          BoxShadow(
+            color: darkShadow,
+            offset: Offset(5, 5),
+            blurRadius: 10,
           ),
         ],
       ),
-      child: ClipOval(
-        child: Image.asset(
-          'assets/images/logo.png',
-          width: size,
-          height: size,
-          fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => Icon(
-            Icons.menu_book_rounded,
-            color: const Color(0xFF007A78),
-            size: size * 0.5,
+      padding: const EdgeInsets.all(5),
+      child: Container(
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white,
+          border: Border.all(
+            color: const Color(0xFF007A78).withOpacity(0.35),
+            width: 1.5,
+          ),
+        ),
+        child: ClipOval(
+          child: Image.asset(
+            'assets/images/logo.png',
+            width: size,
+            height: size,
+            fit: BoxFit.cover,
+            errorBuilder: (_, __, ___) => Icon(
+              Icons.menu_book_rounded,
+              color: const Color(0xFF007A78),
+              size: size * 0.5,
+            ),
           ),
         ),
       ),
     );
   }
 
+  /// Fixed-height error banner: reserves layout space so errors never push the signup link downward
   Widget _buildErrorBanner() {
-    if (_errorMessage == null) return const SizedBox.shrink();
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 250),
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-      decoration: BoxDecoration(
-        color: accentCoral.withOpacity(0.12),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: accentCoral.withOpacity(0.4)),
-      ),
-      child: Row(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          const Icon(Icons.error_outline_rounded, size: 14, color: accentCoral),
-          const SizedBox(width: 6),
-          Flexible(
-            child: Text(
-              _errorMessage!,
-              style: const TextStyle(
-                color: accentCoral,
-                fontSize: 10.5,
-                fontWeight: FontWeight.w600,
-                height: 1.25,
+    return SizedBox(
+      height: 22,
+      child: _errorMessage != null
+          ? AnimatedOpacity(
+              duration: const Duration(milliseconds: 200),
+              opacity: 1.0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                decoration: BoxDecoration(
+                  color: accentCoral.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(8),
+                  border: Border.all(color: accentCoral.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.error_outline_rounded, size: 12, color: accentCoral),
+                    const SizedBox(width: 4),
+                    Flexible(
+                      child: Text(
+                        _errorMessage!,
+                        style: const TextStyle(
+                          color: accentCoral,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        textAlign: TextAlign.center,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              textAlign: TextAlign.center,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-        ],
-      ),
+            )
+          : const SizedBox.shrink(),
     );
   }
 
@@ -416,33 +503,30 @@ class _AuthScreenState extends State<AuthScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const SizedBox(height: 6),
-        // Smaller Round Logo
-        _buildRoundLogo(size: 46),
-        const SizedBox(height: 6),
         // Header
         const Text(
           'Login',
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 25,
             fontWeight: FontWeight.w800,
             color: primaryNavy,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2),
         const Text(
           'Sign in to your account',
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: 12,
             color: subtitleGray,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
 
-        // Enhanced Error Banner
+        // Fixed-height Error Banner (does not shift layout)
         _buildErrorBanner(),
+        const SizedBox(height: 4),
 
         // Recessed Field: Username
         _buildRecessedTextField(
@@ -490,17 +574,17 @@ class _AuthScreenState extends State<AuthScreen>
           onTapUp: () => setState(() => _isSignInPressed = false),
           onTap: _handleSignIn,
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
 
-        // Footer Text
+        // Footer Text (positioned comfortably away from circle's bottom edge)
         GestureDetector(
           onTap: _flipToSignUp,
           child: const Padding(
-            padding: EdgeInsets.all(4.0),
+            padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
             child: Text.rich(
               TextSpan(
                 text: "Don't have an account? ",
-                style: TextStyle(fontSize: 11, color: subtitleGray),
+                style: TextStyle(fontSize: 11.5, color: subtitleGray),
                 children: [
                   TextSpan(
                     text: 'Sign up',
@@ -514,7 +598,6 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ),
         ),
-        const SizedBox(height: 4),
       ],
     );
   }
@@ -538,30 +621,28 @@ class _AuthScreenState extends State<AuthScreen>
       key: const ValueKey('step1_invite'),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const SizedBox(height: 10),
-        _buildRoundLogo(size: 44),
-        const SizedBox(height: 6),
         const Text(
           'Sign Up',
           style: TextStyle(
-            fontSize: 24,
+            fontSize: 25,
             fontWeight: FontWeight.w800,
             color: primaryNavy,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 1),
+        const SizedBox(height: 2),
         const Text(
           'Enter your school invite code',
           style: TextStyle(
-            fontSize: 11.5,
+            fontSize: 12,
             color: subtitleGray,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 8),
 
         _buildErrorBanner(),
+        const SizedBox(height: 6),
 
         // Recessed Field: Invite Code
         _buildRecessedTextField(

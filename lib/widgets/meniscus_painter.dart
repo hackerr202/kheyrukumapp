@@ -15,8 +15,8 @@ class MeniscusPainter extends CustomPainter {
   final double shoulderRadius; // Radius of the convex shoulders
   final double velocityX;      // Velocity for dynamic surface leaning
   final Color dockFillColor;
-  final Color accentColor;
   final double cornerRadius;
+  final bool isDark;
 
   MeniscusPainter({
     required this.beadX,
@@ -27,6 +27,7 @@ class MeniscusPainter extends CustomPainter {
     this.dockFillColor = const Color(0xFF161927),
     required this.accentColor,
     this.cornerRadius = 20.0,
+    this.isDark = true,
   });
 
   @override
@@ -129,20 +130,19 @@ class MeniscusPainter extends CustomPainter {
 
     // 2. Ambient Drop Shadow
     final shadowPaint = Paint()
-      ..color = Colors.black.withOpacity(0.55)
-      ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 18);
+      ..color = isDark ? Colors.black.withOpacity(0.55) : Colors.black.withOpacity(0.09)
+      ..maskFilter = MaskFilter.blur(BlurStyle.normal, isDark ? 18 : 12);
     canvas.save();
-    canvas.translate(0, 8);
+    canvas.translate(0, isDark ? 8 : 4);
     canvas.drawPath(dockPath, shadowPaint);
     canvas.restore();
 
-    // 3. Plate Gradient Fill (#161927 to #0C0E17)
+    // 3. Plate Gradient Fill (Dark plate in dark mode, pure clean light surface in light mode)
     final fillPaint = Paint()
       ..shader = LinearGradient(
-        colors: [
-          dockFillColor,
-          const Color(0xFF0C0E17),
-        ],
+        colors: isDark
+            ? [dockFillColor, const Color(0xFF0C0E17)]
+            : [const Color(0xFFFFFFFF), const Color(0xFFF8FAFC)],
         begin: Alignment.topCenter,
         end: Alignment.bottomCenter,
       ).createShader(Rect.fromLTWH(0, 0, w, h));
@@ -152,7 +152,9 @@ class MeniscusPainter extends CustomPainter {
     final borderPaint = Paint()
       ..style = PaintingStyle.stroke
       ..strokeWidth = 1.2
-      ..color = const Color(0xFF2E334D).withOpacity(0.8);
+      ..color = isDark
+          ? const Color(0xFF2E334D).withOpacity(0.8)
+          : const Color(0xFFE2E8F0);
     canvas.drawPath(dockPath, borderPaint);
 
     // 5. Luminous Rim Highlight strictly on the socket bowl arc
@@ -160,7 +162,7 @@ class MeniscusPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.4
       ..strokeCap = StrokeCap.round
-      ..color = accentColor.withOpacity(0.65)
+      ..color = accentColor.withOpacity(isDark ? 0.65 : 0.35)
       ..maskFilter = const MaskFilter.blur(BlurStyle.normal, 4);
     canvas.drawPath(bowlPath, rimGlowPaint);
 
@@ -180,6 +182,7 @@ class MeniscusPainter extends CustomPainter {
         oldDelegate.shoulderRadius != shoulderRadius ||
         oldDelegate.velocityX != velocityX ||
         oldDelegate.dockFillColor != dockFillColor ||
-        oldDelegate.accentColor != accentColor;
+        oldDelegate.accentColor != accentColor ||
+        oldDelegate.isDark != isDark;
   }
 }

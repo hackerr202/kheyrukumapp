@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/announcement.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/announcement_banner.dart';
 import '../../widgets/meniscus_nav_bar.dart';
 import '../announcements/announcements_sheet.dart';
@@ -104,35 +105,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
     MoreTab(),
   ];
 
-  final List<Map<String, String>> _tabHeaders = const [
-    {'title': 'Home', 'subtitle': 'Everything, on one surface.'},
-    {'title': 'Students', 'subtitle': 'Tracking Quranic progress & halaqah milestones.'},
-    {'title': 'Messages', 'subtitle': 'Three unread. All of them kind.'},
-    {'title': 'Homework', 'subtitle': 'Daily recitation & Tajweed assignments.'},
-    {'title': 'More', 'subtitle': 'Administrative hubs, student services & tools.'},
-  ];
-
   @override
   Widget build(BuildContext context) {
-    final activeItem = _navItems[_currentTabIndex];
-    final headerInfo = _tabHeaders[_currentTabIndex];
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final titleColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtitleColor = isDark ? Colors.white.withOpacity(0.55) : AppColors.textSecondaryLight;
-    final headerBtnBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final headerBorderColor = isDark ? const Color(0xFF334155) : AppColors.borderSubtleLight;
+    return ValueListenableBuilder<ThemeMode>(
+      valueListenable: AppTheme.themeModeNotifier,
+      builder: (context, themeMode, _) {
+        final activeItem = _navItems[_currentTabIndex];
+        final isDark = themeMode == ThemeMode.dark;
+        final headerBtnBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+        final headerBorderColor = isDark ? const Color(0xFF334155) : AppColors.borderSubtleLight;
 
-    return Scaffold(
-      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
-      body: Stack(
-        children: [
-          // Ambient Radial Glow responding to active tab color
-          AnimatedPositioned(
-            duration: const Duration(milliseconds: 350),
-            top: 40,
-            left: 0,
-            right: 0,
-            height: 300,
+        return Scaffold(
+          backgroundColor: isDark ? AppColors.background : AppColors.backgroundLight,
+          body: Stack(
+            children: [
+              // Ambient Radial Glow responding to active tab color
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 350),
+                top: 40,
+                left: 0,
+                right: 0,
+                height: 300,
             child: IgnorePointer(
               child: DecoratedBox(
                 decoration: BoxDecoration(
@@ -327,42 +320,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
 
-
-                const SizedBox(height: 10),
-
-                // Hero Title (Huge bold typography like the video)
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    headerInfo['title']!,
-                    key: ValueKey<String>(headerInfo['title']!),
-                    style: TextStyle(
-                      fontSize: 38,
-                      fontWeight: FontWeight.w800,
-                      color: titleColor,
-                      letterSpacing: -0.8,
-                      fontFamily: 'Poppins',
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 4),
-
-                // Subtitle
-                AnimatedSwitcher(
-                  duration: const Duration(milliseconds: 200),
-                  child: Text(
-                    headerInfo['subtitle']!,
-                    key: ValueKey<String>(headerInfo['subtitle']!),
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: subtitleColor,
-                      fontWeight: FontWeight.normal,
-                    ),
-                  ),
-                ),
-
-                const SizedBox(height: 16),
+                const SizedBox(height: 12),
 
                 // Dynamic Page Body driven by tab index
                 Expanded(
@@ -390,7 +348,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
           ),
 
-          // Top Right Replay Splash Button
           // Real-time Incoming Announcement Notification Banner (drops down from top)
           if (_activeAlertAnnouncement != null)
             Positioned(
@@ -410,7 +367,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
             ),
 
           // Floating Meniscus Bottom Navigation Bar
-
           Positioned(
             left: 20,
             right: 20,
@@ -428,5 +384,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         ],
       ),
     );
-  }
+  },
+);
 }
