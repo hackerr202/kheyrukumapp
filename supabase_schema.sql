@@ -568,5 +568,175 @@ DO $$ BEGIN
     WITH CHECK (auth.uid() = user_id);
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- ------------------------------------------------------------------------------
+-- 14. STUDENT DAILY ATTENDANCE
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.student_attendance (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    session_date DATE NOT NULL DEFAULT CURRENT_DATE,
+    status TEXT NOT NULL DEFAULT 'present' CHECK (status IN ('present', 'absent', 'late', 'excused')),
+    remarks TEXT,
+    created_at TIMESTAMPTZ DEFAULT NOW(),
+    UNIQUE(student_id, session_date)
+);
+
+ALTER TABLE public.student_attendance ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents view own children attendance"
+    ON public.student_attendance FOR SELECT TO authenticated
+    USING (
+        student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+        OR teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Teachers and admins record attendance"
+    ON public.student_attendance FOR ALL TO authenticated
+    USING (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ------------------------------------------------------------------------------
+-- 15. WEEKLY PROGRESS REPORTS
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.weekly_reports (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    teacher_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    week_start_date DATE NOT NULL,
+    sabaq TEXT NOT NULL,
+    sabqi TEXT NOT NULL,
+    manzil TEXT NOT NULL,
+    tajweed_rating TEXT NOT NULL DEFAULT 'Excellent' CHECK (tajweed_rating IN ('Excellent', 'Very Good', 'Good', 'Needs Revision')),
+    teacher_remarks TEXT,
+    attendance_days INT DEFAULT 5,
+    mistakes_count INT DEFAULT 0,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.weekly_reports ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents view own children weekly reports"
+    ON public.weekly_reports FOR SELECT TO authenticated
+    USING (
+        student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+        OR teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Teachers and admins manage weekly reports"
+    ON public.weekly_reports FOR ALL TO authenticated
+    USING (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ------------------------------------------------------------------------------
+-- 16. MONTHLY PAYMENTS & RECEIPT VERIFICATION
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.monthly_payments (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    parent_id UUID NOT NULL REFERENCES public.profiles(id) ON DELETE CASCADE,
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    month_year TEXT NOT NULL,
+    amount NUMERIC(10, 2) NOT NULL DEFAULT 50.00,
+    due_date DATE NOT NULL,
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'submitted', 'approved', 'rejected', 'overdue')),
+    receipt_url TEXT,
+    rejection_reason TEXT,
+    notes TEXT,
+    submitted_at TIMESTAMPTZ,
+    reviewed_at TIMESTAMPTZ,
+    reviewed_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.monthly_payments ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents view own payments"
+    ON public.monthly_payments FOR SELECT TO authenticated
+    USING (
+        parent_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents update receipt submission"
+    ON public.monthly_payments FOR UPDATE TO authenticated
+    USING (parent_id = auth.uid())
+    WITH CHECK (parent_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins manage all payments"
+    ON public.monthly_payments FOR ALL TO authenticated
+    USING (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- ------------------------------------------------------------------------------
+-- 17. ACCOUNT SUSPENSION & STATUS
+-- ------------------------------------------------------------------------------
+CREATE TABLE IF NOT EXISTS public.account_status (
+    user_id UUID PRIMARY KEY REFERENCES public.profiles(id) ON DELETE CASCADE,
+    status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'suspended', 'removed')),
+    suspension_reason TEXT,
+    suspended_at TIMESTAMPTZ,
+    suspended_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
+    updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.account_status ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Users can check own status"
+    ON public.account_status FOR SELECT TO authenticated
+    USING (
+        user_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Admins manage account status"
+    ON public.account_status FOR ALL TO authenticated
+    USING (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+-- Realtime Publications
+ALTER PUBLICATION supabase_realtime ADD TABLE public.student_attendance;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.weekly_reports;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.monthly_payments;
+
 
 

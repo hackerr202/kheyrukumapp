@@ -1,7 +1,9 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/models/announcement.dart';
+import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
+import '../../core/services/notification_center_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/announcement_banner.dart';
@@ -13,7 +15,7 @@ import 'tabs/home_tab.dart';
 import 'tabs/homework_tab.dart';
 import 'tabs/messages_tab.dart';
 import 'tabs/more_tab.dart';
-import 'tabs/settings_tab.dart';
+import 'tabs/students_tab.dart';
 
 /// Main Dashboard Screen styled precisely after the reference Meniscus demonstration,
 /// integrated with Supabase Realtime announcement broadcasts and immediate notifications.
@@ -27,10 +29,14 @@ class DashboardScreen extends StatefulWidget {
 class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTabIndex = 0;
   int _unreadAnnouncementsCount = 0;
+  int _unreadNotificationsCount = NotificationCenterService.instance.unreadCount;
   Announcement? _activeAlertAnnouncement;
   Timer? _alertDismissTimer;
   StreamSubscription<Announcement>? _alertSub;
   StreamSubscription<List<Announcement>>? _announcementsSub;
+  StreamSubscription<List<AppNotification>>? _notifsSub;
+
+  int get _totalUnreadCount => _unreadAnnouncementsCount + _unreadNotificationsCount;
 
   @override
   void initState() {
@@ -47,6 +53,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
       if (!mounted) return;
       final unread = list.where((a) => !AnnouncementService.instance.isRead(a.id)).length;
       setState(() => _unreadAnnouncementsCount = unread);
+    });
+
+    // 3. Stream unread system notifications (attendance, weekly reports, tuition, payments)
+    _notifsSub = NotificationCenterService.instance.stream.listen((list) {
+      if (!mounted) return;
+      setState(() => _unreadNotificationsCount = NotificationCenterService.instance.unreadCount);
     });
   }
 
@@ -65,6 +77,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _alertDismissTimer?.cancel();
     _alertSub?.cancel();
     _announcementsSub?.cancel();
+    _notifsSub?.cancel();
     super.dispose();
   }
 
@@ -99,7 +112,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   final List<Widget> _pages = const [
     HomeTab(),
-    SettingsTab(), // Student Profiles & Halaqah Level
+    StudentsTab(), // Multi-child parent view & Admin student roster
     MessagesTab(),
     HomeworkTab(),
     MoreTab(),
@@ -258,7 +271,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ),
                                 ),
                               ),
-                              if (_unreadAnnouncementsCount > 0)
+                              if (_totalUnreadCount > 0)
                                 Positioned(
                                   top: -4,
                                   right: -4,
@@ -274,7 +287,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     ),
                                     child: Center(
                                       child: Text(
-                                        '$_unreadAnnouncementsCount',
+                                        '$_totalUnreadCount',
                                         style: const TextStyle(
                                           color: Colors.white,
                                           fontSize: 9,

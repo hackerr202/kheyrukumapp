@@ -3,6 +3,7 @@ import '../../../core/theme/app_colors.dart';
 import '../../../widgets/invite_code_dialog.dart';
 import '../../announcements/announcements_sheet.dart';
 import '../../announcements/post_announcement_dialog.dart';
+import '../../payments/payments_screen.dart';
 import '../../settings/settings_sheet.dart';
 
 /// The "More" Tab: Hub for administrative menus, separated Teacher/Parent
@@ -346,7 +347,12 @@ class MoreTab extends StatelessWidget {
           subtitle: 'Student monthly contributions, payment status, and sponsorship receipts',
           badgeText: 'FINANCIAL',
           badgeColor: const Color(0xFF8B5CF6),
-          onTap: () => _showFeesDialog(context),
+          onTap: () {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => const PaymentsScreen()),
+            );
+          },
           isDark: isDark,
           cardBg: cardBg,
           borderColor: borderColor,
