@@ -86,8 +86,44 @@ class SupabaseService {
         'message': 'Code verified for ${response['role']} role.',
       };
     } catch (e) {
-      return {'valid': false, 'message': 'Error validating code: $e'};
+      return {'valid': false, 'message': 'Invalid code or server error: ${cleanErrorMessage(e)}'};
     }
+  }
+
+  /// Converts any raw backend/auth/database exception into a human-friendly message
+  static String cleanErrorMessage(dynamic e) {
+    if (e == null) return 'An unexpected error occurred. Please try again.';
+    final str = e.toString();
+    final lower = str.toLowerCase();
+
+    if (lower.contains('invalid login credentials') || lower.contains('invalid credentials')) {
+      return 'Incorrect email or password. Please check your details and try again.';
+    }
+    if (lower.contains('email not confirmed')) {
+      return 'Your email is not verified yet. Please check your inbox for the confirmation link.';
+    }
+    if (lower.contains('user already registered') || lower.contains('already in use')) {
+      return 'An account with this email already exists. Please log in instead.';
+    }
+    if (lower.contains('password should be at least') || lower.contains('password')) {
+      if (lower.contains('least 6') || lower.contains('short')) {
+        return 'Password must be at least 6 characters long.';
+      }
+    }
+    if (lower.contains('rate limit') || lower.contains('too many requests')) {
+      return 'Too many attempts. Please wait a moment before trying again.';
+    }
+    if (lower.contains('socketexception') ||
+        lower.contains('failed host lookup') ||
+        lower.contains('clientexception') ||
+        lower.contains('network') ||
+        lower.contains('connection')) {
+      return 'Unable to reach the server. Please verify your internet connection.';
+    }
+
+    return str
+        .replaceAll(RegExp(r'^(AuthApiException|AuthException|PostgrestException|Exception):\s*'), '')
+        .trim();
   }
 
   /// 2. Register new Parent or Teacher using an Invitation Code + Email + Password
@@ -136,7 +172,7 @@ class SupabaseService {
             : 'Registration complete. You can now log in.',
       };
     } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      return {'success': false, 'message': cleanErrorMessage(e)};
     }
   }
 
@@ -172,7 +208,7 @@ class SupabaseService {
       }
       return {'success': false, 'message': 'Invalid email or password.'};
     } catch (e) {
-      return {'success': false, 'message': e.toString()};
+      return {'success': false, 'message': cleanErrorMessage(e)};
     }
   }
 
@@ -186,7 +222,7 @@ class SupabaseService {
       );
       return {'success': true, 'message': 'Verification email sent! Please check your inbox.'};
     } catch (e) {
-      return {'success': false, 'message': 'Failed to resend email: $e'};
+      return {'success': false, 'message': 'Failed to resend email: ${cleanErrorMessage(e)}'};
     }
   }
 
@@ -276,7 +312,7 @@ class SupabaseService {
       };
     } catch (e) {
       debugPrint('[SupabaseService] generateInviteCode error: $e');
-      return {'success': false, 'message': 'Failed to generate code: $e'};
+      return {'success': false, 'message': cleanErrorMessage(e)};
     }
   }
 

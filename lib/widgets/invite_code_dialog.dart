@@ -7,13 +7,15 @@ import '../core/theme/app_colors.dart';
 /// Modal dialog allowing Administrators to generate realtime invite codes
 /// for Teachers and Parents, and view active codes in real time.
 class InviteCodeDialog extends StatefulWidget {
-  const InviteCodeDialog({super.key});
+  final String initialRole;
 
-  static Future<void> show(BuildContext context) {
+  const InviteCodeDialog({super.key, this.initialRole = 'teacher'});
+
+  static Future<void> show(BuildContext context, {String initialRole = 'teacher'}) {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
-      builder: (_) => const InviteCodeDialog(),
+      builder: (_) => InviteCodeDialog(initialRole: initialRole),
     );
   }
 
@@ -22,11 +24,17 @@ class InviteCodeDialog extends StatefulWidget {
 }
 
 class _InviteCodeDialogState extends State<InviteCodeDialog> {
-  String _selectedRole = 'teacher';
+  late String _selectedRole;
   final TextEditingController _targetEmailController = TextEditingController();
   bool _isGenerating = false;
   String? _newlyGeneratedCode;
   String? _errorMessage;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedRole = widget.initialRole;
+  }
 
   @override
   void dispose() {
@@ -175,7 +183,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Teacher (حلقة)',
+                            'Teacher',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,
@@ -215,7 +223,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            'Parent (ولي أمر)',
+                            'Parent',
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: FontWeight.bold,

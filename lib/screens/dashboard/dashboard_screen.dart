@@ -7,9 +7,11 @@ import '../../widgets/announcement_banner.dart';
 import '../../widgets/meniscus_nav_bar.dart';
 import '../announcements/announcements_sheet.dart';
 import '../announcements/post_announcement_dialog.dart';
+import '../settings/settings_sheet.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/homework_tab.dart';
 import 'tabs/messages_tab.dart';
+import 'tabs/more_tab.dart';
 import 'tabs/settings_tab.dart';
 
 /// Main Dashboard Screen styled precisely after the reference Meniscus demonstration,
@@ -88,18 +90,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
       accentColor: Color(0xFF10B981), // Emerald
     ),
     MeniscusNavItem(
-      icon: Icons.tune_rounded,
-      label: 'Settings',
+      icon: Icons.grid_view_rounded,
+      label: 'More',
       accentColor: Color(0xFFFF4B72), // Neon Rose
     ),
   ];
 
   final List<Widget> _pages = const [
     HomeTab(),
-    SettingsTab(), // Student Profiles & Halqah Level
+    SettingsTab(), // Student Profiles & Halaqah Level
     MessagesTab(),
     HomeworkTab(),
-    SettingsTab(),
+    MoreTab(),
   ];
 
   final List<Map<String, String>> _tabHeaders = const [
@@ -107,7 +109,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     {'title': 'Students', 'subtitle': 'Tracking Quranic progress & halaqah milestones.'},
     {'title': 'Messages', 'subtitle': 'Three unread. All of them kind.'},
     {'title': 'Homework', 'subtitle': 'Daily recitation & Tajweed assignments.'},
-    {'title': 'Settings', 'subtitle': 'Fewer switches. Better defaults.'},
+    {'title': 'More', 'subtitle': 'Administrative hubs, student services & tools.'},
   ];
 
   @override
@@ -229,15 +231,74 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         ],
                       ),
 
-                      // Notification Bell with Unread Count Badge
-                      Stack(
-                        clipBehavior: Clip.none,
+                      // Actions: Notification Bell + Settings
+                      Row(
                         children: [
+                          // Notification Bell with Unread Count Badge
+                          Stack(
+                            clipBehavior: Clip.none,
+                            children: [
+                              InkWell(
+                                onTap: () {
+                                  setState(() => _unreadAnnouncementsCount = 0);
+                                  AnnouncementsSheet.show(context);
+                                },
+                                borderRadius: BorderRadius.circular(10),
+                                child: Container(
+                                  padding: const EdgeInsets.all(7),
+                                  decoration: BoxDecoration(
+                                    color: headerBtnBg,
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(color: headerBorderColor),
+                                    boxShadow: [
+                                      BoxShadow(
+                                        color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                                        blurRadius: 4,
+                                        offset: const Offset(0, 2),
+                                      ),
+                                    ],
+                                  ),
+                                  child: Icon(
+                                    Icons.notifications_none_rounded,
+                                    size: 18,
+                                    color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                                  ),
+                                ),
+                              ),
+                              if (_unreadAnnouncementsCount > 0)
+                                Positioned(
+                                  top: -4,
+                                  right: -4,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(4),
+                                    decoration: const BoxDecoration(
+                                      color: Color(0xFFFF4B72),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    constraints: const BoxConstraints(
+                                      minWidth: 16,
+                                      minHeight: 16,
+                                    ),
+                                    child: Center(
+                                      child: Text(
+                                        '$_unreadAnnouncementsCount',
+                                        style: const TextStyle(
+                                          color: Colors.white,
+                                          fontSize: 9,
+                                          fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                            ],
+                          ),
+
+                          const SizedBox(width: 8),
+
+                          // Settings Button (beside notification bell)
                           InkWell(
-                            onTap: () {
-                              setState(() => _unreadAnnouncementsCount = 0);
-                              AnnouncementsSheet.show(context);
-                            },
+                            onTap: () => SettingsSheet.show(context),
                             borderRadius: BorderRadius.circular(10),
                             child: Container(
                               padding: const EdgeInsets.all(7),
@@ -254,38 +315,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ],
                               ),
                               child: Icon(
-                                Icons.notifications_none_rounded,
+                                Icons.settings_outlined,
                                 size: 18,
                                 color: isDark ? Colors.white : AppColors.textPrimaryLight,
                               ),
                             ),
                           ),
-                          if (_unreadAnnouncementsCount > 0)
-                            Positioned(
-                              top: -4,
-                              right: -4,
-                              child: Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: const BoxDecoration(
-                                  color: Color(0xFFFF4B72),
-                                  shape: BoxShape.circle,
-                                ),
-                                constraints: const BoxConstraints(
-                                  minWidth: 16,
-                                  minHeight: 16,
-                                ),
-                                child: Center(
-                                  child: Text(
-                                    '$_unreadAnnouncementsCount',
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontSize: 9,
-                                      fontWeight: FontWeight.bold,
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
                         ],
                       ),
                     ],

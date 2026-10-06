@@ -165,43 +165,65 @@ class _SplashScreenState extends State<SplashScreen>
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Logo Animation Container
-                      SizedBox(
-                        width: 280,
+                      // Circular Logo Animation Container
+                      Container(
+                        width: 250,
                         height: 250,
-                        child: Stack(
-                          alignment: Alignment.center,
-                          children: [
-                            // 1. Procedural Custom Painting Animation
-                            CustomPaint(
-                              size: const Size(280, 250),
-                              painter: KheyrukumLogoPainter(
-                                crescentProgress: _crescentAnim.value,
-                                pillarsProgress: _pillarsAnim.value,
-                                bulbsProgress: _bulbsAnim.value,
-                                crownProgress: _crownAnim.value,
-                                pulseScale: _pulseAnim.value,
-                              ),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: const Color(0xFF0F172A),
+                          border: Border.all(
+                            color: const Color(0xFF00B4B0).withOpacity(0.4),
+                            width: 2.5,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: const Color(0xFF00B4B0).withOpacity(0.25),
+                              blurRadius: 28,
+                              spreadRadius: 2,
                             ),
-
-                            // 2. High-Res Logo Overlay Fade-In
-                            FadeTransition(
-                              opacity: _assetFadeAnim,
-                              child: Transform.scale(
-                                scale: _pulseAnim.value,
-                                child: Image.asset(
-                                  'assets/images/logo.png',
-                                  width: 240,
-                                  height: 240,
-                                  fit: BoxFit.contain,
-                                  errorBuilder: (context, error, stackTrace) {
-                                    // Smooth fallback to procedural painter if image is still caching
-                                    return const SizedBox.shrink();
-                                  },
-                                ),
-                              ),
+                            BoxShadow(
+                              color: Colors.black.withOpacity(0.4),
+                              blurRadius: 16,
+                              offset: const Offset(0, 8),
                             ),
                           ],
+                        ),
+                        child: ClipOval(
+                          child: Stack(
+                            alignment: Alignment.center,
+                            children: [
+                              // 1. Procedural Custom Painting Animation
+                              CustomPaint(
+                                size: const Size(250, 250),
+                                painter: KheyrukumLogoPainter(
+                                  crescentProgress: _crescentAnim.value,
+                                  pillarsProgress: _pillarsAnim.value,
+                                  bulbsProgress: _bulbsAnim.value,
+                                  crownProgress: _crownAnim.value,
+                                  pulseScale: _pulseAnim.value,
+                                ),
+                              ),
+
+                              // 2. High-Res Logo Overlay Fade-In
+                              FadeTransition(
+                                opacity: _assetFadeAnim,
+                                child: Transform.scale(
+                                  scale: _pulseAnim.value,
+                                  child: Image.asset(
+                                    'assets/images/logo.png',
+                                    width: 240,
+                                    height: 240,
+                                    fit: BoxFit.cover,
+                                    errorBuilder: (context, error, stackTrace) {
+                                      // Smooth fallback to procedural painter if image is still caching
+                                      return const SizedBox.shrink();
+                                    },
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
                       ),
 

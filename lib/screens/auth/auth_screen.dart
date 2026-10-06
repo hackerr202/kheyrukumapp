@@ -334,6 +334,81 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
+  Widget _buildRoundLogo({double size = 46}) {
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        border: Border.all(
+          color: const Color(0xFF007A78).withOpacity(0.3),
+          width: 1.5,
+        ),
+        boxShadow: const [
+          BoxShadow(
+            color: darkShadow,
+            offset: Offset(3, 3),
+            blurRadius: 6,
+          ),
+          BoxShadow(
+            color: lightShadow,
+            offset: Offset(-3, -3),
+            blurRadius: 6,
+          ),
+        ],
+      ),
+      child: ClipOval(
+        child: Image.asset(
+          'assets/images/logo.png',
+          width: size,
+          height: size,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => Icon(
+            Icons.menu_book_rounded,
+            color: const Color(0xFF007A78),
+            size: size * 0.5,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildErrorBanner() {
+    if (_errorMessage == null) return const SizedBox.shrink();
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 250),
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: accentCoral.withOpacity(0.12),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: accentCoral.withOpacity(0.4)),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          const Icon(Icons.error_outline_rounded, size: 14, color: accentCoral),
+          const SizedBox(width: 6),
+          Flexible(
+            child: Text(
+              _errorMessage!,
+              style: const TextStyle(
+                color: accentCoral,
+                fontSize: 10.5,
+                fontWeight: FontWeight.w600,
+                height: 1.25,
+              ),
+              textAlign: TextAlign.center,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   // ===========================================================================
   // FRONT SIDE (LOGIN)
   // ===========================================================================
@@ -341,38 +416,33 @@ class _AuthScreenState extends State<AuthScreen>
     return Column(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const SizedBox(height: 12),
+        const SizedBox(height: 6),
+        // Smaller Round Logo
+        _buildRoundLogo(size: 46),
+        const SizedBox(height: 6),
         // Header
         const Text(
           'Login',
           style: TextStyle(
-            fontSize: 26,
+            fontSize: 24,
             fontWeight: FontWeight.w800,
             color: primaryNavy,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         const Text(
           'Sign in to your account',
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11.5,
             color: subtitleGray,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 10),
 
-        // Error message if any
-        if (_errorMessage != null) ...[
-          Text(
-            _errorMessage!,
-            style: const TextStyle(color: accentCoral, fontSize: 11, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-            maxLines: 2,
-          ),
-          const SizedBox(height: 6),
-        ],
+        // Enhanced Error Banner
+        _buildErrorBanner(),
 
         // Recessed Field: Username
         _buildRecessedTextField(
@@ -380,7 +450,7 @@ class _AuthScreenState extends State<AuthScreen>
           hintText: 'Username or Email',
           icon: Icons.person_outline_rounded,
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 10),
 
         // Recessed Field: Password
         _buildRecessedTextField(
@@ -389,7 +459,7 @@ class _AuthScreenState extends State<AuthScreen>
           icon: Icons.lock_outline_rounded,
           isPassword: true,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         // Tactile Toggle Switch: Remember Me
         Row(
@@ -398,7 +468,7 @@ class _AuthScreenState extends State<AuthScreen>
             const Text(
               'Remember me',
               style: TextStyle(
-                fontSize: 12,
+                fontSize: 11.5,
                 color: primaryNavy,
                 fontWeight: FontWeight.w600,
               ),
@@ -409,7 +479,7 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ],
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 12),
 
         // Raised Neumorphic Button: SIGN IN
         _buildRaisedButton(
@@ -420,7 +490,7 @@ class _AuthScreenState extends State<AuthScreen>
           onTapUp: () => setState(() => _isSignInPressed = false),
           onTap: _handleSignIn,
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 8),
 
         // Footer Text
         GestureDetector(
@@ -430,7 +500,7 @@ class _AuthScreenState extends State<AuthScreen>
             child: Text.rich(
               TextSpan(
                 text: "Don't have an account? ",
-                style: TextStyle(fontSize: 11.5, color: subtitleGray),
+                style: TextStyle(fontSize: 11, color: subtitleGray),
                 children: [
                   TextSpan(
                     text: 'Sign up',
@@ -444,7 +514,7 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 4),
       ],
     );
   }
@@ -468,44 +538,39 @@ class _AuthScreenState extends State<AuthScreen>
       key: const ValueKey('step1_invite'),
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
-        const SizedBox(height: 20),
+        const SizedBox(height: 10),
+        _buildRoundLogo(size: 44),
+        const SizedBox(height: 6),
         const Text(
           'Sign Up',
           style: TextStyle(
-            fontSize: 26,
+            fontSize: 24,
             fontWeight: FontWeight.w800,
             color: primaryNavy,
             letterSpacing: -0.5,
           ),
         ),
-        const SizedBox(height: 2),
+        const SizedBox(height: 1),
         const Text(
           'Enter your school invite code',
           style: TextStyle(
-            fontSize: 12,
+            fontSize: 11.5,
             color: subtitleGray,
             fontWeight: FontWeight.w500,
           ),
         ),
-        const SizedBox(height: 22),
+        const SizedBox(height: 14),
 
-        if (_errorMessage != null) ...[
-          Text(
-            _errorMessage!,
-            style: const TextStyle(color: accentCoral, fontSize: 11, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 8),
-        ],
+        _buildErrorBanner(),
 
         // Recessed Field: Invite Code
         _buildRecessedTextField(
           controller: _inviteCodeController,
-          hintText: 'Invite Code (e.g. KHY-7842)',
+          hintText: 'Invite Code (e.g. KHY-TEA-1234)',
           icon: Icons.confirmation_number_outlined,
           textCapitalization: TextCapitalization.characters,
         ),
-        const SizedBox(height: 20),
+        const SizedBox(height: 16),
 
         // Raised Neumorphic Button: VERIFY CODE
         _buildRaisedButton(
@@ -516,7 +581,7 @@ class _AuthScreenState extends State<AuthScreen>
           onTapUp: () => setState(() => _isVerifyPressed = false),
           onTap: _handleVerifyCode,
         ),
-        const SizedBox(height: 18),
+        const SizedBox(height: 14),
 
         // Footer: Flip back to login
         GestureDetector(
@@ -526,7 +591,7 @@ class _AuthScreenState extends State<AuthScreen>
             child: Text.rich(
               TextSpan(
                 text: 'Already have an account? ',
-                style: TextStyle(fontSize: 11.5, color: subtitleGray),
+                style: TextStyle(fontSize: 11, color: subtitleGray),
                 children: [
                   TextSpan(
                     text: 'Login',
@@ -540,7 +605,7 @@ class _AuthScreenState extends State<AuthScreen>
             ),
           ),
         ),
-        const SizedBox(height: 10),
+        const SizedBox(height: 6),
       ],
     );
   }
@@ -558,7 +623,7 @@ class _AuthScreenState extends State<AuthScreen>
             const Text(
               'Welcome',
               style: TextStyle(
-                fontSize: 24,
+                fontSize: 22,
                 fontWeight: FontWeight.w800,
                 color: primaryNavy,
                 letterSpacing: -0.5,
@@ -595,14 +660,7 @@ class _AuthScreenState extends State<AuthScreen>
         ),
         const SizedBox(height: 10),
 
-        if (_errorMessage != null) ...[
-          Text(
-            _errorMessage!,
-            style: const TextStyle(color: accentCoral, fontSize: 10.5, fontWeight: FontWeight.w600),
-            textAlign: TextAlign.center,
-          ),
-          const SizedBox(height: 4),
-        ],
+        _buildErrorBanner(),
 
         // Recessed Field: Full name
         _buildRecessedTextField(
