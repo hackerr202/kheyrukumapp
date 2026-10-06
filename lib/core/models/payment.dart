@@ -89,6 +89,9 @@ class MonthlyPayment {
   bool get isSubmitted => status.toLowerCase() == 'submitted';
   bool get isPending => status.toLowerCase() == 'pending';
   bool get isOverdue => status.toLowerCase() == 'overdue';
+  bool get hasReceipt =>
+      (receiptUrl != null && receiptUrl!.isNotEmpty) ||
+      (receiptLocalMock != null && receiptLocalMock!.isNotEmpty);
 
   MonthlyPayment copyWith({
     String? status,
