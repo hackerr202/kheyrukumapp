@@ -1,6 +1,7 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/supabase_service.dart';
 
 /// Neumorphic (Soft UI) Login & Sign-Up Screen with a true 3D perspective flip
@@ -122,6 +123,17 @@ class _AuthScreenState extends State<AuthScreen>
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
+      final profile = await SupabaseService.instance.getUserProfile();
+      if (profile != null) {
+        AuthSessionService.instance.setRole(
+          profile['role'] ?? 'parent',
+          name: profile['full_name'],
+          email: profile['email'],
+          phone: profile['phone'],
+        );
+      } else if (email.trim().toLowerCase() == 'admin@kheyrukum.com') {
+        AuthSessionService.instance.setRole('admin');
+      }
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
@@ -247,6 +259,11 @@ class _AuthScreenState extends State<AuthScreen>
           _flipToLogin();
         });
       } else {
+        AuthSessionService.instance.setRole(
+          res['role'] ?? 'parent',
+          name: name,
+          email: email,
+        );
         if (mounted) {
           Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
         }

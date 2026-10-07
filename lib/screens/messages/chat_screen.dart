@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/messaging_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -27,15 +28,9 @@ class _ChatScreenState extends State<ChatScreen> {
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
 
-  bool get _isAdmin {
-    final user = SupabaseService.instance.currentUser;
-    if (user == null || user.email?.toLowerCase() == 'admin@kheyrukum.com') return true;
-    return false;
-  }
-
-  String get _currentUserId => _isAdmin ? 'admin-001' : 'par-001';
-  String get _currentUserName => _isAdmin ? 'Admin Director' : 'Muhammed Yakut';
-  String get _currentUserRole => _isAdmin ? 'admin' : 'parent';
+  String get _currentUserId => AuthSessionService.instance.userId;
+  String get _currentUserName => AuthSessionService.instance.userName;
+  String get _currentUserRole => AuthSessionService.instance.currentRole;
 
   @override
   void dispose() {

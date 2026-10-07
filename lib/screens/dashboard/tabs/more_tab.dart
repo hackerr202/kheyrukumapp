@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../../core/services/auth_session_service.dart';
+import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/invite_code_dialog.dart';
 import '../../announcements/announcements_sheet.dart';
@@ -6,17 +8,22 @@ import '../../announcements/post_announcement_dialog.dart';
 import '../../payments/payments_screen.dart';
 import '../../settings/settings_sheet.dart';
 
-/// The "More" Tab: Hub for administrative menus, separated Teacher/Parent
-/// invite generators, center announcements, halaqah fees, and future services.
+/// The "More" Tab: Role-separated menu hub:
+/// - Admin: Teachers & Parents invite code generation, center broadcasts, tuition fees, halaqah management.
+/// - Teacher: Assigned halaqah curriculum, center announcements (view-only), audio homework, settings.
+/// - Parent: Tuition payments & receipt submissions, center announcements (view-only), child circle info, settings.
 class MoreTab extends StatelessWidget {
   const MoreTab({super.key});
 
-  void _showFeesDialog(BuildContext context) {
+  void _showTeacherHalaqahDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
     final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
     final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+
+    final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
+    final classStudents = StudentService.instance.getStudentsForHalaqah(assignedHalaqah);
 
     showDialog<void>(
       context: context,
@@ -42,14 +49,14 @@ class MoreTab extends StatelessWidget {
                       Container(
                         padding: const EdgeInsets.all(8),
                         decoration: BoxDecoration(
-                          color: const Color(0xFF8B5CF6).withOpacity(0.15),
+                          color: AppColors.accentTeal.withOpacity(0.15),
                           borderRadius: BorderRadius.circular(10),
                         ),
-                        child: const Icon(Icons.payments_rounded, color: Color(0xFF8B5CF6), size: 20),
+                        child: const Icon(Icons.school_rounded, color: AppColors.accentTeal, size: 20),
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        'Halaqah Fees & Tuition',
+                        'Assigned Circle',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
                       ),
                     ],
@@ -60,86 +67,59 @@ class MoreTab extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 14),
               Text(
-                'Tuition & Contribution Tracking',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                assignedHalaqah,
+                style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
               ),
               const SizedBox(height: 4),
               Text(
-                'Monitor monthly halaqah contributions, parent payments, and educational sponsorships.',
+                'Ustaz: ${AuthSessionService.instance.userName} • ${classStudents.length} Students Enrolled',
+                style: const TextStyle(fontSize: 12, color: AppColors.accentTeal, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Daily Curriculum: Sabaq (new memorization), Sabqi (recent revision), and Manzil (cumulative revision). You are responsible for recording daily attendance and keeping parents informed.',
                 style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.4),
               ),
               const SizedBox(height: 16),
-              // Summary cards
-              Row(
-                children: [
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Monthly Rate', style: TextStyle(fontSize: 10.5, color: subtextColor)),
-                          const SizedBox(height: 4),
-                          const Text(
-                            '\$50 / month',
-                            style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text('Class Students Roster:', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    ...classStudents.map((s) => Padding(
+                          padding: const EdgeInsets.only(bottom: 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text('• ${s.fullName}', style: TextStyle(fontSize: 11.5, color: textColor)),
+                              Text('Juz ${s.currentJuz}', style: TextStyle(fontSize: 10.5, color: subtextColor)),
+                            ],
                           ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: borderColor),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('Collection Status', style: TextStyle(fontSize: 10.5, color: subtextColor)),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Active & Synced',
-                            style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppColors.accentTeal),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ],
+                        )),
+                  ],
+                ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
               SizedBox(
                 width: double.infinity,
-                child: ElevatedButton.icon(
-                  onPressed: () {
-                    Navigator.of(ctx).pop();
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(
-                        content: Text('Fee payment processing module will be configured for your center.'),
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  },
-                  icon: const Icon(Icons.receipt_long_rounded, size: 16, color: Colors.white),
-                  label: const Text('Record Student Fee Payment', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
-                    foregroundColor: Colors.white,
-                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    backgroundColor: AppColors.accentTeal,
+                    foregroundColor: Colors.black,
                     shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
                   ),
+                  child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
                 ),
               ),
             ],
@@ -149,7 +129,7 @@ class MoreTab extends StatelessWidget {
     );
   }
 
-  void _showHalaqahsDialog(BuildContext context) {
+  void _showAllHalaqahsDialog(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
     final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
@@ -187,7 +167,7 @@ class MoreTab extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        'Memorization Circles',
+                        'Active Study Circles',
                         style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
                       ),
                     ],
@@ -200,34 +180,8 @@ class MoreTab extends StatelessWidget {
               ),
               const SizedBox(height: 14),
               Text(
-                'Active Study Circles (حلقات التحفيظ)',
-                style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'Students and teachers connected via realtime invite codes are grouped into circles for daily Sabaq (new memorization), Sabqi (recent revision), and Manzil (cumulative retention).',
-                style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.4),
-              ),
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.check_circle_outline_rounded, color: AppColors.accentEmerald, size: 20),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        'Database synced. Ready for automated recitation attendance logging.',
-                        style: TextStyle(fontSize: 11.5, color: textColor, fontWeight: FontWeight.w500),
-                      ),
-                    ),
-                  ],
-                ),
+                '1. Halaqah Abu Bakr (Ustaz Ibrahim Bilal) - 3 Students\n2. Halaqah Uthman Ibn Affan (Ustaz Tariq Mansoor) - 1 Student',
+                style: TextStyle(fontSize: 12, color: subtextColor, height: 1.5),
               ),
               const SizedBox(height: 18),
               SizedBox(
@@ -258,146 +212,192 @@ class MoreTab extends StatelessWidget {
     final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
     final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
-      children: [
-        // Header Section
-        Text(
-          'More Menus & Services',
-          style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          'Administrative controls, invitation hubs, and center resources.',
-          style: TextStyle(fontSize: 12, color: subtextColor),
-        ),
-        const SizedBox(height: 20),
+    return ValueListenableBuilder<String>(
+      valueListenable: AuthSessionService.instance.roleNotifier,
+      builder: (context, currentRole, _) {
+        final isAdmin = currentRole == 'admin';
+        final isTeacher = currentRole == 'teacher';
+        final isParent = currentRole == 'parent';
 
-        // 1. TEACHERS INVITE (ALONE)
-        _buildMenuCard(
-          context: context,
-          icon: Icons.school_rounded,
-          iconBg: AppColors.accentTeal.withOpacity(0.15),
-          iconColor: AppColors.accentTeal,
-          title: 'Teachers Invite',
-          subtitle: 'Generate & share real-time codes for ustazs to manage halaqahs',
-          badgeText: 'TEACHER CODE',
-          badgeColor: AppColors.accentTeal,
-          onTap: () => InviteCodeDialog.show(context, initialRole: 'teacher'),
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-        const SizedBox(height: 12),
+        return ListView(
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 110),
+          children: [
+            // Header Section
+            Text(
+              'More Menus & Services',
+              style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: textColor),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isTeacher
+                  ? 'Class curriculum, center circulars, and teacher settings.'
+                  : (isParent
+                      ? 'Tuition payments, center announcements, and family settings.'
+                      : 'Administrative controls, invitation hubs, and center resources.'),
+              style: TextStyle(fontSize: 12, color: subtextColor),
+            ),
+            const SizedBox(height: 20),
 
-        // 2. PARENTS INVITE (ALONE)
-        _buildMenuCard(
-          context: context,
-          icon: Icons.family_restroom_rounded,
-          iconBg: AppColors.accentAmber.withOpacity(0.15),
-          iconColor: AppColors.accentAmber,
-          title: 'Parents Invite',
-          subtitle: 'Generate & share real-time codes for parents to link student recitation',
-          badgeText: 'PARENT CODE',
-          badgeColor: AppColors.accentAmber,
-          onTap: () => InviteCodeDialog.show(context, initialRole: 'parent'),
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-        const SizedBox(height: 12),
+            // 1. ADMIN ONLY: TEACHERS INVITE
+            if (isAdmin) ...[
+              _buildMenuCard(
+                context: context,
+                icon: Icons.school_rounded,
+                iconBg: AppColors.accentTeal.withOpacity(0.15),
+                iconColor: AppColors.accentTeal,
+                title: 'Teachers Invite',
+                subtitle: 'Generate & share real-time codes for ustazs to manage halaqahs',
+                badgeText: 'TEACHER CODE',
+                badgeColor: AppColors.accentTeal,
+                onTap: () => InviteCodeDialog.show(context, initialRole: 'teacher'),
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
 
-        // 3. ANNOUNCEMENTS
-        _buildMenuCard(
-          context: context,
-          icon: Icons.campaign_rounded,
-          iconBg: const Color(0xFFFF4B72).withOpacity(0.15),
-          iconColor: const Color(0xFFFF4B72),
-          title: 'Center Announcements',
-          subtitle: 'Broadcast circulars to teachers & parents, or review all notices',
-          badgeText: 'REALTIME FEED',
-          badgeColor: const Color(0xFFFF4B72),
-          onTap: () => AnnouncementsSheet.show(context),
-          extraActionText: '+ Post',
-          onExtraAction: () {
-            showDialog(
+              // 2. ADMIN ONLY: PARENTS INVITE
+              _buildMenuCard(
+                context: context,
+                icon: Icons.family_restroom_rounded,
+                iconBg: AppColors.accentAmber.withOpacity(0.15),
+                iconColor: AppColors.accentAmber,
+                title: 'Parents Invite',
+                subtitle: 'Generate & share real-time codes for parents to link student recitation',
+                badgeText: 'PARENT CODE',
+                badgeColor: AppColors.accentAmber,
+                onTap: () => InviteCodeDialog.show(context, initialRole: 'parent'),
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // TEACHER SPECIFIC: ASSIGNED HALAQAH
+            if (isTeacher) ...[
+              _buildMenuCard(
+                context: context,
+                icon: Icons.school_rounded,
+                iconBg: AppColors.accentTeal.withOpacity(0.15),
+                iconColor: AppColors.accentTeal,
+                title: 'My Assigned Halaqah',
+                subtitle: '${AuthSessionService.instance.assignedHalaqahName} • Roster & Curriculum',
+                badgeText: 'CLASS INFO',
+                badgeColor: AppColors.accentTeal,
+                onTap: () => _showTeacherHalaqahDialog(context),
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
+            ],
+
+            // CENTER ANNOUNCEMENTS
+            _buildMenuCard(
               context: context,
-              builder: (_) => const PostAnnouncementDialog(),
-            );
-          },
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-        const SizedBox(height: 12),
+              icon: Icons.campaign_rounded,
+              iconBg: const Color(0xFFFF4B72).withOpacity(0.15),
+              iconColor: const Color(0xFFFF4B72),
+              title: 'Center Announcements',
+              subtitle: isAdmin
+                  ? 'Broadcast circulars to teachers & parents, or review all notices'
+                  : 'Official circulars, reminders, and holiday updates from administration',
+              badgeText: 'REALTIME FEED',
+              badgeColor: const Color(0xFFFF4B72),
+              onTap: () => AnnouncementsSheet.show(context),
+              extraActionText: isAdmin ? '+ Post' : null,
+              onExtraAction: isAdmin
+                  ? () {
+                      showDialog(
+                        context: context,
+                        builder: (_) => const PostAnnouncementDialog(),
+                      );
+                    }
+                  : null,
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
+            ),
+            const SizedBox(height: 12),
 
-        // 4. FEES & TUITION
-        _buildMenuCard(
-          context: context,
-          icon: Icons.payments_rounded,
-          iconBg: const Color(0xFF8B5CF6).withOpacity(0.15),
-          iconColor: const Color(0xFF8B5CF6),
-          title: 'Halaqah Fees & Tuition',
-          subtitle: 'Student monthly contributions, payment status, and sponsorship receipts',
-          badgeText: 'FINANCIAL',
-          badgeColor: const Color(0xFF8B5CF6),
-          onTap: () {
-            Navigator.push(
-              context,
-              MaterialPageRoute(builder: (_) => const PaymentsScreen()),
-            );
-          },
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-        const SizedBox(height: 12),
+            // TUITION & FEES (Admin manages all, Parent views and submits receipts)
+            if (isAdmin || isParent) ...[
+              _buildMenuCard(
+                context: context,
+                icon: Icons.payments_rounded,
+                iconBg: const Color(0xFF8B5CF6).withOpacity(0.15),
+                iconColor: const Color(0xFF8B5CF6),
+                title: isParent ? 'Tuition & Fee Receipts' : 'Halaqah Fees & Tuition',
+                subtitle: isParent
+                    ? 'Submit bank receipt screenshot, view monthly status, and sponsorship'
+                    : 'Student monthly contributions, receipt inspection, and fee status',
+                badgeText: 'FINANCIAL',
+                badgeColor: const Color(0xFF8B5CF6),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const PaymentsScreen()),
+                  );
+                },
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
+            ],
 
-        // 5. HALAQAHS & CIRCLES
-        _buildMenuCard(
-          context: context,
-          icon: Icons.menu_book_rounded,
-          iconBg: AppColors.accentEmerald.withOpacity(0.15),
-          iconColor: AppColors.accentEmerald,
-          title: 'Memorization Circles (Halaqahs)',
-          subtitle: 'Manage recitation groups, student circles & curriculum milestones',
-          badgeText: 'CIRCLES',
-          badgeColor: AppColors.accentEmerald,
-          onTap: () => _showHalaqahsDialog(context),
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-        const SizedBox(height: 12),
+            // HALAQAHS CIRCLES (Admin view)
+            if (isAdmin) ...[
+              _buildMenuCard(
+                context: context,
+                icon: Icons.menu_book_rounded,
+                iconBg: AppColors.accentEmerald.withOpacity(0.15),
+                iconColor: AppColors.accentEmerald,
+                title: 'Memorization Circles (Halaqahs)',
+                subtitle: 'Manage recitation groups, student circles & curriculum milestones',
+                badgeText: 'CIRCLES',
+                badgeColor: AppColors.accentEmerald,
+                onTap: () => _showAllHalaqahsDialog(context),
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
+            ],
 
-        // 6. PORTAL SETTINGS SHORTCUT
-        _buildMenuCard(
-          context: context,
-          icon: Icons.settings_rounded,
-          iconBg: const Color(0xFF00BCD4).withOpacity(0.15),
-          iconColor: const Color(0xFF00BCD4),
-          title: 'Portal Settings',
-          subtitle: 'Light/Dark theme toggle, profile settings, and notification alerts',
-          badgeText: 'SETTINGS',
-          badgeColor: const Color(0xFF00BCD4),
-          onTap: () => SettingsSheet.show(context),
-          isDark: isDark,
-          cardBg: cardBg,
-          borderColor: borderColor,
-          textColor: textColor,
-          subtextColor: subtextColor,
-        ),
-      ],
+            // PORTAL SETTINGS SHORTCUT (All roles)
+            _buildMenuCard(
+              context: context,
+              icon: Icons.settings_rounded,
+              iconBg: const Color(0xFF00BCD4).withOpacity(0.15),
+              iconColor: const Color(0xFF00BCD4),
+              title: 'Portal Settings',
+              subtitle: 'Light/Dark theme toggle, profile settings, and notification alerts',
+              badgeText: 'SETTINGS',
+              badgeColor: const Color(0xFF00BCD4),
+              onTap: () => SettingsSheet.show(context),
+              isDark: isDark,
+              cardBg: cardBg,
+              borderColor: borderColor,
+              textColor: textColor,
+              subtextColor: subtextColor,
+            ),
+          ],
+        );
+      },
     );
   }
 
@@ -503,7 +503,6 @@ class MoreTab extends StatelessWidget {
 
                 const SizedBox(width: 8),
 
-                // Optional Extra Action button or Chevron
                 if (extraActionText != null && onExtraAction != null)
                   InkWell(
                     onTap: onExtraAction,

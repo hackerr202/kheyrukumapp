@@ -6,6 +6,7 @@ class Student {
   final String? parentId;
   final String parentName;
   final String parentPhone;
+  final String? parentEmail;
   final DateTime? dateOfBirth;
   final int currentJuz;
   final int currentSurah;
@@ -22,6 +23,7 @@ class Student {
     this.parentId,
     this.parentName = 'Parent Account',
     this.parentPhone = '+251 91 123 4567',
+    this.parentEmail,
     this.dateOfBirth,
     this.currentJuz = 30,
     this.currentSurah = 67,
@@ -37,10 +39,11 @@ class Student {
       fullName: json['full_name']?.toString() ?? 'Student',
       halaqahId: json['halaqah_id']?.toString(),
       halaqahName: json['halaqah_name']?.toString() ??
-          (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Halaqah Abu Bakr'),
+          (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Halaqah Abu Bakr (حلقة أبي بكر)'),
       parentId: json['parent_id']?.toString(),
       parentName: json['parent_name']?.toString() ?? 'Parent',
       parentPhone: json['parent_phone']?.toString() ?? '+251 91 123 4567',
+      parentEmail: json['parent_email']?.toString(),
       dateOfBirth: json['date_of_birth'] != null
           ? DateTime.tryParse(json['date_of_birth'].toString())
           : null,
@@ -74,6 +77,7 @@ class Student {
     String? parentId,
     String? parentName,
     String? parentPhone,
+    String? parentEmail,
     int? currentJuz,
     int? currentSurah,
     int? currentAyah,
@@ -88,6 +92,7 @@ class Student {
       parentId: parentId ?? this.parentId,
       parentName: parentName ?? this.parentName,
       parentPhone: parentPhone ?? this.parentPhone,
+      parentEmail: parentEmail ?? this.parentEmail,
       dateOfBirth: dateOfBirth,
       currentJuz: currentJuz ?? this.currentJuz,
       currentSurah: currentSurah ?? this.currentSurah,

@@ -4,10 +4,13 @@ import 'notification_center_service.dart';
 
 /// Messaging service managing:
 /// - Admin creating groups with parents or direct 1-on-1 chats
+/// - Teacher starting 1-on-1 chats with parents of his class students
 /// - Parent initiating conversations with Admin or child's halaqah Teachers
 /// - Real-time message streaming
 class MessagingService {
-  MessagingService._();
+  MessagingService._() {
+    _seedInitialConversations();
+  }
 
   static final MessagingService instance = MessagingService._();
 
@@ -23,10 +26,91 @@ class MessagingService {
 
   List<Conversation> get allConversations => List.unmodifiable(_conversations);
 
-  /// Get conversations relevant for a user (or all if admin)
-  List<Conversation> getConversationsForUser(String userId, {bool isAdmin = false}) {
-    if (isAdmin) return _conversations;
-    return _conversations.where((c) => c.participantIds.contains(userId) || c.isGroup).toList();
+  void _seedInitialConversations() {
+    final now = DateTime.now();
+
+    // Initial conversation between Ustaz Ibrahim and Parent Ahmed Muhammed
+    final convo1 = Conversation(
+      id: 'convo-teach-par-001',
+      title: 'Parent: Brother Ahmed (Abdur-Rahman\'s Parent)',
+      isGroup: false,
+      participantIds: ['teach-001', 'par-001'],
+      participantNames: ['Ustaz Ibrahim Bilal', 'Brother Ahmed Muhammed'],
+      lastMessage: 'Masha\'Allah Abdur-Rahman showed great improvement in Tajweed today.',
+      lastMessageTime: now.subtract(const Duration(hours: 2)),
+      halaqahId: 'halaqah-001',
+      groupType: 'direct_teacher',
+    );
+
+    // Initial conversation between Director and Parent
+    final convo2 = Conversation(
+      id: 'convo-admin-par-001',
+      title: 'Center Director (Ustaz Muhammed)',
+      isGroup: false,
+      participantIds: ['admin-001', 'par-001'],
+      participantNames: ['Admin Director', 'Brother Ahmed Muhammed'],
+      lastMessage: 'Welcome to Kheyrukum Islamic Center Portal.',
+      lastMessageTime: now.subtract(const Duration(days: 2)),
+      groupType: 'direct_admin',
+    );
+
+    _conversations.addAll([convo1, convo2]);
+
+    _messagesMap['convo-teach-par-001'] = [
+      ChatMessage(
+        id: 'msg-seed-1',
+        conversationId: 'convo-teach-par-001',
+        senderId: 'teach-001',
+        senderName: 'Ustaz Ibrahim Bilal',
+        senderRole: 'teacher',
+        content: 'As-salamu alaykum Brother Ahmed. Abdur-Rahman completed his recitation of Surah Al-Mulk today.',
+        timestamp: now.subtract(const Duration(hours: 3)),
+        isRead: true,
+      ),
+      ChatMessage(
+        id: 'msg-seed-2',
+        conversationId: 'convo-teach-par-001',
+        senderId: 'par-001',
+        senderName: 'Brother Ahmed Muhammed',
+        senderRole: 'parent',
+        content: 'Wa alaykumu as-salam Ustaz. JazakAllahu khayran for the guidance. We practiced together at home yesterday.',
+        timestamp: now.subtract(const Duration(hours: 2, minutes: 30)),
+        isRead: true,
+      ),
+      ChatMessage(
+        id: 'msg-seed-3',
+        conversationId: 'convo-teach-par-001',
+        senderId: 'teach-001',
+        senderName: 'Ustaz Ibrahim Bilal',
+        senderRole: 'teacher',
+        content: 'Masha\'Allah Abdur-Rahman showed great improvement in Tajweed today.',
+        timestamp: now.subtract(const Duration(hours: 2)),
+        isRead: true,
+      ),
+    ];
+
+    _messagesMap['convo-admin-par-001'] = [
+      ChatMessage(
+        id: 'msg-seed-4',
+        conversationId: 'convo-admin-par-001',
+        senderId: 'admin-001',
+        senderName: 'Admin Director',
+        senderRole: 'admin',
+        content: 'Welcome to Kheyrukum Islamic Center Portal. Please reach out if you have any administrative questions.',
+        timestamp: now.subtract(const Duration(days: 2)),
+        isRead: true,
+      ),
+    ];
+  }
+
+  /// Get conversations relevant for a user based on user ID and role
+  List<Conversation> getConversationsForUser(String userId, {String role = 'admin'}) {
+    if (role == 'admin') return _conversations;
+    return _conversations.where((c) {
+      if (c.participantIds.contains(userId)) return true;
+      if (c.isGroup && role == 'parent' && c.groupType == 'parent_group') return true;
+      return false;
+    }).toList();
   }
 
   /// Stream messages for a specific conversation
@@ -34,7 +118,6 @@ class MessagingService {
     if (!_chatControllers.containsKey(conversationId)) {
       _chatControllers[conversationId] = StreamController<List<ChatMessage>>.broadcast();
     }
-    // Emit current messages immediately
     Timer.run(() {
       _chatControllers[conversationId]?.add(List.from(_messagesMap[conversationId] ?? []));
     });
@@ -88,6 +171,74 @@ class MessagingService {
     return msg;
   }
 
+  /// Teacher starts a direct 1-on-1 chat with a parent of his class students
+  Future<Conversation> startTeacherChatWithParent({
+    required String teacherId,
+    required String teacherName,
+    required String parentId,
+    required String parentName,
+    required String studentName,
+    String? halaqahId,
+    String? initialMessage,
+  }) async {
+    // Check if direct conversation already exists between teacher and parent
+    final existingIndex = _conversations.indexWhere(
+      (c) =>
+          !c.isGroup &&
+          c.participantIds.contains(teacherId) &&
+          c.participantIds.contains(parentId),
+    );
+
+    if (existingIndex != -1) {
+      final existing = _conversations[existingIndex];
+      if (initialMessage != null && initialMessage.isNotEmpty) {
+        await sendMessage(
+          conversationId: existing.id,
+          senderId: teacherId,
+          senderName: teacherName,
+          senderRole: 'teacher',
+          content: initialMessage,
+        );
+      }
+      return existing;
+    }
+
+    final convo = Conversation(
+      id: 'convo-teach-par-${DateTime.now().millisecondsSinceEpoch}',
+      title: 'Parent: $parentName ($studentName\'s Parent)',
+      isGroup: false,
+      participantIds: [teacherId, parentId],
+      participantNames: [teacherName, parentName],
+      lastMessage: initialMessage ?? 'Ustaz $teacherName started a conversation regarding $studentName.',
+      lastMessageTime: DateTime.now(),
+      halaqahId: halaqahId,
+      groupType: 'direct_teacher',
+    );
+
+    _conversations.insert(0, convo);
+    _conversationsController.add(List.from(_conversations));
+
+    if (initialMessage != null && initialMessage.isNotEmpty) {
+      await sendMessage(
+        conversationId: convo.id,
+        senderId: teacherId,
+        senderName: teacherName,
+        senderRole: 'teacher',
+        content: initialMessage,
+      );
+    }
+
+    // Notification for Parent
+    NotificationCenterService.instance.addNotification(
+      title: 'Message from Ustaz $teacherName 💬',
+      body: 'Ustaz $teacherName started a discussion regarding $studentName.',
+      type: 'chat',
+      data: {'conversation_id': convo.id},
+    );
+
+    return convo;
+  }
+
   /// Admin creates a new group conversation with parents
   Future<Conversation> createGroup({
     required String title,
@@ -110,7 +261,6 @@ class MessagingService {
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
-    // Add first message
     await sendMessage(
       conversationId: convo.id,
       senderId: 'admin-001',
@@ -119,7 +269,6 @@ class MessagingService {
       content: 'As-salamu alaykum parents. Welcome to "$title".',
     );
 
-    // Notify parents
     NotificationCenterService.instance.addNotification(
       title: 'New Group Created 👥',
       body: 'Admin created a new discussion group: "$title".',
@@ -136,9 +285,8 @@ class MessagingService {
     required String parentName,
     String? initialMessage,
   }) async {
-    // Check if direct conversation already exists
     final existingIndex = _conversations.indexWhere(
-      (c) => !c.isGroup && c.participantIds.contains(parentId),
+      (c) => !c.isGroup && c.participantIds.contains('admin-001') && c.participantIds.contains(parentId),
     );
 
     if (existingIndex != -1) {
@@ -194,11 +342,21 @@ class MessagingService {
         ? 'Center Director (Ustaz Muhammed)'
         : '$targetName (${halaqahName ?? 'Halaqah Teacher'})';
 
+    final targetId = targetRole == 'admin' ? 'admin-001' : 'teach-001';
+
+    final existingIndex = _conversations.indexWhere(
+      (c) => !c.isGroup && c.participantIds.contains(parentId) && c.participantIds.contains(targetId),
+    );
+
+    if (existingIndex != -1) {
+      return _conversations[existingIndex];
+    }
+
     final convo = Conversation(
       id: 'convo-${DateTime.now().millisecondsSinceEpoch}',
       title: title,
       isGroup: false,
-      participantIds: [parentId, targetRole == 'admin' ? 'admin-001' : 'teach-001'],
+      participantIds: [parentId, targetId],
       participantNames: [parentName, targetName],
       lastMessage: initialMessage ?? 'Conversation initiated.',
       lastMessageTime: DateTime.now(),

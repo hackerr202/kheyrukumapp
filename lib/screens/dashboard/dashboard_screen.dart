@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/prayer_reminder_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -181,83 +182,129 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 const SizedBox(height: 8),
 
                 // Top Header Bar: Admin Broadcast + Title + Notification Bell
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      // Admin Broadcast Button
-                      InkWell(
-                        onTap: () {
-                          showDialog(
-                            context: context,
-                            builder: (_) => const PostAnnouncementDialog(),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(10),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: headerBtnBg,
-                            borderRadius: BorderRadius.circular(10),
-                            border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.5)),
-                            boxShadow: [
-                              BoxShadow(
-                                color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
-                                blurRadius: 4,
-                                offset: const Offset(0, 2),
-                              ),
-                            ],
-                          ),
-                          child: const Row(
-                            children: [
-                              Icon(Icons.campaign_rounded, size: 14, color: Color(0xFFFFA000)),
-                              SizedBox(width: 4),
-                              Text(
-                                'Post Notice',
-                                style: TextStyle(
-                                  color: Color(0xFFFFA000),
-                                  fontSize: 11,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
+                ValueListenableBuilder<String>(
+                  valueListenable: AuthSessionService.instance.roleNotifier,
+                  builder: (context, currentRole, _) {
+                    final isAdmin = currentRole == 'admin';
+                    final isTeacher = currentRole == 'teacher';
 
-                      // Center Pill
-                      Row(
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          Container(
-                            width: 7,
-                            height: 7,
-                            decoration: BoxDecoration(
-                              color: activeItem.accentColor,
-                              shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: activeItem.accentColor.withOpacity(0.6),
-                                  blurRadius: 6,
+                          // Admin Broadcast Button ONLY for Admin
+                          if (isAdmin)
+                            InkWell(
+                              onTap: () {
+                                showDialog(
+                                  context: context,
+                                  builder: (_) => const PostAnnouncementDialog(),
+                                );
+                              },
+                              borderRadius: BorderRadius.circular(10),
+                              child: Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: headerBtnBg,
+                                  borderRadius: BorderRadius.circular(10),
+                                  border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.5)),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                                      blurRadius: 4,
+                                      offset: const Offset(0, 2),
+                                    ),
+                                  ],
                                 ),
-                              ],
+                                child: const Row(
+                                  children: [
+                                    Icon(Icons.campaign_rounded, size: 14, color: Color(0xFFFFA000)),
+                                    SizedBox(width: 4),
+                                    Text(
+                                      'Post Notice',
+                                      style: TextStyle(
+                                        color: Color(0xFFFFA000),
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            )
+                          else
+                            // Teacher & Parent header badge
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              decoration: BoxDecoration(
+                                color: headerBtnBg,
+                                borderRadius: BorderRadius.circular(10),
+                                border: Border.all(
+                                  color: (isTeacher ? AppColors.accentTeal : AppColors.accentAmber).withOpacity(0.4),
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                                    blurRadius: 4,
+                                    offset: const Offset(0, 2),
+                                  ),
+                                ],
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    isTeacher ? Icons.school_rounded : Icons.family_restroom_rounded,
+                                    size: 14,
+                                    color: isTeacher ? AppColors.accentTeal : AppColors.accentAmber,
+                                  ),
+                                  const SizedBox(width: 5),
+                                  Text(
+                                    isTeacher ? 'Teacher' : 'Parent',
+                                    style: TextStyle(
+                                      color: isTeacher ? AppColors.accentTeal : AppColors.accentAmber,
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'KHEYRUKUM PORTAL',
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w600,
-                              letterSpacing: 1.2,
-                              color: isDark ? Colors.white.withOpacity(0.7) : AppColors.textSecondaryLight,
-                            ),
-                          ),
-                        ],
-                      ),
 
-                      // Actions: Notification Bell + Settings
-                      Row(
+                          // Center Pill
+                          Row(
+                            children: [
+                              Container(
+                                width: 7,
+                                height: 7,
+                                decoration: BoxDecoration(
+                                  color: activeItem.accentColor,
+                                  shape: BoxShape.circle,
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: activeItem.accentColor.withOpacity(0.6),
+                                      blurRadius: 6,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                isTeacher
+                                    ? 'TEACHER PORTAL'
+                                    : (isAdmin ? 'ADMIN PORTAL' : 'PARENT PORTAL'),
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w600,
+                                  letterSpacing: 1.2,
+                                  color: isDark ? Colors.white.withOpacity(0.7) : AppColors.textSecondaryLight,
+                                ),
+                              ),
+                            ],
+                          ),
+
+                          // Actions: Notification Bell + Settings
+                          Row(
                         children: [
                           // Notification Bell with Unread Count Badge
                           Stack(
@@ -348,8 +395,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           ),
                         ],
                       ),
-                    ],
-                  ),
+                    );
+                  },
                 ),
 
                 const SizedBox(height: 12),

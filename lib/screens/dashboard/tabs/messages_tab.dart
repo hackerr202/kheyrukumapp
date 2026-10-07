@@ -1,14 +1,15 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/chat_message.dart';
+import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/student_service.dart';
-import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../messages/chat_screen.dart';
 
-/// Messages Tab:
-/// - Admins: Create parent discussion groups, broadcast messages, start direct 1-on-1 chats with parents.
-/// - Parents: Access halaqah parent groups, start direct chat with Center Director (Admin) or child's Ustaz/teacher.
+/// Messages Tab with role-based communication:
+/// - Admin: Broadcast groups, parent groups, and direct 1-on-1 parent chats.
+/// - Teacher: Direct 1-on-1 chats with parents of his class students.
+/// - Parent: Direct chats with child's Ustaz and Center Director.
 class MessagesTab extends StatefulWidget {
   const MessagesTab({super.key});
 
@@ -17,14 +18,6 @@ class MessagesTab extends StatefulWidget {
 }
 
 class _MessagesTabState extends State<MessagesTab> {
-  bool get _isAdmin {
-    final user = SupabaseService.instance.currentUser;
-    if (user == null || user.email?.toLowerCase() == 'admin@kheyrukum.com') return true;
-    return false;
-  }
-
-  String get _currentUserId => _isAdmin ? 'admin-001' : 'par-001';
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -33,145 +26,347 @@ class _MessagesTabState extends State<MessagesTab> {
     final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
     final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
-    return StreamBuilder<List<Conversation>>(
-      stream: MessagingService.instance.conversationsStream,
-      initialData: MessagingService.instance.allConversations,
-      builder: (context, snapshot) {
-        final conversations = MessagingService.instance.getConversationsForUser(_currentUserId, isAdmin: _isAdmin);
+    return ValueListenableBuilder<String>(
+      valueListenable: AuthSessionService.instance.roleNotifier,
+      builder: (context, currentRole, _) {
+        final isAdmin = currentRole == 'admin';
+        final isTeacher = currentRole == 'teacher';
+        final isParent = currentRole == 'parent';
+        final currentUserId = AuthSessionService.instance.userId;
 
-        return Scaffold(
-          backgroundColor: Colors.transparent,
-          body: ListView(
-            padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-            children: [
-              // Header & New Chat button (placed safely in header away from bottom nav bar)
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        return StreamBuilder<List<Conversation>>(
+          stream: MessagingService.instance.conversationsStream,
+          initialData: MessagingService.instance.allConversations,
+          builder: (context, snapshot) {
+            final conversations = MessagingService.instance.getConversationsForUser(
+              currentUserId,
+              role: currentRole,
+            );
+
+            return Scaffold(
+              backgroundColor: Colors.transparent,
+              body: ListView(
+                padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
                 children: [
-                  Text(
-                    'Messages & Circles',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
-                  ),
-                  if (_isAdmin)
-                    ElevatedButton.icon(
-                      onPressed: () => _showAdminActionSheet(context),
-                      icon: const Icon(Icons.add_comment_rounded, size: 15),
-                      label: const Text('New Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFFFA000),
-                        foregroundColor: Colors.black,
-                        elevation: 2,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                    ),
-                ],
-              ),
-              const SizedBox(height: 12),
-
-              // Action Bar for Parents
-              if (!_isAdmin) ...[
-                Row(
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _startParentDirectChat(context, role: 'admin'),
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFFFFA000).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.4)),
+                  // Header Row with Role-Appropriate Title and Action Button
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isTeacher
+                                ? 'Class Parent Messages'
+                                : (isParent ? 'Messages & Ustaz' : 'Messages & Circles'),
+                            style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
                           ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.shield_outlined, size: 18, color: Color(0xFFFFA000)),
-                              SizedBox(width: 6),
-                              Text(
-                                'Message Director',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Color(0xFFFFA000)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: InkWell(
-                        onTap: () => _startParentDirectChat(context, role: 'teacher'),
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF00BCD4).withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: const Color(0xFF00BCD4).withOpacity(0.4)),
-                          ),
-                          child: const Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.menu_book_rounded, size: 18, color: Color(0xFF00BCD4)),
-                              SizedBox(width: 6),
-                              Text(
-                                'Message Ustaz',
-                                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Color(0xFF00BCD4)),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 16),
-              ],
-
-              // Conversation Items List
-              if (conversations.isEmpty)
-                Container(
-                  padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(color: borderColor),
-                  ),
-                  child: Center(
-                    child: Column(
-                      children: [
-                        Icon(Icons.chat_bubble_outline_rounded, size: 44, color: const Color(0xFFFFA000).withOpacity(0.7)),
-                        const SizedBox(height: 12),
-                        Text('No Active Conversations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
-                        const SizedBox(height: 6),
-                        Text(
-                          _isAdmin
-                              ? 'Start private chats with parents or create a discussion group for halaqah circles.'
-                              : 'Send a message to the Center Director or your child\'s Ustaz using the buttons above.',
-                          textAlign: TextAlign.center,
-                          style: TextStyle(color: subtextColor, fontSize: 12, height: 1.4),
-                        ),
-                        if (_isAdmin) ...[
-                          const SizedBox(height: 18),
-                          ElevatedButton.icon(
-                            onPressed: () => _showAdminActionSheet(context),
-                            icon: const Icon(Icons.add_comment_rounded, size: 16),
-                            label: const Text('Start First Chat', style: TextStyle(fontWeight: FontWeight.bold)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: const Color(0xFFFFA000),
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 11),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isTeacher
+                                ? 'Communicate with parents of your class students'
+                                : (isParent ? 'Direct chats with Ustaz and Director' : 'Admin communication hub'),
+                            style: TextStyle(fontSize: 11, color: subtextColor),
                           ),
                         ],
+                      ),
+
+                      // Action Button for Admin
+                      if (isAdmin)
+                        ElevatedButton.icon(
+                          onPressed: () => _showAdminActionSheet(context),
+                          icon: const Icon(Icons.add_comment_rounded, size: 15),
+                          label: const Text('New Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: const Color(0xFFFFA000),
+                            foregroundColor: Colors.black,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+
+                      // Action Button for Teacher (Start Chat with Class Parent)
+                      if (isTeacher)
+                        ElevatedButton.icon(
+                          onPressed: () => _showTeacherMessageParentSheet(context),
+                          icon: const Icon(Icons.chat_bubble_rounded, size: 14),
+                          label: const Text('Message Parent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5)),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentTeal,
+                            foregroundColor: Colors.black,
+                            elevation: 2,
+                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 14),
+
+                  // Action Buttons for Parents
+                  if (isParent) ...[
+                    Row(
+                      children: [
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _startParentDirectChat(context, role: 'teacher'),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFF00BCD4).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFF00BCD4).withOpacity(0.4)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.menu_book_rounded, size: 18, color: Color(0xFF00BCD4)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Message Ustaz',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Color(0xFF00BCD4)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: InkWell(
+                            onTap: () => _startParentDirectChat(context, role: 'admin'),
+                            borderRadius: BorderRadius.circular(14),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 10),
+                              decoration: BoxDecoration(
+                                color: const Color(0xFFFFA000).withOpacity(0.12),
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: const Color(0xFFFFA000).withOpacity(0.4)),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.shield_outlined, size: 18, color: Color(0xFFFFA000)),
+                                  SizedBox(width: 6),
+                                  Text(
+                                    'Message Director',
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11.5, color: Color(0xFFFFA000)),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
+                    const SizedBox(height: 16),
+                  ],
+
+                  // Conversation Items List
+                  if (conversations.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Center(
+                        child: Column(
+                          children: [
+                            Icon(Icons.chat_bubble_outline_rounded, size: 44, color: AppColors.accentTeal.withOpacity(0.7)),
+                            const SizedBox(height: 12),
+                            Text('No Active Conversations', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: textColor)),
+                            const SizedBox(height: 6),
+                            Text(
+                              isTeacher
+                                  ? 'Tap "Message Parent" above to start a conversation with any parent of your class students.'
+                                  : (isParent
+                                      ? 'Tap "Message Ustaz" to contact your child\'s recitation teacher.'
+                                      : 'Start private chats with parents or create a discussion group.'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(color: subtextColor, fontSize: 12),
+                            ),
+                          ],
+                        ),
+                      ),
+                    )
+                  else
+                    ...conversations.map((convo) {
+                      final hasUnread = false;
+
+                      return Container(
+                        margin: const EdgeInsets.only(bottom: 10),
+                        decoration: BoxDecoration(
+                          color: cardBg,
+                          borderRadius: BorderRadius.circular(18),
+                          border: Border.all(color: hasUnread ? AppColors.accentTeal.withOpacity(0.5) : borderColor),
+                          boxShadow: [
+                            BoxShadow(
+                              color: Colors.black.withOpacity(isDark ? 0.15 : 0.04),
+                              blurRadius: 6,
+                              offset: const Offset(0, 2),
+                            ),
+                          ],
+                        ),
+                        child: ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          leading: CircleAvatar(
+                            radius: 22,
+                            backgroundColor: (convo.isGroup ? AppColors.accentEmerald : AppColors.accentTeal).withOpacity(0.2),
+                            child: Icon(
+                              convo.isGroup ? Icons.groups_rounded : Icons.person_rounded,
+                              color: convo.isGroup ? AppColors.accentEmerald : AppColors.accentTeal,
+                              size: 22,
+                            ),
+                          ),
+                          title: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  convo.title,
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ),
+                              Text(
+                                _formatTime(convo.lastMessageTime),
+                                style: TextStyle(fontSize: 10.5, color: subtextColor),
+                              ),
+                            ],
+                          ),
+                          subtitle: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              convo.lastMessage.isNotEmpty ? convo.lastMessage : 'No messages yet',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                color: subtextColor,
+                                fontWeight: hasUnread ? FontWeight.bold : FontWeight.normal,
+                              ),
+                            ),
+                          ),
+                          trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 12, color: Colors.grey),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  conversationId: convo.id,
+                                  conversationTitle: convo.title,
+                                  targetRole: convo.groupType == 'direct_teacher' ? 'parent' : 'admin',
+                                ),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    }),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // Teacher Message Parent Sheet (Lists ONLY parents of his class students)
+  void _showTeacherMessageParentSheet(BuildContext context) {
+    final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
+    final classStudents = StudentService.instance.getStudentsForHalaqah(assignedHalaqah);
+
+    showModalBottomSheet(
+      context: context,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentTeal.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.chat_bubble_rounded, color: AppColors.accentTeal, size: 20),
                   ),
+                  const SizedBox(width: 10),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'Message Class Parent',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
+                      Text(
+                        'Select a parent from $assignedHalaqah',
+                        style: const TextStyle(fontSize: 11.5, color: Colors.grey),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              if (classStudents.isEmpty)
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text('No students currently assigned to your class.'),
                 )
               else
-                ...conversations.map((convo) => _buildConversationTile(convo, isDark, cardBg, borderColor, textColor, subtextColor)),
+                ...classStudents.map((student) {
+                  return ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 4, vertical: 2),
+                    leading: CircleAvatar(
+                      backgroundColor: AppColors.accentAmber.withOpacity(0.2),
+                      child: Text(
+                        student.parentName.isNotEmpty ? student.parentName[0] : 'P',
+                        style: const TextStyle(color: AppColors.accentAmber, fontWeight: FontWeight.bold),
+                      ),
+                    ),
+                    title: Text(student.parentName, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                    subtitle: Text(
+                      'Student: ${student.fullName} • ${student.parentPhone}',
+                      style: const TextStyle(fontSize: 11.5),
+                    ),
+                    trailing: const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: AppColors.accentTeal),
+                    onTap: () async {
+                      Navigator.pop(ctx);
+                      final convo = await MessagingService.instance.startTeacherChatWithParent(
+                        teacherId: AuthSessionService.instance.userId,
+                        teacherName: AuthSessionService.instance.userName,
+                        parentId: student.parentId ?? 'par-001',
+                        parentName: student.parentName,
+                        studentName: student.fullName,
+                        halaqahId: student.halaqahId,
+                      );
+
+                      if (context.mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              conversationId: convo.id,
+                              conversationTitle: convo.title,
+                              targetRole: 'parent',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  );
+                }),
             ],
           ),
         );
@@ -179,241 +374,135 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 
-  Widget _buildConversationTile(
-    Conversation convo,
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    final formattedTime = convo.lastMessageTime != null
-        ? '${convo.lastMessageTime!.hour.toString().padLeft(2, '0')}:${convo.lastMessageTime!.minute.toString().padLeft(2, '0')}'
-        : '';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: ListTile(
-        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-        onTap: () {
-          Navigator.push(
-            context,
-            MaterialPageRoute(
-              builder: (_) => ChatScreen(
-                conversationId: convo.id,
-                conversationTitle: convo.title,
-                targetRole: convo.groupType == 'direct_teacher' ? 'teacher' : (convo.isGroup ? 'group' : 'admin'),
-              ),
-            ),
-          );
-        },
-        leading: CircleAvatar(
-          radius: 22,
-          backgroundColor: convo.isGroup
-              ? const Color(0xFFFFA000).withOpacity(0.2)
-              : (convo.groupType == 'direct_teacher' ? const Color(0xFF00BCD4).withOpacity(0.2) : const Color(0xFF10B981).withOpacity(0.2)),
-          child: Icon(
-            convo.isGroup
-                ? Icons.groups_rounded
-                : (convo.groupType == 'direct_teacher' ? Icons.school_rounded : Icons.person_rounded),
-            color: convo.isGroup
-                ? const Color(0xFFFFA000)
-                : (convo.groupType == 'direct_teacher' ? const Color(0xFF00BCD4) : const Color(0xFF10B981)),
-            size: 22,
-          ),
-        ),
-        title: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Expanded(
-              child: Text(
-                convo.title,
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
-              ),
-            ),
-            Text(formattedTime, style: TextStyle(fontSize: 10, color: subtextColor)),
-          ],
-        ),
-        subtitle: Padding(
-          padding: const EdgeInsets.only(top: 4),
-          child: Text(
-            convo.lastMessage ?? 'No messages yet',
-            style: TextStyle(fontSize: 12, color: subtextColor),
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-        ),
-        trailing: const Icon(Icons.chevron_right_rounded, size: 20, color: Colors.grey),
-      ),
+  // Parent starts direct chat with Ustaz or Director
+  void _startParentDirectChat(BuildContext context, {required String role}) async {
+    final convo = await MessagingService.instance.startParentChat(
+      parentId: AuthSessionService.instance.userId,
+      parentName: AuthSessionService.instance.userName,
+      targetRole: role,
+      targetName: role == 'teacher' ? 'Ustaz Ibrahim Bilal' : 'Ustaz Muhammed Yakut',
+      halaqahName: 'Halaqah Abu Bakr (حلقة أبي بكر)',
     );
+
+    if (context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: convo.id,
+            conversationTitle: convo.title,
+            targetRole: role,
+          ),
+        ),
+      );
+    }
   }
 
-  // Admin action bottom sheet to either create a group or message an individual parent
+  // Admin Action Sheet to start chat or group
   void _showAdminActionSheet(BuildContext context) {
+    final registeredParents = StudentService.instance.getRegisteredParents();
+
     showModalBottomSheet(
       context: context,
-      backgroundColor: Theme.of(context).brightness == Brightness.dark ? const Color(0xFF1E293B) : Colors.white,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(20))),
-      builder: (ctx) => SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 20),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
           child: Column(
             mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(width: 40, height: 4, decoration: BoxDecoration(color: Colors.grey.shade400, borderRadius: BorderRadius.circular(2))),
-              const SizedBox(height: 16),
-              const Text('Start Communication', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-              const SizedBox(height: 14),
+              const Text('Admin Messaging Hub', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
               ListTile(
                 leading: const CircleAvatar(
                   backgroundColor: Color(0xFFFFA000),
-                  child: Icon(Icons.groups_rounded, color: Colors.black, size: 20),
+                  child: Icon(Icons.person_rounded, color: Colors.black),
                 ),
-                title: const Text('Create Parents Group', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('Broadcast messages & discussions to circle parents', style: TextStyle(fontSize: 11)),
+                title: const Text('Direct Chat with Parent', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Start private 1-on-1 discussion with a parent'),
                 onTap: () {
                   Navigator.pop(ctx);
-                  _showCreateGroupDialog(context);
+                  _showSelectParentForAdminChat(context, registeredParents);
                 },
               ),
-              const Divider(),
               ListTile(
                 leading: const CircleAvatar(
-                  backgroundColor: Color(0xFF00BCD4),
-                  child: Icon(Icons.person_rounded, color: Colors.black, size: 20),
+                  backgroundColor: AppColors.accentEmerald,
+                  child: Icon(Icons.groups_rounded, color: Colors.black),
                 ),
-                title: const Text('Direct 1-on-1 Message to Parent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
-                subtitle: const Text('Send private note or inquiry to a specific parent', style: TextStyle(fontSize: 11)),
-                onTap: () {
+                title: const Text('Create Parent Halaqah Group', style: TextStyle(fontWeight: FontWeight.bold)),
+                subtitle: const Text('Group discussion with parents of a circle'),
+                onTap: () async {
                   Navigator.pop(ctx);
-                  _showSelectParentDialog(context);
+                  await MessagingService.instance.createGroup(
+                    title: 'Halaqah Abu Bakr Parents Group',
+                    parentIds: registeredParents.map((p) => p['id']!).toList(),
+                    parentNames: registeredParents.map((p) => p['name']!).toList(),
+                    halaqahId: 'halaqah-001',
+                  );
                 },
               ),
             ],
           ),
-        ),
-      ),
+        );
+      },
     );
   }
 
-  void _showCreateGroupDialog(BuildContext context) {
-    final titleCtrl = TextEditingController(text: 'Halaqah Parents Circle');
-    final halaqahCtrl = TextEditingController(text: 'Halaqah Abu Bakr');
-
-    showDialog(
+  void _showSelectParentForAdminChat(BuildContext context, List<Map<String, String>> parents) {
+    showModalBottomSheet(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Create Parent Group', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(controller: titleCtrl, decoration: const InputDecoration(labelText: 'Group Title')),
-            const SizedBox(height: 8),
-            TextField(controller: halaqahCtrl, decoration: const InputDecoration(labelText: 'Halaqah Name')),
-          ],
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
-          ElevatedButton(
-            onPressed: () async {
-              if (titleCtrl.text.isNotEmpty) {
-                final convo = await MessagingService.instance.createGroup(
-                  title: titleCtrl.text.trim(),
-                  parentIds: ['par-001', 'par-002'],
-                  parentNames: ['Muhammed Yakut', 'Khalid Al-Mansoor'],
-                  halaqahId: 'hal-001',
-                );
-                Navigator.pop(ctx);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (_) => ChatScreen(
-                      conversationId: convo.id,
-                      conversationTitle: convo.title,
-                      targetRole: 'group',
-                    ),
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) {
+        return Container(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text('Select Parent to Message', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 12),
+              ...parents.map((p) {
+                return ListTile(
+                  leading: CircleAvatar(
+                    backgroundColor: AppColors.accentAmber.withOpacity(0.2),
+                    child: Text(p['name']![0], style: const TextStyle(fontWeight: FontWeight.bold, color: AppColors.accentAmber)),
                   ),
+                  title: Text(p['name']!, style: const TextStyle(fontWeight: FontWeight.bold)),
+                  subtitle: Text('Children: ${p['children']} • ${p['phone']}'),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final convo = await MessagingService.instance.startDirectChatWithParent(
+                      parentId: p['id']!,
+                      parentName: p['name']!,
+                    );
+                    if (context.mounted) {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => ChatScreen(
+                            conversationId: convo.id,
+                            conversationTitle: convo.title,
+                            targetRole: 'parent',
+                          ),
+                        ),
+                      );
+                    }
+                  },
                 );
-              }
-            },
-            child: const Text('Create Group'),
+              }),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  void _showSelectParentDialog(BuildContext context) {
-    final students = StudentService.instance.allStudents;
-    final uniqueParents = <String, String>{};
-    for (final s in students) {
-      if (s.parentId != null) {
-        uniqueParents[s.parentId!] = s.parentName;
-      }
-    }
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Select Parent for 1-on-1 Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15)),
-        content: SizedBox(
-          width: double.maxFinite,
-          child: ListView(
-            shrinkWrap: true,
-            children: uniqueParents.entries.map((entry) {
-              return ListTile(
-                leading: const CircleAvatar(child: Icon(Icons.person, size: 18)),
-                title: Text(entry.value, style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13)),
-                trailing: const Icon(Icons.arrow_forward_ios_rounded, size: 14),
-                onTap: () async {
-                  Navigator.pop(ctx);
-                  final convo = await MessagingService.instance.startDirectChatWithParent(
-                    parentId: entry.key,
-                    parentName: entry.value,
-                  );
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => ChatScreen(
-                        conversationId: convo.id,
-                        conversationTitle: convo.title,
-                        targetRole: 'parent',
-                      ),
-                    ),
-                  );
-                },
-              );
-            }).toList(),
-          ),
-        ),
-      ),
-    );
-  }
-
-  void _startParentDirectChat(BuildContext context, {required String role}) async {
-    final title = role == 'admin' ? 'Center Director (Ustaz Muhammed)' : 'Ustaz (Halaqah Abu Bakr)';
-    final convo = await MessagingService.instance.startParentChat(
-      parentId: 'par-001',
-      parentName: 'Muhammed Yakut',
-      targetRole: role,
-      targetName: title,
-    );
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (_) => ChatScreen(
-          conversationId: convo.id,
-          conversationTitle: convo.title,
-          targetRole: role,
-        ),
-      ),
-    );
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    return '${dt.month}/${dt.day}';
   }
 }
