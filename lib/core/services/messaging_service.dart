@@ -8,9 +8,7 @@ import 'notification_center_service.dart';
 /// - Parent initiating conversations with Admin or child's halaqah Teachers
 /// - Real-time message streaming
 class MessagingService {
-  MessagingService._() {
-    _seedInitialConversations();
-  }
+  MessagingService._();
 
   static final MessagingService instance = MessagingService._();
 
@@ -25,83 +23,6 @@ class MessagingService {
   Stream<List<Conversation>> get conversationsStream => _conversationsController.stream;
 
   List<Conversation> get allConversations => List.unmodifiable(_conversations);
-
-  void _seedInitialConversations() {
-    final now = DateTime.now();
-
-    // Initial conversation between Ustaz Ibrahim and Parent Ahmed Muhammed
-    final convo1 = Conversation(
-      id: 'convo-teach-par-001',
-      title: 'Parent: Brother Ahmed (Abdur-Rahman\'s Parent)',
-      isGroup: false,
-      participantIds: ['teach-001', 'par-001'],
-      participantNames: ['Ustaz Ibrahim Bilal', 'Brother Ahmed Muhammed'],
-      lastMessage: 'Masha\'Allah Abdur-Rahman showed great improvement in Tajweed today.',
-      lastMessageTime: now.subtract(const Duration(hours: 2)),
-      halaqahId: 'halaqah-001',
-      groupType: 'direct_teacher',
-    );
-
-    // Initial conversation between Director and Parent
-    final convo2 = Conversation(
-      id: 'convo-admin-par-001',
-      title: 'Center Director (Ustaz Muhammed)',
-      isGroup: false,
-      participantIds: ['admin-001', 'par-001'],
-      participantNames: ['Admin Director', 'Brother Ahmed Muhammed'],
-      lastMessage: 'Welcome to Kheyrukum Islamic Center Portal.',
-      lastMessageTime: now.subtract(const Duration(days: 2)),
-      groupType: 'direct_admin',
-    );
-
-    _conversations.addAll([convo1, convo2]);
-
-    _messagesMap['convo-teach-par-001'] = [
-      ChatMessage(
-        id: 'msg-seed-1',
-        conversationId: 'convo-teach-par-001',
-        senderId: 'teach-001',
-        senderName: 'Ustaz Ibrahim Bilal',
-        senderRole: 'teacher',
-        content: 'As-salamu alaykum Brother Ahmed. Abdur-Rahman completed his recitation of Surah Al-Mulk today.',
-        timestamp: now.subtract(const Duration(hours: 3)),
-        isRead: true,
-      ),
-      ChatMessage(
-        id: 'msg-seed-2',
-        conversationId: 'convo-teach-par-001',
-        senderId: 'par-001',
-        senderName: 'Brother Ahmed Muhammed',
-        senderRole: 'parent',
-        content: 'Wa alaykumu as-salam Ustaz. JazakAllahu khayran for the guidance. We practiced together at home yesterday.',
-        timestamp: now.subtract(const Duration(hours: 2, minutes: 30)),
-        isRead: true,
-      ),
-      ChatMessage(
-        id: 'msg-seed-3',
-        conversationId: 'convo-teach-par-001',
-        senderId: 'teach-001',
-        senderName: 'Ustaz Ibrahim Bilal',
-        senderRole: 'teacher',
-        content: 'Masha\'Allah Abdur-Rahman showed great improvement in Tajweed today.',
-        timestamp: now.subtract(const Duration(hours: 2)),
-        isRead: true,
-      ),
-    ];
-
-    _messagesMap['convo-admin-par-001'] = [
-      ChatMessage(
-        id: 'msg-seed-4',
-        conversationId: 'convo-admin-par-001',
-        senderId: 'admin-001',
-        senderName: 'Admin Director',
-        senderRole: 'admin',
-        content: 'Welcome to Kheyrukum Islamic Center Portal. Please reach out if you have any administrative questions.',
-        timestamp: now.subtract(const Duration(days: 2)),
-        isRead: true,
-      ),
-    ];
-  }
 
   /// Get conversations relevant for a user based on user ID and role
   List<Conversation> getConversationsForUser(String userId, {String role = 'admin'}) {

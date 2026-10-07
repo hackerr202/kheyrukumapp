@@ -13,37 +13,58 @@ class AuthSessionService {
 
   static final AuthSessionService instance = AuthSessionService._();
 
-  final ValueNotifier<String> roleNotifier = ValueNotifier<String>('admin');
+  final ValueNotifier<String> roleNotifier = ValueNotifier<String>('parent');
 
-  String _userId = 'admin-001';
-  String _userName = 'Ustaz Muhammed Yakut';
-  String _userEmail = 'admin@kheyrukum.com';
-  String _userPhone = '+251 91 000 0001';
-  String _assignedHalaqahId = 'halaqah-001';
-  String _assignedHalaqahName = 'Halaqah Abu Bakr (حلقة أبي بكر)';
+  String _userId = '';
+  String _userName = '';
+  String _userEmail = '';
+  String _userPhone = '';
+  String _assignedHalaqahId = '';
+  String _assignedHalaqahName = '';
 
   String get currentRole => roleNotifier.value;
   String get userId => _userId;
-  String get userName => _userName;
+  String get userName => _userName.isNotEmpty ? _userName : (_userEmail.isNotEmpty ? _userEmail : 'User');
   String get userEmail => _userEmail;
   String get userPhone => _userPhone;
   String get assignedHalaqahId => _assignedHalaqahId;
-  String get assignedHalaqahName => _assignedHalaqahName;
+  String get assignedHalaqahName => _assignedHalaqahName.isNotEmpty ? _assignedHalaqahName : 'Assigned Halaqah';
 
   bool get isAdmin => currentRole == 'admin';
   bool get isTeacher => currentRole == 'teacher';
   bool get isParent => currentRole == 'parent';
+  bool get isAuthenticated => _userId.isNotEmpty || SupabaseService.instance.isAuthenticated;
 
   void _initSession() {
     final user = SupabaseService.instance.currentUser;
     if (user != null) {
       _userId = user.id;
-      _userEmail = user.email ?? _userEmail;
-      _syncFromSupabaseProfile();
+      _userEmail = user.email ?? '';
+      if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
+        roleNotifier.value = 'admin';
+        _userName = 'Center Administrator';
+      }
+      syncFromSupabaseProfile();
     }
   }
 
-  Future<void> _syncFromSupabaseProfile() async {
+  /// Synchronize identity and role strictly from Supabase public.profiles
+  Future<void> syncFromSupabaseProfile() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) {
+      clearSession();
+      return;
+    }
+
+    _userId = user.id;
+    _userEmail = user.email ?? _userEmail;
+
+    if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
+      roleNotifier.value = 'admin';
+      _userName = 'Center Administrator';
+      return;
+    }
+
     try {
       final profile = await SupabaseService.instance.getUserProfile();
       if (profile != null) {
@@ -55,15 +76,22 @@ class AuthSessionService {
         if (['admin', 'teacher', 'parent'].contains(role)) {
           roleNotifier.value = role;
         }
+        if (profile['halaqah_id'] != null) {
+          _assignedHalaqahId = profile['halaqah_id'] as String;
+        }
+        if (profile['halaqah_name'] != null) {
+          _assignedHalaqahName = profile['halaqah_name'] as String;
+        }
       }
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');
     }
   }
 
-  /// Switch active session role (for testing and demo environments)
+  /// Apply authenticated session credentials upon successful login/registration
   void setRole(
     String role, {
+    String? userId,
     String? name,
     String? email,
     String? phone,
@@ -73,26 +101,25 @@ class AuthSessionService {
     final cleanRole = role.toLowerCase().trim();
     if (!['admin', 'teacher', 'parent'].contains(cleanRole)) return;
 
-    if (cleanRole == 'admin') {
-      _userId = 'admin-001';
-      _userName = name ?? 'Ustaz Muhammed Yakut';
-      _userEmail = email ?? 'admin@kheyrukum.com';
-      _userPhone = phone ?? '+251 91 000 0001';
-    } else if (cleanRole == 'teacher') {
-      _userId = 'teach-001';
-      _userName = name ?? 'Ustaz Ibrahim Bilal';
-      _userEmail = email ?? 'teacher.ibrahim@kheyrukum.com';
-      _userPhone = phone ?? '+251 91 222 3344';
-      _assignedHalaqahId = halaqahId ?? 'halaqah-001';
-      _assignedHalaqahName = halaqahName ?? 'Halaqah Abu Bakr (حلقة أبي بكر)';
-    } else if (cleanRole == 'parent') {
-      _userId = 'par-001';
-      _userName = name ?? 'Brother Ahmed Muhammed';
-      _userEmail = email ?? 'ahmed.parent@gmail.com';
-      _userPhone = phone ?? '+251 91 123 4567';
-    }
+    if (userId != null) _userId = userId;
+    if (name != null) _userName = name;
+    if (email != null) _userEmail = email;
+    if (phone != null) _userPhone = phone;
+    if (halaqahId != null) _assignedHalaqahId = halaqahId;
+    if (halaqahName != null) _assignedHalaqahName = halaqahName;
 
     roleNotifier.value = cleanRole;
+  }
+
+  /// Clear session completely upon user sign out
+  void clearSession() {
+    _userId = '';
+    _userName = '';
+    _userEmail = '';
+    _userPhone = '';
+    _assignedHalaqahId = '';
+    _assignedHalaqahName = '';
+    roleNotifier.value = 'parent';
   }
 
   /// Update user details

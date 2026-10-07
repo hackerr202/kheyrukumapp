@@ -13,7 +13,7 @@ import 'supabase_service.dart';
 /// - Cloud sync with Supabase tables: public.students, public.parent_students, public.student_attendance
 class StudentService {
   StudentService._() {
-    _seedInitialData();
+    fetchStudentsFromCloud();
   }
 
   static final StudentService instance = StudentService._();
@@ -33,148 +33,27 @@ class StudentService {
 
   List<Student> get allStudents => List.unmodifiable(_students);
 
-  void _seedInitialData() {
-    final now = DateTime.now();
+  /// Fetch enrolled students from Supabase Cloud
+  Future<void> fetchStudentsFromCloud() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
 
-    // 1. Initial Students across Halaqahs with parent linkings
-    _students.addAll([
-      Student(
-        id: 'stu-001',
-        fullName: 'Abdur-Rahman Muhammed',
-        halaqahId: 'halaqah-001',
-        halaqahName: 'Halaqah Abu Bakr (حلقة أبي بكر)',
-        parentId: 'par-001',
-        parentName: 'Brother Ahmed Muhammed',
-        parentPhone: '+251 91 123 4567',
-        parentEmail: 'ahmed.parent@gmail.com',
-        currentJuz: 30,
-        currentSurah: 67,
-        currentAyah: 15,
-        monthlyFeeStatus: 'paid',
-        monthlyFeeAmount: 50.0,
-        createdAt: now.subtract(const Duration(days: 30)),
-      ),
-      Student(
-        id: 'stu-002',
-        fullName: 'Fatima Muhammed',
-        halaqahId: 'halaqah-001',
-        halaqahName: 'Halaqah Abu Bakr (حلقة أبي بكر)',
-        parentId: 'par-001', // Same parent: multi-child demonstration!
-        parentName: 'Brother Ahmed Muhammed',
-        parentPhone: '+251 91 123 4567',
-        parentEmail: 'ahmed.parent@gmail.com',
-        currentJuz: 30,
-        currentSurah: 114,
-        currentAyah: 6,
-        monthlyFeeStatus: 'paid',
-        monthlyFeeAmount: 50.0,
-        createdAt: now.subtract(const Duration(days: 25)),
-      ),
-      Student(
-        id: 'stu-003',
-        fullName: 'Zayd Ibn Thabit',
-        halaqahId: 'halaqah-001',
-        halaqahName: 'Halaqah Abu Bakr (حلقة أبي بكر)',
-        parentId: 'par-002',
-        parentName: 'Sister Khadija Ali',
-        parentPhone: '+251 91 765 4321',
-        parentEmail: 'khadija.ali@gmail.com',
-        currentJuz: 29,
-        currentSurah: 71,
-        currentAyah: 10,
-        monthlyFeeStatus: 'pending',
-        monthlyFeeAmount: 50.0,
-        createdAt: now.subtract(const Duration(days: 20)),
-      ),
-      Student(
-        id: 'stu-004',
-        fullName: 'Yusuf Khalid',
-        halaqahId: 'halaqah-002',
-        halaqahName: 'Halaqah Uthman Ibn Affan (حلقة عثمان)',
-        parentId: 'par-003',
-        parentName: 'Brother Khalid Omar',
-        parentPhone: '+251 91 999 8877',
-        parentEmail: 'khalid.omar@gmail.com',
-        currentJuz: 28,
-        currentSurah: 58,
-        currentAyah: 8,
-        monthlyFeeStatus: 'pending',
-        monthlyFeeAmount: 50.0,
-        createdAt: now.subtract(const Duration(days: 15)),
-      ),
-    ]);
+    try {
+      final res = await client
+          .from('students')
+          .select('id, full_name, halaqah_id, halaqah_name, current_juz, current_surah, current_ayah, monthly_fee_status, monthly_fee_amount, created_at')
+          .order('created_at', ascending: false);
 
-    // 2. Preload Attendance records for Abdur-Rahman & Fatima
-    _attendanceMap['stu-001'] = [
-      AttendanceRecord(
-        id: 'att-001-1',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        halaqahId: 'halaqah-001',
-        date: now,
-        status: 'present',
-        teacherRemarks: 'Recited Sabaq with excellent articulation and tajweed rules.',
-        markedBy: 'teach-001',
-        createdAt: now,
-      ),
-      AttendanceRecord(
-        id: 'att-001-2',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        halaqahId: 'halaqah-001',
-        date: now.subtract(const Duration(days: 1)),
-        status: 'present',
-        teacherRemarks: 'Attended circle punctually.',
-        markedBy: 'teach-001',
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-      AttendanceRecord(
-        id: 'att-001-3',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        halaqahId: 'halaqah-001',
-        date: now.subtract(const Duration(days: 2)),
-        status: 'late',
-        teacherRemarks: 'Arrived 10 minutes late due to school dismissal.',
-        markedBy: 'teach-001',
-        createdAt: now.subtract(const Duration(days: 2)),
-      ),
-    ];
-
-    _attendanceMap['stu-002'] = [
-      AttendanceRecord(
-        id: 'att-002-1',
-        studentId: 'stu-002',
-        studentName: 'Fatima Muhammed',
-        halaqahId: 'halaqah-001',
-        date: now,
-        status: 'present',
-        teacherRemarks: 'Completed Surah An-Nas recitation without mistakes.',
-        markedBy: 'teach-001',
-        createdAt: now,
-      ),
-    ];
-
-    // 3. Preload Weekly Report for Abdur-Rahman
-    _weeklyReportsMap['stu-001'] = [
-      WeeklyReport(
-        id: 'wr-001',
-        studentId: 'stu-001',
-        studentName: 'Abdur-Rahman Muhammed',
-        weekStartDate: now.subtract(const Duration(days: 7)),
-        weekEndDate: now,
-        sabaq: 'Surah Al-Mulk (Ayah 1 to 15)',
-        sabqi: 'Surah Al-Qalam (Ayah 1 to 20)',
-        manzil: 'Juz 30 Full Review',
-        daysPresent: 5,
-        totalDays: 5,
-        tajweedRating: 'Excellent',
-        mistakesCount: 1,
-        teacherRemarks: 'Masha\'Allah consistent recitation and clear Ghunnah pronunciation.',
-        teacherName: 'Ustaz Ibrahim Bilal',
-        createdAt: now.subtract(const Duration(days: 1)),
-      ),
-    ];
+      if (res is List && res.isNotEmpty) {
+        _students.clear();
+        for (final item in res) {
+          _students.add(Student.fromJson(item as Map<String, dynamic>));
+        }
+        _studentsController.add(List.from(_students));
+      }
+    } catch (e) {
+      debugPrint('[StudentService] Cloud fetch notice: $e');
+    }
   }
 
   /// Get list of all distinct registered parents for easy admin selection when enrolling students
@@ -196,17 +75,6 @@ class StudentService {
           'children': children,
         };
       }
-    }
-
-    // Default registered parents if none yet
-    if (parentMap.isEmpty) {
-      parentMap['par-001'] = {
-        'id': 'par-001',
-        'name': 'Brother Ahmed Muhammed',
-        'phone': '+251 91 123 4567',
-        'email': 'ahmed.parent@gmail.com',
-        'children': 'None yet',
-      };
     }
 
     return parentMap.values.toList();

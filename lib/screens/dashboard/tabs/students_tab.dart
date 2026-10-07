@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import '../../../core/models/absence_request.dart';
 import '../../../core/models/attendance.dart';
 import '../../../core/models/student.dart';
 import '../../../core/models/weekly_report.dart';
+import '../../../core/services/absence_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/student_service.dart';
@@ -291,6 +293,131 @@ class _StudentsTabState extends State<StudentsTab> {
           ),
 
           const SizedBox(height: 18),
+
+          // PENDING ABSENCE REQUESTS BANNER (From Parents)
+          StreamBuilder<List<AbsenceRequest>>(
+            stream: AbsenceService.instance.requestsStream,
+            initialData: AbsenceService.instance.allRequests,
+            builder: (context, reqSnapshot) {
+              final pendingRequests = AbsenceService.instance.getPendingRequestsForHalaqah(assignedHalaqah);
+              if (pendingRequests.isEmpty) return const SizedBox.shrink();
+
+              return Container(
+                margin: const EdgeInsets.only(bottom: 18),
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF8B5CF6).withOpacity(isDark ? 0.15 : 0.08),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.4)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        const Icon(Icons.mark_email_unread_rounded, size: 18, color: Color(0xFF8B5CF6)),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Pending Absence Excuses (${pendingRequests.length})',
+                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    ...pendingRequests.map((req) => Container(
+                          margin: const EdgeInsets.only(bottom: 8),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: cardBg,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: borderColor),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Text(
+                                    req.studentName,
+                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+                                  ),
+                                  Text(
+                                    req.date.toIso8601String().substring(0, 10),
+                                    style: TextStyle(fontSize: 11, color: subtextColor),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Reason: ${req.reasonLabel}',
+                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF8B5CF6)),
+                              ),
+                              if (req.notes.isNotEmpty) ...[
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Parent Note: "${req.notes}"',
+                                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: subtextColor),
+                                ),
+                              ],
+                              const SizedBox(height: 10),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: ElevatedButton.icon(
+                                      onPressed: () async {
+                                        await AbsenceService.instance.approveRequest(
+                                          req.id,
+                                          reviewedBy: AuthSessionService.instance.userName,
+                                        );
+                                        setState(() {});
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(
+                                              content: Text('Absence excuse approved for ${req.studentName}! Marked Excused in attendance.'),
+                                              backgroundColor: const Color(0xFF8B5CF6),
+                                            ),
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
+                                      label: const Text('Approve & Excuse', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: const Color(0xFF8B5CF6),
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: OutlinedButton.icon(
+                                      onPressed: () async {
+                                        await AbsenceService.instance.declineRequest(
+                                          req.id,
+                                          reviewedBy: AuthSessionService.instance.userName,
+                                        );
+                                        setState(() {});
+                                      },
+                                      icon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
+                                      label: const Text('Decline', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
+                                      style: OutlinedButton.styleFrom(
+                                        side: const BorderSide(color: Color(0xFFEF4444)),
+                                        padding: const EdgeInsets.symmetric(vertical: 6),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        )),
+                  ],
+                ),
+              );
+            },
+          ),
 
           Text(
             'Class Student Attendance Sheet',
@@ -940,8 +1067,97 @@ class _StudentsTabState extends State<StudentsTab> {
 
         const SizedBox(height: 20),
 
-        // Attendance History Log
-        Text('Daily Attendance History', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
+        // Attendance History Header & "+ Request Absence Excuse"
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text('Daily Attendance History', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
+            ElevatedButton.icon(
+              onPressed: () => _showRequestAbsenceDialog(context, currentChild),
+              icon: const Icon(Icons.edit_calendar_rounded, size: 13, color: Colors.white),
+              label: const Text('+ Request Excuse', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: const Color(0xFF8B5CF6),
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+              ),
+            ),
+          ],
+        ),
+
+        // Child's Absence Excuse Requests (Live Status)
+        StreamBuilder<List<AbsenceRequest>>(
+          stream: AbsenceService.instance.requestsStream,
+          initialData: AbsenceService.instance.allRequests,
+          builder: (context, snapshot) {
+            final childRequests = (snapshot.data ?? []).where((r) => r.studentId == currentChild.id).toList();
+            if (childRequests.isEmpty) return const SizedBox.shrink();
+
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const SizedBox(height: 10),
+                ...childRequests.map((req) => Container(
+                      margin: const EdgeInsets.only(bottom: 8),
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: cardBg,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: req.isApproved
+                              ? const Color(0xFF10B981).withOpacity(0.5)
+                              : (req.isDeclined ? const Color(0xFFEF4444).withOpacity(0.5) : const Color(0xFF8B5CF6).withOpacity(0.4)),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Excuse: ${req.reasonLabel}',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: textColor),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Date: ${req.date.toIso8601String().substring(0, 10)}${req.notes.isNotEmpty ? " • \"${req.notes}\"" : ""}',
+                                  style: TextStyle(fontSize: 11, color: subtextColor),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                            decoration: BoxDecoration(
+                              color: req.isApproved
+                                  ? const Color(0xFF10B981).withOpacity(0.15)
+                                  : (req.isDeclined ? const Color(0xFFEF4444).withOpacity(0.15) : const Color(0xFFFFA000).withOpacity(0.15)),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Text(
+                              req.isApproved
+                                  ? 'Approved ✅'
+                                  : (req.isDeclined ? 'Declined ❌' : 'Pending ⏳'),
+                              style: TextStyle(
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.bold,
+                                color: req.isApproved
+                                    ? const Color(0xFF10B981)
+                                    : (req.isDeclined ? const Color(0xFFEF4444) : const Color(0xFFFFA000)),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    )),
+                const SizedBox(height: 4),
+              ],
+            );
+          },
+        ),
+
         const SizedBox(height: 10),
         if (attendanceHistory.isEmpty)
           Container(
@@ -1768,6 +1984,128 @@ class _StudentsTabState extends State<StudentsTab> {
           ],
         ),
       ),
+    );
+  }
+
+  // Parent Request Absence Excuse Dialog
+  void _showRequestAbsenceDialog(BuildContext context, Student student) {
+    DateTime selectedDate = DateTime.now();
+    String selectedReason = 'illness';
+    final notesCtrl = TextEditingController(text: 'Feeling unwell and needs rest at home.');
+
+    showDialog<void>(
+      context: context,
+      builder: (ctx) {
+        return StatefulBuilder(
+          builder: (dCtx, setDialogState) {
+            return AlertDialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              title: Row(
+                children: [
+                  const Icon(Icons.edit_calendar_rounded, color: Color(0xFF8B5CF6), size: 22),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text('Request Excuse: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                  ),
+                ],
+              ),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Circle: ${student.halaqahName}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.accentTeal)),
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text('Date: ${selectedDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        TextButton.icon(
+                          onPressed: () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: selectedDate,
+                              firstDate: DateTime.now().subtract(const Duration(days: 2)),
+                              lastDate: DateTime.now().add(const Duration(days: 30)),
+                            );
+                            if (picked != null) {
+                              setDialogState(() => selectedDate = picked);
+                            }
+                          },
+                          icon: const Icon(Icons.calendar_month_rounded, size: 14),
+                          label: const Text('Change Date', style: TextStyle(fontSize: 11.5)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    const Text('Reason for Absence:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    DropdownButtonFormField<String>(
+                      value: selectedReason,
+                      items: const [
+                        DropdownMenuItem(value: 'illness', child: Text('Medical / Illness 🤒')),
+                        DropdownMenuItem(value: 'family_emergency', child: Text('Family Emergency 🚨')),
+                        DropdownMenuItem(value: 'school_exam', child: Text('School Academic Exam 📚')),
+                        DropdownMenuItem(value: 'travel', child: Text('Travel / Out of Town ✈️')),
+                        DropdownMenuItem(value: 'other', child: Text('Other Personal Reason 📝')),
+                      ],
+                      onChanged: (val) {
+                        if (val != null) setDialogState(() => selectedReason = val);
+                      },
+                      decoration: InputDecoration(
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    const Text('Parent Notes / Explanation:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: notesCtrl,
+                      maxLines: 2,
+                      style: const TextStyle(fontSize: 12),
+                      decoration: InputDecoration(
+                        hintText: 'Enter reason details for the teacher...',
+                        contentPadding: const EdgeInsets.all(10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    await AbsenceService.instance.submitAbsenceRequest(
+                      studentId: student.id,
+                      date: selectedDate,
+                      reason: selectedReason,
+                      notes: notesCtrl.text.trim(),
+                    );
+                    Navigator.of(ctx).pop();
+                    setState(() {});
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Absence excuse submitted for ${student.fullName}! Ustaz notified.'),
+                        backgroundColor: const Color(0xFF8B5CF6),
+                      ),
+                    );
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: const Color(0xFF8B5CF6),
+                    foregroundColor: Colors.white,
+                  ),
+                  child: const Text('Submit Excuse'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 }

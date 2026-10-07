@@ -247,25 +247,7 @@ class SupabaseService {
     }
 
     if (client == null) {
-      // Mock code generation for offline / testing
-      final prefix = cleanRole == 'teacher' ? 'KHY-TEA' : 'KHY-PAR';
-      final randomNum = (1000 + DateTime.now().millisecondsSinceEpoch % 9000);
-      final mockCode = '$prefix-$randomNum';
-      return {
-        'success': true,
-        'code': mockCode,
-        'role': cleanRole,
-        'message': 'Mock invitation code generated.',
-        'data': {
-          'id': 'mock-${DateTime.now().millisecondsSinceEpoch}',
-          'code': mockCode,
-          'role': cleanRole,
-          'target_email': targetEmail,
-          'is_used': false,
-          'expires_at': DateTime.now().add(Duration(days: daysValid)).toIso8601String(),
-          'created_at': DateTime.now().toIso8601String(),
-        }
-      };
+      return {'success': false, 'message': 'Supabase service is offline. Please check your internet connection.'};
     }
 
     try {
@@ -319,24 +301,7 @@ class SupabaseService {
   /// 6. Stream Invitation Codes in Real-Time
   Stream<List<InvitationCode>> streamInviteCodes() {
     if (client == null) {
-      return Stream.value([
-        InvitationCode(
-          id: 'demo-1',
-          code: 'KHY-TEA-9102',
-          role: 'teacher',
-          isUsed: false,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 10)),
-          expiresAt: DateTime.now().add(const Duration(days: 30)),
-        ),
-        InvitationCode(
-          id: 'demo-2',
-          code: 'KHY-PAR-7842',
-          role: 'parent',
-          isUsed: false,
-          createdAt: DateTime.now().subtract(const Duration(minutes: 25)),
-          expiresAt: DateTime.now().add(const Duration(days: 30)),
-        ),
-      ]);
+      return Stream.value(<InvitationCode>[]);
     }
 
     return client!

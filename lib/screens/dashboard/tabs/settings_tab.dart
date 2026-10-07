@@ -20,6 +20,7 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   Future<void> _handleSignOut() async {
+    AuthSessionService.instance.clearSession();
     await SupabaseService.instance.signOut();
     if (mounted) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.auth);
@@ -118,16 +119,16 @@ class _SettingsTabState extends State<SettingsTab> {
                 const SizedBox(height: 20),
 
                 // =============================================================
-                // ROLE SWITCHER PREVIEW (For Testing & Verifying all 3 views)
+                // VERIFIED PRODUCTION ACCOUNT & ROLE INFORMATION
                 // =============================================================
                 Text(
-                  'Switch Active Interface (Testing Hub)',
+                  'Account Authentication & Security',
                   style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
                 ),
                 const SizedBox(height: 10),
 
                 Container(
-                  padding: const EdgeInsets.all(14),
+                  padding: const EdgeInsets.all(16),
                   decoration: BoxDecoration(
                     color: cardBg,
                     borderRadius: BorderRadius.circular(16),
@@ -136,41 +137,56 @@ class _SettingsTabState extends State<SettingsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        'Select role to test separated Teacher, Parent, or Admin interfaces:',
-                        style: TextStyle(fontSize: 11.5, color: subtextColor),
-                      ),
-                      const SizedBox(height: 12),
                       Row(
                         children: [
-                          _buildRoleButton(
-                            role: 'admin',
-                            label: 'Admin',
-                            icon: Icons.shield_rounded,
-                            color: const Color(0xFFFF4B72),
-                            isSelected: isAdmin,
-                            onTap: () => AuthSessionService.instance.setRole('admin'),
+                          Icon(
+                            isAdmin
+                                ? Icons.shield_rounded
+                                : (isTeacher ? Icons.school_rounded : Icons.family_restroom_rounded),
+                            size: 20,
+                            color: isAdmin
+                                ? const Color(0xFFFF4B72)
+                                : (isTeacher ? AppColors.accentTeal : AppColors.accentAmber),
                           ),
-                          const SizedBox(width: 8),
-                          _buildRoleButton(
-                            role: 'teacher',
-                            label: 'Teacher',
-                            icon: Icons.school_rounded,
-                            color: AppColors.accentTeal,
-                            isSelected: isTeacher,
-                            onTap: () => AuthSessionService.instance.setRole('teacher'),
-                          ),
-                          const SizedBox(width: 8),
-                          _buildRoleButton(
-                            role: 'parent',
-                            label: 'Parent',
-                            icon: Icons.family_restroom_rounded,
-                            color: AppColors.accentAmber,
-                            isSelected: isParent,
-                            onTap: () => AuthSessionService.instance.setRole('parent'),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  isAdmin
+                                      ? 'Administrator Access Verified 🛡️'
+                                      : (isTeacher ? 'Ustaz / Teacher Portal 🎓' : 'Parent / Guardian Portal 👨‍👩‍👧'),
+                                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: textColor),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  'Cryptographically authenticated via Supabase Cloud Auth',
+                                  style: TextStyle(fontSize: 11, color: subtextColor),
+                                ),
+                              ],
+                            ),
                           ),
                         ],
                       ),
+                      if (isTeacher && AuthSessionService.instance.assignedHalaqahName.isNotEmpty) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentTeal.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Text(
+                            'Assigned Halaqah: ${AuthSessionService.instance.assignedHalaqahName}',
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              color: AppColors.accentTeal,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -268,105 +284,66 @@ class _SettingsTabState extends State<SettingsTab> {
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Invite Codes Generator',
-                                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
-                                  ),
-                                  Text(
-                                    'Generate realtime signup codes for Teachers and Parents',
-                                    style: TextStyle(fontSize: 11.5, color: subtextColor),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => InviteCodeDialog.show(context),
-                            icon: const Icon(Icons.add_rounded, size: 16, color: Colors.black),
-                            label: const Text(
-                              'Manage & Generate Invite Codes',
-                              style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black),
-                            ),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentTeal,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Invite Codes Generator',
+                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
+                                ),
+                                Text(
+                                  'Generate realtime signup codes for Teachers and Parents',
+                                  style: TextStyle(fontSize: 11.5, color: subtextColor),
+                                ),
+                              ],
                             ),
                           ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          onPressed: () => InviteCodeDialog.show(context),
+                          icon: const Icon(Icons.add_rounded, size: 16, color: Colors.black),
+                          label: const Text(
+                            'Manage & Generate Invite Codes',
+                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.accentTeal,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
                         ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                ],
-
-                // Sign Out Button
-                SizedBox(
-                  width: double.infinity,
-                  child: OutlinedButton.icon(
-                    onPressed: _handleSignOut,
-                    icon: const Icon(Icons.logout_rounded, size: 16, color: Color(0xFFEF4444)),
-                    label: const Text(
-                      'Sign Out of Account',
-                      style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-                      padding: const EdgeInsets.symmetric(vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                    ),
+                      ),
+                    ],
                   ),
                 ),
+                const SizedBox(height: 20),
               ],
-            );
-          },
-        );
-      },
-    );
-  }
 
-  Widget _buildRoleButton({
-    required String role,
-    required String label,
-    required IconData icon,
-    required Color color,
-    required bool isSelected,
-    required VoidCallback onTap,
-  }) {
-    return Expanded(
-      child: InkWell(
-        onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
-        child: AnimatedContainer(
-          duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 4),
-          decoration: BoxDecoration(
-            color: isSelected ? color : color.withOpacity(0.08),
-            borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: color, width: isSelected ? 2 : 1),
-          ),
-          child: Column(
-            children: [
-              Icon(icon, size: 18, color: isSelected ? Colors.black : color),
-              const SizedBox(height: 4),
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 11.5,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.black : color,
+              // Sign Out Button
+              SizedBox(
+                width: double.infinity,
+                child: OutlinedButton.icon(
+                  onPressed: _handleSignOut,
+                  icon: const Icon(Icons.logout_rounded, size: 16, color: Color(0xFFEF4444)),
+                  label: const Text(
+                    'Sign Out of Account',
+                    style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
                 ),
               ),
             ],
-          ),
-        ),
-      ),
-    );
-  }
+          );
+        },
+      );
+    },
+  );
+}
 }
