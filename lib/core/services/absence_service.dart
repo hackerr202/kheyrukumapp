@@ -45,20 +45,18 @@ class AbsenceService {
     required String reason,
     required String notes,
   }) async {
-    final student = StudentService.instance.allStudents.firstWhere(
-      (s) => s.id == studentId,
-      orElse: () => StudentService.instance.allStudents.first,
-    );
+    final studentMatches = StudentService.instance.allStudents.where((s) => s.id == studentId);
+    final student = studentMatches.isNotEmpty ? studentMatches.first : null;
 
     final request = AbsenceRequest(
       id: 'abs-${DateTime.now().millisecondsSinceEpoch}',
-      studentId: student.id,
-      studentName: student.fullName,
-      halaqahId: student.halaqahId,
-      halaqahName: student.halaqahName,
-      parentId: student.parentId ?? '',
-      parentName: student.parentName,
-      parentPhone: student.parentPhone,
+      studentId: studentId,
+      studentName: student?.fullName ?? 'Student',
+      halaqahId: student?.halaqahId ?? 'halaqah-001',
+      halaqahName: student?.halaqahName ?? 'Halaqah Circle',
+      parentId: student?.parentId ?? '',
+      parentName: student?.parentName ?? 'Parent',
+      parentPhone: student?.parentPhone ?? '',
       date: date,
       reason: reason,
       notes: notes.trim(),
@@ -72,12 +70,12 @@ class AbsenceService {
     // DISPATCH NOTIFICATION TO TEACHER
     NotificationCenterService.instance.addNotification(
       title: 'Absence Excuse Request Received 📝',
-      body: '${student.parentName} submitted an absence excuse for ${student.fullName} on ${date.toIso8601String().substring(0, 10)} (${request.reasonLabel}). Review required.',
+      body: '${request.parentName} submitted an absence excuse for ${request.studentName} on ${date.toIso8601String().substring(0, 10)} (${request.reasonLabel}). Review required.',
       type: 'attendance',
       data: {
         'request_id': request.id,
-        'student_id': student.id,
-        'halaqah_name': student.halaqahName,
+        'student_id': studentId,
+        'halaqah_name': request.halaqahName,
       },
     );
 

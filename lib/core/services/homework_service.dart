@@ -159,21 +159,17 @@ class HomeworkService {
       );
     } else {
       // Find student and assignment details to construct submission
-      final assignment = _assignments.firstWhere(
-        (a) => a.id == assignmentId,
-        orElse: () => _assignments.first,
-      );
-      final student = StudentService.instance.allStudents.firstWhere(
-        (s) => s.id == studentId,
-        orElse: () => StudentService.instance.allStudents.first,
-      );
+      final assignmentMatches = _assignments.where((a) => a.id == assignmentId);
+      final assignment = assignmentMatches.isNotEmpty ? assignmentMatches.first : null;
+      final studentMatches = StudentService.instance.allStudents.where((s) => s.id == studentId);
+      final student = studentMatches.isNotEmpty ? studentMatches.first : null;
 
       _submissions.add(HomeworkSubmission(
         id: 'sub-$assignmentId-$studentId',
-        assignmentId: assignment.id,
-        studentId: student.id,
-        studentName: student.fullName,
-        parentId: student.parentId ?? '',
+        assignmentId: assignmentId,
+        studentId: studentId,
+        studentName: student?.fullName ?? 'Student',
+        parentId: student?.parentId ?? '',
         status: 'completed_at_home',
         repetitionCount: repetitionCount,
         parentNote: notes,
@@ -184,12 +180,14 @@ class HomeworkService {
     _submissionsController.add(List.from(_submissions));
 
     // DISPATCH NOTIFICATION TO TEACHER
-    final assignment = _assignments.firstWhere((a) => a.id == assignmentId, orElse: () => _assignments.first);
-    final student = StudentService.instance.allStudents.firstWhere((s) => s.id == studentId, orElse: () => StudentService.instance.allStudents.first);
+    final assignmentMatches = _assignments.where((a) => a.id == assignmentId);
+    final assignmentTitle = assignmentMatches.isNotEmpty ? assignmentMatches.first.title : 'Quran Homework';
+    final studentMatches = StudentService.instance.allStudents.where((s) => s.id == studentId);
+    final studentName = studentMatches.isNotEmpty ? studentMatches.first.fullName : 'Student';
 
     NotificationCenterService.instance.addNotification(
       title: 'Homework Practiced at Home ✅',
-      body: '${student.fullName} has completed recitation practice for ${assignment.title} ($repetitionCount repetitions). Parent note: ${notes ?? "Done"}',
+      body: '$studentName has completed recitation practice for $assignmentTitle ($repetitionCount repetitions). Parent note: ${notes ?? "Done"}',
       type: 'homework',
       data: {
         'assignment_id': assignmentId,

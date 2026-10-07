@@ -201,10 +201,14 @@ class StudentService {
     String? markedBy,
     DateTime? sessionDate,
   }) async {
-    final student = _students.firstWhere(
-      (s) => s.id == studentId,
-      orElse: () => _students.first,
-    );
+    final studentMatches = _students.where((s) => s.id == studentId);
+    final student = studentMatches.isNotEmpty
+        ? studentMatches.first
+        : Student(
+            id: studentId,
+            fullName: 'Student',
+            createdAt: DateTime.now(),
+          );
 
     final date = sessionDate ?? DateTime.now();
     final dateStr = date.toIso8601String().substring(0, 10);
@@ -310,10 +314,14 @@ class StudentService {
     int mistakesCount = 0,
     String? teacherName,
   }) async {
-    final student = _students.firstWhere(
-      (s) => s.id == studentId,
-      orElse: () => _students.first,
-    );
+    final studentMatches = _students.where((s) => s.id == studentId);
+    final student = studentMatches.isNotEmpty
+        ? studentMatches.first
+        : Student(
+            id: studentId,
+            fullName: 'Student',
+            createdAt: DateTime.now(),
+          );
 
     final report = WeeklyReport(
       id: 'wr-${DateTime.now().millisecondsSinceEpoch}',

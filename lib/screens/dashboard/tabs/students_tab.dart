@@ -1413,9 +1413,9 @@ class _StudentsTabState extends State<StudentsTab> {
     String selectedHalaqah = 'Halaqah Abu Bakr (حلقة أبي بكر)';
 
     // Parent Linking State
-    bool linkExistingParent = true;
     final registeredParents = StudentService.instance.getRegisteredParents();
-    String selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id']! : 'par-001';
+    bool linkExistingParent = registeredParents.isNotEmpty;
+    String selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id']! : '';
 
     final newParentNameCtrl = TextEditingController();
     final newParentPhoneCtrl = TextEditingController();
@@ -1604,7 +1604,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   String finalParentPhone;
                   String? finalParentEmail;
 
-                  if (linkExistingParent) {
+                  if (linkExistingParent && registeredParents.isNotEmpty) {
                     final found = registeredParents.firstWhere(
                       (p) => p['id'] == selectedParentId,
                       orElse: () => registeredParents.first,
