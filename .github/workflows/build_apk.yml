@@ -30,7 +30,18 @@ jobs:
           # Add system notification and internet permissions for background push alerts
           sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.VIBRATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>' android/app/src/main/AndroidManifest.xml
 
-          # Align compileSdk to 35 for all modules
+          # Force stable AndroidX dependencies compatible with API 35
+          echo "allprojects {" >> android/build.gradle
+          echo "    configurations.all {" >> android/build.gradle
+          echo "        resolutionStrategy {" >> android/build.gradle
+          echo "            force 'androidx.core:core:1.13.1'" >> android/build.gradle
+          echo "            force 'androidx.core:core-ktx:1.13.1'" >> android/build.gradle
+          echo "            force 'androidx.browser:browser:1.8.0'" >> android/build.gradle
+          echo "            force 'androidx.activity:activity:1.9.3'" >> android/build.gradle
+          echo "            force 'androidx.activity:activity-ktx:1.9.3'" >> android/build.gradle
+          echo "        }" >> android/build.gradle
+          echo "    }" >> android/build.gradle
+          echo "}" >> android/build.gradle
           echo "subprojects {" >> android/build.gradle
           echo "    afterEvaluate { project ->" >> android/build.gradle
           echo "        if (project.hasProperty('android')) {" >> android/build.gradle
