@@ -3,6 +3,8 @@ import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/invite_code_dialog.dart';
+import '../../admin/halaqah_management_sheet.dart';
+import '../../admin/user_management_screen.dart';
 import '../../announcements/announcements_sheet.dart';
 import '../../announcements/post_announcement_dialog.dart';
 import '../../payments/payments_screen.dart';
@@ -129,81 +131,6 @@ class MoreTab extends StatelessWidget {
     );
   }
 
-  void _showAllHalaqahsDialog(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
-
-    showDialog<void>(
-      context: context,
-      builder: (ctx) => Dialog(
-        backgroundColor: cardBg,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(24),
-          side: BorderSide(color: borderColor),
-        ),
-        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
-        child: Container(
-          constraints: const BoxConstraints(maxWidth: 420),
-          padding: const EdgeInsets.all(22),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: AppColors.accentEmerald.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.menu_book_rounded, color: AppColors.accentEmerald, size: 20),
-                      ),
-                      const SizedBox(width: 10),
-                      Text(
-                        'Active Study Circles',
-                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
-                      ),
-                    ],
-                  ),
-                  IconButton(
-                    icon: Icon(Icons.close_rounded, size: 18, color: subtextColor),
-                    onPressed: () => Navigator.of(ctx).pop(),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              Text(
-                '1. Halaqah Abu Bakr (Ustaz Ibrahim Bilal) - 3 Students\n2. Halaqah Uthman Ibn Affan (Ustaz Tariq Mansoor) - 1 Student',
-                style: TextStyle(fontSize: 12, color: subtextColor, height: 1.5),
-              ),
-              const SizedBox(height: 18),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppColors.accentEmerald,
-                    foregroundColor: Colors.black,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  child: const Text('Close', style: TextStyle(fontWeight: FontWeight.bold)),
-                ),
-              ),
-            ],
-          ),
-        ),
-      ),
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -238,8 +165,31 @@ class MoreTab extends StatelessWidget {
             ),
             const SizedBox(height: 20),
 
-            // 1. ADMIN ONLY: TEACHERS INVITE
+            // 1. ADMIN ONLY: USER MANAGEMENT (TEACHERS & PARENTS)
             if (isAdmin) ...[
+              _buildMenuCard(
+                context: context,
+                icon: Icons.manage_accounts_rounded,
+                iconBg: const Color(0xFF6366F1).withOpacity(0.15),
+                iconColor: const Color(0xFF6366F1),
+                title: 'User Management',
+                subtitle: 'Monitor registered teachers & parents, assign halaqahs, and manage invitations',
+                badgeText: 'ADMIN CONTROL',
+                badgeColor: const Color(0xFF6366F1),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const UserManagementScreen()),
+                  );
+                },
+                isDark: isDark,
+                cardBg: cardBg,
+                borderColor: borderColor,
+                textColor: textColor,
+                subtextColor: subtextColor,
+              ),
+              const SizedBox(height: 12),
+
               _buildMenuCard(
                 context: context,
                 icon: Icons.school_rounded,
@@ -368,7 +318,7 @@ class MoreTab extends StatelessWidget {
                 subtitle: 'Manage recitation groups, student circles & curriculum milestones',
                 badgeText: 'CIRCLES',
                 badgeColor: AppColors.accentEmerald,
-                onTap: () => _showAllHalaqahsDialog(context),
+                onTap: () => HalaqahManagementSheet.show(context),
                 isDark: isDark,
                 cardBg: cardBg,
                 borderColor: borderColor,

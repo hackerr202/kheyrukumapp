@@ -1,13 +1,17 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/attendance.dart';
+import '../../../core/models/halaqah.dart';
 import '../../../core/models/student.dart';
 import '../../../core/models/weekly_report.dart';
 import '../../../core/services/absence_service.dart';
 import '../../../core/services/auth_session_service.dart';
+import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../widgets/invite_code_dialog.dart';
+import '../../admin/halaqah_management_sheet.dart';
 import '../../messages/chat_screen.dart';
 import '../../payments/payments_screen.dart';
 
@@ -959,11 +963,17 @@ class _StudentsTabState extends State<StudentsTab> {
                   // Chat with child's Ustaz button
                   ElevatedButton.icon(
                     onPressed: () async {
+                      final halaqahs = HalaqahService.instance.halaqahs;
+                      final hMatch = halaqahs.where((h) => h.name.toLowerCase() == currentChild.halaqahName.toLowerCase());
+                      final teacherName = (hMatch.isNotEmpty && hMatch.first.teacherName != 'Unassigned')
+                          ? hMatch.first.teacherName
+                          : 'Assigned Ustaz';
+
                       final convo = await MessagingService.instance.startParentChat(
                         parentId: AuthSessionService.instance.userId,
                         parentName: AuthSessionService.instance.userName,
                         targetRole: 'teacher',
-                        targetName: 'Ustaz Ibrahim Bilal',
+                        targetName: teacherName,
                         halaqahName: currentChild.halaqahName,
                       );
 
@@ -1406,20 +1416,17 @@ class _StudentsTabState extends State<StudentsTab> {
   }
 
   // ===========================================================================
-  // DIALOG: ADD STUDENT & LINK SPECIFIC PARENT (CORE REQUIREMENT)
+  // DIALOG: ADD STUDENT & LINK SPECIFIC PARENT (STRICT PRODUCTION REQUIREMENT)
   // ===========================================================================
   void _showAddStudentDialog(BuildContext context) {
     final nameCtrl = TextEditingController();
-    String selectedHalaqah = 'Halaqah Abu Bakr (حلقة أبي بكر)';
 
-    // Parent Linking State
+    final halaqahs = HalaqahService.instance.halaqahs;
+    String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
+    String selectedHalaqahName = halaqahs.isNotEmpty ? halaqahs.first.name : '';
+
     final registeredParents = StudentService.instance.getRegisteredParents();
-    bool linkExistingParent = registeredParents.isNotEmpty;
-    String selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id']! : '';
-
-    final newParentNameCtrl = TextEditingController();
-    final newParentPhoneCtrl = TextEditingController();
-    final newParentEmailCtrl = TextEditingController();
+    String? selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
 
     int juz = 30;
     int surah = 1;
@@ -1430,6 +1437,14 @@ class _StudentsTabState extends State<StudentsTab> {
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
           final isDark = Theme.of(ctx).brightness == Brightness.dark;
+          final currentHalaqahs = HalaqahService.instance.halaqahs;
+          final currentParents = StudentService.instance.getRegisteredParents();
+
+          final bool canSubmit = nameCtrl.text.trim().isNotEmpty &&
+              selectedParentId != null &&
+              selectedParentId!.isNotEmpty &&
+              selectedHalaqahId != null &&
+              selectedHalaqahId!.isNotEmpty;
 
           return AlertDialog(
             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -1447,116 +1462,160 @@ class _StudentsTabState extends State<StudentsTab> {
                 children: [
                   TextField(
                     controller: nameCtrl,
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Student Full Name *',
                       hintText: 'e.g. Abdur-Rahman Muhammed',
                       prefixIcon: Icon(Icons.face_rounded, size: 20),
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
 
-                  DropdownButtonFormField<String>(
-                    value: selectedHalaqah,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Halaqah Abu Bakr (حلقة أبي بكر)',
-                        child: Text('Halaqah Abu Bakr (Ustaz Ibrahim)'),
+                  // 1. DYNAMIC HALAQAH SELECTION
+                  if (currentHalaqahs.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentEmerald.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.accentEmerald.withOpacity(0.3)),
                       ),
-                      DropdownMenuItem(
-                        value: 'Halaqah Uthman Ibn Affan (حلقة عثمان)',
-                        child: Text('Halaqah Uthman (Ustaz Tariq)'),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.info_outline_rounded, size: 16, color: AppColors.accentEmerald),
+                              SizedBox(width: 6),
+                              Text('No Study Circles Created Yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentEmerald)),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text('Please create a halaqah circle first before enrolling students.', style: TextStyle(fontSize: 11)),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              HalaqahManagementSheet.show(context);
+                            },
+                            icon: const Icon(Icons.add_rounded, size: 14),
+                            label: const Text('Create Halaqah Circle', style: TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentEmerald,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                    onChanged: (val) => setDialogState(() => selectedHalaqah = val!),
-                    decoration: const InputDecoration(
-                      labelText: 'Assigned Class (Halaqah) *',
-                      prefixIcon: Icon(Icons.school_rounded, size: 20),
+                    )
+                  else
+                    DropdownButtonFormField<String>(
+                      value: selectedHalaqahId ?? currentHalaqahs.first.id,
+                      items: currentHalaqahs.map((h) {
+                        return DropdownMenuItem<String>(
+                          value: h.id,
+                          child: Text(
+                            '${h.name} (${h.teacherName})',
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(fontSize: 12),
+                          ),
+                        );
+                      }).toList(),
+                      onChanged: (val) {
+                        setDialogState(() {
+                          selectedHalaqahId = val;
+                          final match = currentHalaqahs.where((h) => h.id == val);
+                          selectedHalaqahName = match.isNotEmpty ? match.first.name : '';
+                        });
+                      },
+                      decoration: const InputDecoration(
+                        labelText: 'Assigned Class (Halaqah) *',
+                        prefixIcon: Icon(Icons.school_rounded, size: 20),
+                      ),
                     ),
-                  ),
 
                   const SizedBox(height: 18),
                   const Divider(),
                   const SizedBox(height: 6),
 
-                  // SPECIFIC PARENT LINKING SECTION
+                  // 2. STRICT EXISTING PARENT LINKING (NO NEW PARENT CREATION ALLOWED HERE)
                   Row(
                     children: [
                       const Icon(Icons.family_restroom_rounded, size: 16, color: AppColors.accentAmber),
                       const SizedBox(width: 6),
                       const Text(
-                        'Link to Specific Parent *',
+                        'Link to Existing Registered Parent *',
                         style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentAmber),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
 
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('Existing Parent', style: TextStyle(fontSize: 11)),
-                          selected: linkExistingParent,
-                          onSelected: (val) => setDialogState(() => linkExistingParent = true),
-                        ),
+                  if (currentParents.isEmpty)
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.accentAmber.withOpacity(0.1),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: AppColors.accentAmber.withOpacity(0.3)),
                       ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: ChoiceChip(
-                          label: const Text('New Parent', style: TextStyle(fontSize: 11)),
-                          selected: !linkExistingParent,
-                          onSelected: (val) => setDialogState(() => linkExistingParent = false),
-                        ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Row(
+                            children: [
+                              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.accentAmber),
+                              SizedBox(width: 6),
+                              Expanded(
+                                child: Text(
+                                  'No Registered Parents Found',
+                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentAmber),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 4),
+                          const Text(
+                            'A student must be added to an existing parent account. Please invite a parent first using a Parent Invitation Code.',
+                            style: TextStyle(fontSize: 11),
+                          ),
+                          const SizedBox(height: 8),
+                          ElevatedButton.icon(
+                            onPressed: () {
+                              Navigator.pop(ctx);
+                              InviteCodeDialog.show(context, initialRole: 'parent');
+                            },
+                            icon: const Icon(Icons.qr_code_rounded, size: 14),
+                            label: const Text('Generate Parent Invite Code', style: TextStyle(fontSize: 11)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: AppColors.accentAmber,
+                              foregroundColor: Colors.black,
+                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                            ),
+                          ),
+                        ],
                       ),
-                    ],
-                  ),
-
-                  const SizedBox(height: 10),
-
-                  if (linkExistingParent) ...[
+                    )
+                  else
                     DropdownButtonFormField<String>(
-                      value: selectedParentId,
-                      items: registeredParents.map((p) {
+                      value: selectedParentId ?? currentParents.first['id'],
+                      items: currentParents.map((p) {
                         return DropdownMenuItem<String>(
                           value: p['id'],
                           child: Text(
-                            '${p['name']} (${p['phone']})',
+                            '${p['name']} (${p['phone'].isNotEmpty ? p['phone'] : p['email']})',
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 12),
                           ),
                         );
                       }).toList(),
-                      onChanged: (val) => setDialogState(() => selectedParentId = val!),
+                      onChanged: (val) => setDialogState(() => selectedParentId = val),
                       decoration: const InputDecoration(
-                        labelText: 'Select Registered Parent',
+                        labelText: 'Select Registered Parent *',
                         prefixIcon: Icon(Icons.people_rounded, size: 20),
                       ),
                     ),
-                  ] else ...[
-                    TextField(
-                      controller: newParentNameCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Parent Full Name *',
-                        prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: newParentPhoneCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Parent Phone Number *',
-                        prefixIcon: Icon(Icons.phone_outlined, size: 20),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    TextField(
-                      controller: newParentEmailCtrl,
-                      decoration: const InputDecoration(
-                        labelText: 'Parent Email (Optional)',
-                        prefixIcon: Icon(Icons.email_outlined, size: 20),
-                      ),
-                    ),
-                  ],
 
                   const SizedBox(height: 16),
                   const Divider(),
@@ -1591,71 +1650,42 @@ class _StudentsTabState extends State<StudentsTab> {
             actions: [
               TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
               ElevatedButton(
-                onPressed: () async {
-                  if (nameCtrl.text.trim().isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter student name.')),
-                    );
-                    return;
-                  }
+                onPressed: canSubmit
+                    ? () async {
+                        final foundParent = currentParents.firstWhere(
+                          (p) => p['id'] == selectedParentId,
+                          orElse: () => currentParents.first,
+                        );
 
-                  String finalParentId;
-                  String finalParentName;
-                  String finalParentPhone;
-                  String? finalParentEmail;
+                        Navigator.pop(ctx);
+                        await StudentService.instance.addStudent(
+                          fullName: nameCtrl.text.trim(),
+                          halaqahName: selectedHalaqahName,
+                          halaqahId: selectedHalaqahId,
+                          parentId: foundParent['id']!,
+                          parentName: foundParent['name']!,
+                          parentPhone: foundParent['phone'] ?? '',
+                          parentEmail: foundParent['email'],
+                          currentJuz: juz,
+                          currentSurah: surah,
+                          currentAyah: ayah,
+                        );
 
-                  if (linkExistingParent && registeredParents.isNotEmpty) {
-                    final found = registeredParents.firstWhere(
-                      (p) => p['id'] == selectedParentId,
-                      orElse: () => registeredParents.first,
-                    );
-                    finalParentId = found['id']!;
-                    finalParentName = found['name']!;
-                    finalParentPhone = found['phone']!;
-                    finalParentEmail = found['email'];
-                  } else {
-                    if (newParentNameCtrl.text.trim().isEmpty || newParentPhoneCtrl.text.trim().isEmpty) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(content: Text('Please complete parent full name and phone number.')),
-                      );
-                      return;
-                    }
-                    finalParentId = 'par-${DateTime.now().millisecondsSinceEpoch}';
-                    finalParentName = newParentNameCtrl.text.trim();
-                    finalParentPhone = newParentPhoneCtrl.text.trim();
-                    finalParentEmail = newParentEmailCtrl.text.trim();
-                  }
-
-                  await StudentService.instance.addStudent(
-                    fullName: nameCtrl.text.trim(),
-                    halaqahName: selectedHalaqah,
-                    halaqahId: selectedHalaqah.contains('Abu Bakr') ? 'halaqah-001' : 'halaqah-002',
-                    parentId: finalParentId,
-                    parentName: finalParentName,
-                    parentPhone: finalParentPhone,
-                    parentEmail: finalParentEmail,
-                    currentJuz: juz,
-                    currentSurah: surah,
-                    currentAyah: ayah,
-                  );
-
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Student "${nameCtrl.text.trim()}" enrolled & linked to parent "$finalParentName"!'),
-                        backgroundColor: AppColors.accentEmerald,
-                        behavior: SnackBarBehavior.floating,
-                      ),
-                    );
-                  }
-                },
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('Enrolled ${nameCtrl.text.trim()} under ${foundParent['name']}.'),
+                              backgroundColor: AppColors.accentTeal,
+                            ),
+                          );
+                        }
+                      }
+                    : null,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentTeal,
                   foregroundColor: Colors.black,
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
                 ),
-                child: const Text('Enroll & Link', style: TextStyle(fontWeight: FontWeight.bold)),
+                child: const Text('Enroll Student'),
               ),
             ],
           );

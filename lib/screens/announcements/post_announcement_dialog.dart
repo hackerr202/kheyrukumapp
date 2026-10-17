@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import '../../core/services/announcement_service.dart';
 
+import '../../core/services/auth_session_service.dart';
+
 /// Modal dialog for Admins to compose and broadcast real-time announcements.
 class PostAnnouncementDialog extends StatefulWidget {
   const PostAnnouncementDialog({super.key});
@@ -12,7 +14,16 @@ class PostAnnouncementDialog extends StatefulWidget {
 class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  final _authorController = TextEditingController(text: 'Ustaz Muhammed Yakut (Director)');
+  late final TextEditingController _authorController;
+
+  @override
+  void initState() {
+    super.initState();
+    final name = AuthSessionService.instance.userName;
+    _authorController = TextEditingController(
+      text: name.isNotEmpty ? '$name (Director)' : 'Center Administration',
+    );
+  }
 
   String _selectedCategory = 'general';
   String _selectedAudience = 'all';

@@ -105,16 +105,20 @@ class PaymentService {
   /// Admin approves the payment
   Future<void> approvePayment({
     required String paymentId,
-    String? adminName = 'Ustaz Muhammed Yakut',
+    String? adminName,
   }) async {
     final index = _payments.indexWhere((p) => p.id == paymentId);
     if (index == -1) return;
 
     final existing = _payments[index];
+    final reviewer = adminName ??
+        (AuthSessionService.instance.userName.isNotEmpty
+            ? AuthSessionService.instance.userName
+            : 'Administration');
     final updated = existing.copyWith(
       status: 'approved',
       reviewedAt: DateTime.now(),
-      reviewedBy: adminName,
+      reviewedBy: reviewer,
       rejectionReason: null,
     );
 
@@ -122,11 +126,9 @@ class PaymentService {
     _paymentsController.add(List.from(_payments));
 
     // PARENT NOTIFICATION: Payment approved!
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'Payment Approved ✅',
       body: 'Your payment of \$${updated.amount.toStringAsFixed(0)} for ${updated.studentName} (${updated.month}) has been verified and approved.',
-      type: 'payment_approval',
-      data: {'payment_id': updated.id, 'status': 'approved'},
     );
   }
 
@@ -134,28 +136,30 @@ class PaymentService {
   Future<void> rejectPayment({
     required String paymentId,
     required String reason,
-    String? adminName = 'Ustaz Muhammed Yakut',
+    String? adminName,
   }) async {
     final index = _payments.indexWhere((p) => p.id == paymentId);
     if (index == -1) return;
 
     final existing = _payments[index];
+    final reviewer = adminName ??
+        (AuthSessionService.instance.userName.isNotEmpty
+            ? AuthSessionService.instance.userName
+            : 'Administration');
     final updated = existing.copyWith(
       status: 'rejected',
       rejectionReason: reason,
       reviewedAt: DateTime.now(),
-      reviewedBy: adminName,
+      reviewedBy: reviewer,
     );
 
     _payments[index] = updated;
     _paymentsController.add(List.from(_payments));
 
     // PARENT NOTIFICATION: Payment rejected with specific reason
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'Payment Verification Rejected ❌',
       body: 'Payment for ${updated.studentName} (${updated.month}) could not be verified. Reason: "$reason". Please upload a clear receipt.',
-      type: 'payment_rejection',
-      data: {'payment_id': updated.id, 'reason': reason},
     );
   }
 

@@ -350,7 +350,7 @@ class _AuthScreenState extends State<AuthScreen>
   @override
   Widget build(BuildContext context) {
     final screenSize = MediaQuery.of(context).size;
-    final cardDiameter = (math.min(screenSize.width * 0.94, 430.0)).clamp(340.0, 440.0);
+    final cardDiameter = (math.min(screenSize.width * 0.96, 480.0)).clamp(380.0, 500.0);
 
     return Scaffold(
       backgroundColor: bgColor,
@@ -358,15 +358,15 @@ class _AuthScreenState extends State<AuthScreen>
         child: Center(
           child: SingleChildScrollView(
             physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 20),
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 // 1. Centerpiece Round Logo Placed Just Above Card
                 _buildRoundLogo(size: 64),
-                const SizedBox(height: 14),
+                const SizedBox(height: 12),
 
-                // 2. 3D Flipping Circular Card
+                // 2. 3D Flipping Circular Card (Enlarged to fit all contents comfortably)
                 AnimatedBuilder(
                   animation: _flipAnimation,
                   builder: (context, child) {
@@ -401,7 +401,7 @@ class _AuthScreenState extends State<AuthScreen>
                         ),
                         child: ClipOval(
                           child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 36, vertical: 20),
+                            padding: const EdgeInsets.symmetric(horizontal: 38, vertical: 24),
                             child: isFront
                                 ? _buildFrontLogin()
                                 : Transform(

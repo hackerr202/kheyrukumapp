@@ -42,7 +42,7 @@ class AnnouncementService {
               'Assalamu Alaikum. Welcome to the official parent-teacher communication system. Daily recitation submissions and Halaqah attendance tracking are now active.',
           category: 'event',
           targetAudience: 'all',
-          authorName: 'Ustaz Muhammed Yakut (Director)',
+          authorName: 'Center Administration',
           isPinned: true,
           createdAt: DateTime.now().subtract(const Duration(hours: 2)),
         ),
@@ -68,7 +68,7 @@ class AnnouncementService {
     required String content,
     String category = 'general',
     String targetAudience = 'all',
-    String authorName = 'Ustaz Muhammed Yakut (Director)',
+    String authorName = 'Center Administration',
     bool isPinned = false,
   }) async {
     final client = SupabaseService.instance.client;

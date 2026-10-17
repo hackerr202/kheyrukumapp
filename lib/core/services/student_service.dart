@@ -3,7 +3,9 @@ import 'package:flutter/foundation.dart';
 import '../models/attendance.dart';
 import '../models/student.dart';
 import '../models/weekly_report.dart';
+import 'auth_session_service.dart';
 import 'notification_center_service.dart';
+import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
 /// Service managing:
@@ -54,14 +56,57 @@ class StudentService {
     } catch (e) {
       debugPrint('[StudentService] Cloud fetch notice: $e');
     }
+    await fetchRegisteredParentsFromCloud();
+  }
+
+  final List<Map<String, String>> _cachedRegisteredParents = [];
+
+  /// Fetch registered parents from Supabase profiles
+  Future<void> fetchRegisteredParentsFromCloud() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      final res = await client
+          .from('profiles')
+          .select('id, full_name, phone, email')
+          .eq('role', 'parent');
+      if (res is List) {
+        _cachedRegisteredParents.clear();
+        for (final item in res) {
+          _cachedRegisteredParents.add({
+            'id': item['id']?.toString() ?? '',
+            'name': item['full_name']?.toString() ?? 'Parent',
+            'phone': item['phone']?.toString() ?? '',
+            'email': item['email']?.toString() ?? '',
+          });
+        }
+      }
+    } catch (e) {
+      debugPrint('[StudentService] Cloud fetch parents notice: $e');
+    }
   }
 
   /// Get list of all distinct registered parents for easy admin selection when enrolling students
   List<Map<String, String>> getRegisteredParents() {
     final Map<String, Map<String, String>> parentMap = {};
 
+    // 1. Include cloud registered parents
+    for (final p in _cachedRegisteredParents) {
+      final pid = p['id']!;
+      if (pid.isNotEmpty) {
+        parentMap[pid] = {
+          'id': pid,
+          'name': p['name'] ?? 'Parent',
+          'phone': p['phone'] ?? '',
+          'email': p['email'] ?? '',
+          'children': '',
+        };
+      }
+    }
+
+    // 2. Merge with existing enrolled students' parents
     for (final s in _students) {
-      if (s.parentId != null && !parentMap.containsKey(s.parentId)) {
+      if (s.parentId != null && s.parentId!.isNotEmpty) {
         final children = _students
             .where((other) => other.parentId == s.parentId)
             .map((other) => other.fullName)
@@ -237,7 +282,10 @@ class StudentService {
       date: date,
       status: status,
       teacherRemarks: defaultRemark,
-      markedBy: markedBy ?? 'Ustaz Ibrahim Bilal',
+      markedBy: markedBy ??
+          (AuthSessionService.instance.userName.isNotEmpty
+              ? AuthSessionService.instance.userName
+              : 'Assigned Ustaz'),
       createdAt: DateTime.now(),
     );
 
@@ -255,16 +303,9 @@ class StudentService {
     if (status == 'late') statusEmoji = '⏰';
     if (status == 'excused') statusEmoji = '📝';
 
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'Daily Attendance: ${status.toUpperCase()} $statusEmoji',
       body: '${student.fullName} was marked ${status.toUpperCase()} today in ${student.halaqahName}. Remarks: $defaultRemark',
-      type: 'attendance',
-      data: {
-        'student_id': student.id,
-        'student_name': student.fullName,
-        'status': status,
-        'date': date.toIso8601String(),
-      },
     );
 
     // Supabase cloud sync
@@ -337,23 +378,19 @@ class StudentService {
       tajweedRating: tajweedRating,
       mistakesCount: mistakesCount,
       teacherRemarks: remarks,
-      teacherName: teacherName ?? 'Ustaz Ibrahim Bilal',
+      teacherName: teacherName ??
+          (AuthSessionService.instance.userName.isNotEmpty
+              ? AuthSessionService.instance.userName
+              : 'Assigned Ustaz'),
       createdAt: DateTime.now(),
     );
 
     _weeklyReportsMap.putIfAbsent(student.id, () => []).insert(0, report);
 
     // WEEKLY REPORT NOTIFICATION FOR PARENT
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'Weekly Quran Progress Report 📜',
       body: 'Weekly evaluation for ${student.fullName}: Sabaq ($sabaq), Tajweed: $tajweedRating. Remarks: $remarks',
-      type: 'weekly_report',
-      data: {
-        'student_id': student.id,
-        'student_name': student.fullName,
-        'sabaq': sabaq,
-        'rating': tajweedRating,
-      },
     );
   }
 }

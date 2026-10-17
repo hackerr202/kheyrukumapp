@@ -165,25 +165,25 @@ class _SplashScreenState extends State<SplashScreen>
                   return Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      // Circular Logo Animation Container
+                      // Circular Logo Animation Container - Seamless Full Circle
                       Container(
                         width: 250,
                         height: 250,
                         decoration: BoxDecoration(
                           shape: BoxShape.circle,
-                          color: const Color(0xFF0F172A),
+                          color: Colors.white,
                           border: Border.all(
-                            color: const Color(0xFF00B4B0).withOpacity(0.4),
-                            width: 2.5,
+                            color: const Color(0xFF00B4B0),
+                            width: 3.0,
                           ),
                           boxShadow: [
                             BoxShadow(
-                              color: const Color(0xFF00B4B0).withOpacity(0.25),
-                              blurRadius: 28,
-                              spreadRadius: 2,
+                              color: const Color(0xFF00B4B0).withOpacity(0.35),
+                              blurRadius: 30,
+                              spreadRadius: 3,
                             ),
                             BoxShadow(
-                              color: Colors.black.withOpacity(0.4),
+                              color: Colors.black.withOpacity(0.35),
                               blurRadius: 16,
                               offset: const Offset(0, 8),
                             ),
@@ -191,6 +191,7 @@ class _SplashScreenState extends State<SplashScreen>
                         ),
                         child: ClipOval(
                           child: Stack(
+                            fit: StackFit.expand,
                             alignment: Alignment.center,
                             children: [
                               // 1. Procedural Custom Painting Animation
@@ -205,18 +206,17 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                               ),
 
-                              // 2. High-Res Logo Overlay Fade-In
+                              // 2. High-Res Logo Overlay Fade-In filling the entire circular disc
                               FadeTransition(
                                 opacity: _assetFadeAnim,
                                 child: Transform.scale(
                                   scale: _pulseAnim.value,
                                   child: Image.asset(
                                     'assets/images/logo.png',
-                                    width: 240,
-                                    height: 240,
+                                    width: 250,
+                                    height: 250,
                                     fit: BoxFit.cover,
                                     errorBuilder: (context, error, stackTrace) {
-                                      // Smooth fallback to procedural painter if image is still caching
                                       return const SizedBox.shrink();
                                     },
                                   ),
@@ -295,20 +295,6 @@ class _SplashScreenState extends State<SplashScreen>
                     ],
                   );
                 },
-              ),
-            ),
-          ),
-
-          // Skip Button
-          Positioned(
-            top: 48,
-            right: 20,
-            child: TextButton.icon(
-              onPressed: _navigateToDashboard,
-              icon: const Icon(Icons.arrow_forward, size: 16, color: AppColors.textSecondary),
-              label: const Text(
-                'Skip',
-                style: TextStyle(color: AppColors.textSecondary, fontSize: 13),
               ),
             ),
           ),

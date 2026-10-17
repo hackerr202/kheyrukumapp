@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/services/auth_session_service.dart';
+import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -376,12 +377,20 @@ class _MessagesTabState extends State<MessagesTab> {
 
   // Parent starts direct chat with Ustaz or Director
   void _startParentDirectChat(BuildContext context, {required String role}) async {
+    final children = StudentService.instance.getStudentsForParent(AuthSessionService.instance.userId);
+    final childHalaqah = children.isNotEmpty ? children.first.halaqahName : 'Study Circle';
+    final halaqahs = HalaqahService.instance.halaqahs;
+    final hMatch = halaqahs.where((h) => h.name.toLowerCase() == childHalaqah.toLowerCase());
+    final teacherName = (hMatch.isNotEmpty && hMatch.first.teacherName != 'Unassigned')
+        ? hMatch.first.teacherName
+        : 'Assigned Ustaz';
+
     final convo = await MessagingService.instance.startParentChat(
       parentId: AuthSessionService.instance.userId,
       parentName: AuthSessionService.instance.userName,
       targetRole: role,
-      targetName: role == 'teacher' ? 'Ustaz Ibrahim Bilal' : 'Ustaz Muhammed Yakut',
-      halaqahName: 'Halaqah Abu Bakr (حلقة أبي بكر)',
+      targetName: role == 'teacher' ? teacherName : 'Center Director',
+      halaqahName: childHalaqah,
     );
 
     if (context.mounted) {
@@ -401,6 +410,7 @@ class _MessagesTabState extends State<MessagesTab> {
   // Admin Action Sheet to start chat or group
   void _showAdminActionSheet(BuildContext context) {
     final registeredParents = StudentService.instance.getRegisteredParents();
+    final halaqahs = HalaqahService.instance.halaqahs;
 
     showModalBottomSheet(
       context: context,
@@ -435,11 +445,13 @@ class _MessagesTabState extends State<MessagesTab> {
                 subtitle: const Text('Group discussion with parents of a circle'),
                 onTap: () async {
                   Navigator.pop(ctx);
+                  final firstHalaqah = halaqahs.isNotEmpty ? halaqahs.first : null;
+                  final groupName = firstHalaqah != null ? '${firstHalaqah.name} Parents Group' : 'Study Circle Parents Group';
                   await MessagingService.instance.createGroup(
-                    title: 'Halaqah Abu Bakr Parents Group',
+                    title: groupName,
                     parentIds: registeredParents.map((p) => p['id']!).toList(),
                     parentNames: registeredParents.map((p) => p['name']!).toList(),
-                    halaqahId: 'halaqah-001',
+                    halaqahId: firstHalaqah?.id,
                   );
                 },
               ),

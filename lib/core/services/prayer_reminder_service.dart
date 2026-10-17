@@ -81,15 +81,10 @@ class PrayerReminderService {
     final title = reminder['title']!;
     final body = reminder['body']!;
 
-    // 1. Add to central NotificationCenterService (available to all users & admin)
-    NotificationCenterService.instance.addNotification(
+    // 1. Post native system status bar notification
+    PushNotificationService.instance.showNotification(
       title: title,
       body: body,
-      type: 'prayer',
-      data: {
-        'scheduled': '10_minute_prayer_interval',
-        'timestamp': DateTime.now().toIso8601String(),
-      },
     );
 
     // 2. Broadcast for real-time in-app alert banner

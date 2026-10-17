@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/homework.dart';
-import 'notification_center_service.dart';
+import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
 
@@ -113,14 +113,9 @@ class HomeworkService {
     _submissionsController.add(List.from(_submissions));
 
     // DISPATCH NOTIFICATION TO PARENTS
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'New Quran Homework Assigned 📖',
       body: '$teacherName assigned $title ($surahName: $fromAyah–$toAyah) for $halaqahName. Due: ${dueDate.toIso8601String().substring(0, 10)}.',
-      type: 'homework',
-      data: {
-        'assignment_id': assignment.id,
-        'halaqah_name': halaqahName,
-      },
     );
 
     // Cloud sync to Supabase if connected
@@ -216,15 +211,9 @@ class HomeworkService {
     _submissionsController.add(List.from(_submissions));
 
     // DISPATCH NOTIFICATION TO PARENT
-    NotificationCenterService.instance.addNotification(
+    PushNotificationService.instance.showNotification(
       title: 'Homework Reviewed by Ustaz 🌟',
       body: 'Recitation for ${existing.studentName} was reviewed: $teacherRating. Feedback: ${teacherFeedback ?? "Masha\'Allah excellent effort."}',
-      type: 'homework',
-      data: {
-        'submission_id': submissionId,
-        'student_id': existing.studentId,
-        'rating': teacherRating,
-      },
     );
   }
 }

@@ -29,7 +29,7 @@ class WeeklyReport {
     this.tajweedRating = 'Excellent',
     this.mistakesCount = 2,
     this.teacherRemarks = 'Masha\'Allah, showing disciplined Tajweed articulation and smooth retention.',
-    this.teacherName = 'Ustaz Muhammed Yakut',
+    this.teacherName = 'Assigned Teacher',
     required this.createdAt,
   });
 
@@ -53,7 +53,7 @@ class WeeklyReport {
       mistakesCount: (json['mistakes_count'] as num?)?.toInt() ?? 1,
       teacherRemarks: json['teacher_remarks']?.toString() ??
           'Consistent recitation with clear Makharij. Recommended for next Surah evaluation.',
-      teacherName: json['teacher_name']?.toString() ?? 'Ustaz Muhammed Yakut',
+      teacherName: json['teacher_name']?.toString() ?? 'Assigned Teacher',
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),

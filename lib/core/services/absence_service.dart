@@ -1,7 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/absence_request.dart';
-import 'notification_center_service.dart';
+import 'auth_session_service.dart';
+import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
 
@@ -67,16 +68,10 @@ class AbsenceService {
     _requests.insert(0, request);
     _requestsController.add(List.from(_requests));
 
-    // DISPATCH NOTIFICATION TO TEACHER
-    NotificationCenterService.instance.addNotification(
+    // DISPATCH SYSTEM NOTIFICATION TO TEACHER
+    PushNotificationService.instance.showNotification(
       title: 'Absence Excuse Request Received 📝',
       body: '${request.parentName} submitted an absence excuse for ${request.studentName} on ${date.toIso8601String().substring(0, 10)} (${request.reasonLabel}). Review required.',
-      type: 'attendance',
-      data: {
-        'request_id': request.id,
-        'student_id': studentId,
-        'halaqah_name': request.halaqahName,
-      },
     );
 
     // Cloud sync to Supabase if connected
@@ -96,15 +91,20 @@ class AbsenceService {
   /// Automatically synchronizes with StudentService to mark daily attendance as 'excused'!
   Future<void> approveRequest(
     String requestId, {
-    String? reviewedBy = 'Ustaz Ibrahim Bilal',
+    String? reviewedBy,
   }) async {
     final index = _requests.indexWhere((r) => r.id == requestId);
     if (index == -1) return;
 
+    final reviewer = reviewedBy ??
+        (AuthSessionService.instance.userName.isNotEmpty
+            ? AuthSessionService.instance.userName
+            : 'Assigned Ustaz');
+
     final existing = _requests[index];
     final updated = existing.copyWith(
       status: 'approved',
-      reviewedBy: reviewedBy,
+      reviewedBy: reviewer,
       reviewedAt: DateTime.now(),
     );
 
@@ -117,51 +117,44 @@ class AbsenceService {
       status: 'excused',
       remarks: 'Parent excuse approved: ${updated.reasonLabel} - ${updated.notes}',
       sessionDate: updated.date,
-      markedBy: reviewedBy,
+      markedBy: reviewer,
     );
 
-    // DISPATCH NOTIFICATION TO PARENT
-    NotificationCenterService.instance.addNotification(
+    // DISPATCH SYSTEM NOTIFICATION TO PARENT
+    PushNotificationService.instance.showNotification(
       title: 'Absence Excuse Approved ✅',
-      body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} has been approved by $reviewedBy.',
-      type: 'attendance',
-      data: {
-        'request_id': updated.id,
-        'student_id': updated.studentId,
-        'status': 'approved',
-      },
+      body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} has been approved by $reviewer.',
     );
   }
 
   /// Teacher Action: Decline absence request
   Future<void> declineRequest(
     String requestId, {
-    String? reviewedBy = 'Ustaz Ibrahim Bilal',
+    String? reviewedBy,
     String? declineReason,
   }) async {
     final index = _requests.indexWhere((r) => r.id == requestId);
     if (index == -1) return;
 
+    final reviewer = reviewedBy ??
+        (AuthSessionService.instance.userName.isNotEmpty
+            ? AuthSessionService.instance.userName
+            : 'Assigned Ustaz');
+
     final existing = _requests[index];
     final updated = existing.copyWith(
       status: 'declined',
-      reviewedBy: reviewedBy,
+      reviewedBy: reviewer,
       reviewedAt: DateTime.now(),
     );
 
     _requests[index] = updated;
     _requestsController.add(List.from(_requests));
 
-    // DISPATCH NOTIFICATION TO PARENT
-    NotificationCenterService.instance.addNotification(
+    // DISPATCH SYSTEM NOTIFICATION TO PARENT
+    PushNotificationService.instance.showNotification(
       title: 'Absence Request Update ❌',
       body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} was declined. Reason: ${declineReason ?? "Please contact the teacher."}',
-      type: 'attendance',
-      data: {
-        'request_id': updated.id,
-        'student_id': updated.studentId,
-        'status': 'declined',
-      },
     );
   }
 }

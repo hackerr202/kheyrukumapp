@@ -19,10 +19,10 @@ class Student {
     required this.id,
     required this.fullName,
     this.halaqahId,
-    this.halaqahName = 'Halaqah Abu Bakr (حلقة أبي بكر)',
+    this.halaqahName = 'Study Circle',
     this.parentId,
-    this.parentName = 'Parent Account',
-    this.parentPhone = '+251 91 123 4567',
+    this.parentName = 'Parent',
+    this.parentPhone = '',
     this.parentEmail,
     this.dateOfBirth,
     this.currentJuz = 30,
@@ -39,10 +39,10 @@ class Student {
       fullName: json['full_name']?.toString() ?? 'Student',
       halaqahId: json['halaqah_id']?.toString(),
       halaqahName: json['halaqah_name']?.toString() ??
-          (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Halaqah Abu Bakr (حلقة أبي بكر)'),
+          (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Study Circle'),
       parentId: json['parent_id']?.toString(),
       parentName: json['parent_name']?.toString() ?? 'Parent',
-      parentPhone: json['parent_phone']?.toString() ?? '+251 91 123 4567',
+      parentPhone: json['parent_phone']?.toString() ?? '',
       parentEmail: json['parent_email']?.toString(),
       dateOfBirth: json['date_of_birth'] != null
           ? DateTime.tryParse(json['date_of_birth'].toString())
