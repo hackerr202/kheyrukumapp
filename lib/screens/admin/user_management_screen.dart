@@ -354,7 +354,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               final halaqahs = HalaqahService.instance.halaqahs;
               final assignedHalaqah = halaqahs.firstWhere(
                 (h) => h.teacherId == t['id'] || h.teacherName == t['full_name'],
-                orElse: () => const Halaqah(id: '', name: '', createdAt: null as dynamic),
+                orElse: () => Halaqah(id: '', name: '', createdAt: DateTime(2000)),
               );
 
               return Container(

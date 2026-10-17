@@ -131,8 +131,8 @@ class PushNotificationService {
       // Also sync to in-app notification center bell badge
       NotificationCenterService.instance.addNotification(
         title: title,
-        message: body,
-        category: 'broadcast',
+        body: body,
+        type: 'broadcast',
       );
 
       debugPrint('[PushNotificationService] System notification posted: "$title"');

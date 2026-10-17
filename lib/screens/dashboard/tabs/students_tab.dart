@@ -1604,7 +1604,7 @@ class _StudentsTabState extends State<StudentsTab> {
                         return DropdownMenuItem<String>(
                           value: p['id'],
                           child: Text(
-                            '${p['name']} (${p['phone'].isNotEmpty ? p['phone'] : p['email']})',
+                            '${p['name']} (${(p['phone'] != null && (p['phone'] as String).isNotEmpty) ? p['phone'] : p['email']})',
                             overflow: TextOverflow.ellipsis,
                             style: const TextStyle(fontSize: 12),
                           ),
