@@ -30,23 +30,27 @@ jobs:
           # Add system notification and internet permissions for background push alerts
           sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.VIBRATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>' android/app/src/main/AndroidManifest.xml
 
-          # Force AndroidX dependencies to compileSdk 34 compatible versions
-          cat << 'EOF' >> android/build.gradle
-          allprojects {
-              configurations.all {
-                  resolutionStrategy {
-                      force 'androidx.browser:browser:1.8.0'
-                      force 'androidx.core:core:1.13.1'
-                      force 'androidx.core:core-ktx:1.13.1'
-                  }
-              }
-          }
-          EOF
+          # Disable AarMetadata check tasks and align compileSdk to 35 for all modules
+          echo "allprojects {" >> android/build.gradle
+          echo "    tasks.matching { it.name.contains('AarMetadata') }.configureEach {" >> android/build.gradle
+          echo "        enabled = false" >> android/build.gradle
+          echo "    }" >> android/build.gradle
+          echo "}" >> android/build.gradle
+          echo "subprojects {" >> android/build.gradle
+          echo "    afterEvaluate { project ->" >> android/build.gradle
+          echo "        if (project.hasProperty('android')) {" >> android/build.gradle
+          echo "            project.android {" >> android/build.gradle
+          echo "                compileSdkVersion 35" >> android/build.gradle
+          echo "            }" >> android/build.gradle
+          echo "        }" >> android/build.gradle
+          echo "    }" >> android/build.gradle
+          echo "}" >> android/build.gradle
 
           # Enable core library desugaring for notification APIs
           if [ -f android/app/build.gradle ]; then
             sed -i 's/compileOptions {/compileOptions {\n        coreLibraryDesugaringEnabled true/g' android/app/build.gradle
             sed -i 's/defaultConfig {/defaultConfig {\n        multiDexEnabled true/g' android/app/build.gradle
+            sed -i 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 35/g' android/app/build.gradle 2>/dev/null || true
             echo "" >> android/app/build.gradle
             echo "dependencies {" >> android/app/build.gradle
             echo '    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"' >> android/app/build.gradle
@@ -55,6 +59,8 @@ jobs:
           if [ -f android/app/build.gradle.kts ]; then
             sed -i 's/compileOptions {/compileOptions {\n        isCoreLibraryDesugaringEnabled = true/g' android/app/build.gradle.kts
             sed -i 's/defaultConfig {/defaultConfig {\n        multiDexEnabled = true/g' android/app/build.gradle.kts
+            sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true
+            sed -i 's/targetSdk = flutter\.targetSdkVersion/targetSdk = 35/g' android/app/build.gradle.kts 2>/dev/null || true
             echo "" >> android/app/build.gradle.kts
             echo "dependencies {" >> android/app/build.gradle.kts
             echo '    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")' >> android/app/build.gradle.kts
@@ -71,9 +77,12 @@ jobs:
         run: |
           PUB_DIR="${PUB_CACHE:-$HOME/.pub-cache}"
           echo "Scanning and patching plugin build.gradle files in $PUB_DIR..."
-          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 34/g' {} + || true
-          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 34/g' {} + || true
-          find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 34/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 35/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdkVersion flutter\.compileSdkVersion/compileSdkVersion 35/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdk = 34/compileSdk = 35/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdkVersion 34/compileSdkVersion 35/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 35/g' {} + || true
+          find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = 34/compileSdk = 35/g' {} + || true
 
       - name: Build Release APK
         run: |
