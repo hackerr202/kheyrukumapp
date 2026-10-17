@@ -46,12 +46,27 @@ jobs:
           # Enable core library desugaring for notification APIs
           if [ -f android/app/build.gradle ]; then
             sed -i 's/compileOptions {/compileOptions {\n        coreLibraryDesugaringEnabled true/g' android/app/build.gradle
-            sed -i '/dependencies {/a \    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"' android/app/build.gradle
+            sed -i 's/defaultConfig {/defaultConfig {\n        multiDexEnabled true/g' android/app/build.gradle
+            cat << 'EOF' >> android/app/build.gradle
+
+dependencies {
+    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"
+}
+EOF
           fi
           if [ -f android/app/build.gradle.kts ]; then
             sed -i 's/compileOptions {/compileOptions {\n        isCoreLibraryDesugaringEnabled = true/g' android/app/build.gradle.kts
-            sed -i '/dependencies {/a \    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")' android/app/build.gradle.kts
+            sed -i 's/defaultConfig {/defaultConfig {\n        multiDexEnabled = true/g' android/app/build.gradle.kts
+            cat << 'EOF' >> android/app/build.gradle.kts
+
+dependencies {
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")
+}
+EOF
           fi
+
+          echo "=== Configured app build file ==="
+          cat android/app/build.gradle.kts 2>/dev/null || cat android/app/build.gradle 2>/dev/null || true
 
       - name: Install dependencies
         run: flutter pub get
