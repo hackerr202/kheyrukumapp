@@ -13,6 +13,14 @@ class SupabaseService {
   static const String supabaseAnonKey = 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g';
 
   static bool _isInitialized = false;
+  static String? _initializationError;
+
+  /// Check if Supabase is initialized, and attempt on-demand retry if needed
+  static Future<bool> ensureInitialized() async {
+    if (_isInitialized && Supabase.instance.client != null) return true;
+    await initialize();
+    return _isInitialized;
+  }
 
   /// Initialize Supabase
   static Future<void> initialize() async {
@@ -27,9 +35,18 @@ class SupabaseService {
         anonKey: supabaseAnonKey,
       );
       _isInitialized = true;
+      _initializationError = null;
       debugPrint('[SupabaseService] Initialized successfully.');
     } catch (e) {
+      _initializationError = e.toString();
       debugPrint('[SupabaseService] Initialization error: $e');
+      // If already initialized (e.g. hot reload or re-init), mark as initialized
+      try {
+        if (Supabase.instance.client != null) {
+          _isInitialized = true;
+          _initializationError = null;
+        }
+      } catch (_) {}
     }
   }
 
@@ -62,8 +79,8 @@ class SupabaseService {
       return {'valid': false, 'message': 'Please enter an invitation code.'};
     }
 
-    if (!_isInitialized) {
-      return {'valid': false, 'message': 'Supabase service is not initialized.'};
+    if (!await ensureInitialized()) {
+      return {'valid': false, 'message': 'Unable to connect to Supabase: ${_initializationError ?? "offline"}'};
     }
 
     try {
@@ -135,8 +152,8 @@ class SupabaseService {
     required String password,
     String? phone,
   }) async {
-    if (!_isInitialized) {
-      return {'success': false, 'message': 'Supabase is not initialized.'};
+    if (!await ensureInitialized()) {
+      return {'success': false, 'message': 'Unable to connect to Supabase: ${_initializationError ?? "offline"}'};
     }
 
     try {
@@ -181,8 +198,8 @@ class SupabaseService {
     required String email,
     required String password,
   }) async {
-    if (!_isInitialized) {
-      return {'success': false, 'message': 'Supabase service is offline.'};
+    if (!await ensureInitialized()) {
+      return {'success': false, 'message': 'Supabase service is offline: ${_initializationError ?? "Please check connection"}'};
     }
 
     try {
@@ -214,7 +231,7 @@ class SupabaseService {
 
   /// Resend verification email
   Future<Map<String, dynamic>> resendVerificationEmail(String email) async {
-    if (!_isInitialized) return {'success': false, 'message': 'Service unavailable.'};
+    if (!await ensureInitialized()) return {'success': false, 'message': 'Service unavailable.'};
     try {
       await client?.auth.resend(
         type: OtpType.signup,
@@ -246,7 +263,7 @@ class SupabaseService {
       return {'success': false, 'message': 'Role must be teacher or parent.'};
     }
 
-    if (client == null) {
+    if (!await ensureInitialized() || client == null) {
       return {'success': false, 'message': 'Supabase service is offline. Please check your internet connection.'};
     }
 
