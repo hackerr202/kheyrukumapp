@@ -152,7 +152,7 @@ class AddStudentDialog {
                           value: p['id'],
                           child: Text('${p['name']} (${p['phone'] ?? p['email'] ?? 'User'})', overflow: TextOverflow.ellipsis),
                         );
-                      }).toList>,
+                      }).toList(),
                       onChanged: (val) {
                         setDialogState(() => selectedParentId = val);
                       },
