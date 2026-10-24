@@ -167,6 +167,13 @@ class PaymentService {
 
   /// Trigger monthly payment reminder to parents
   void sendMonthlyTuitionReminder(String month) {
+    // Dispatch system status bar notification
+    PushNotificationService.instance.showNotification(
+      id: PushNotificationService.idMonthlyFee,
+      title: 'Monthly Tuition Fee Reminder 💳',
+      body: 'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload receipt proof.',
+    );
+
     NotificationCenterService.instance.addNotification(
       title: 'Monthly Halaqah Tuition Reminder 💳',
       body: 'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload receipt proof.',

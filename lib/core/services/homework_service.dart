@@ -113,10 +113,11 @@ class HomeworkService {
     }
     _submissionsController.add(List.from(_submissions));
 
-    // DISPATCH NOTIFICATION TO PARENTS
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center for parents
+    NotificationCenterService.instance.addNotification(
       title: 'New Quran Homework Assigned 📖',
       body: '$teacherName assigned $title ($surahName: $fromAyah–$toAyah) for $halaqahName. Due: ${dueDate.toIso8601String().substring(0, 10)}.',
+      type: 'homework',
     );
 
     // Cloud sync to Supabase if connected
@@ -211,10 +212,11 @@ class HomeworkService {
 
     _submissionsController.add(List.from(_submissions));
 
-    // DISPATCH NOTIFICATION TO PARENT
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center for parents
+    NotificationCenterService.instance.addNotification(
       title: 'Homework Reviewed by Ustaz 🌟',
       body: 'Recitation for ${existing.studentName} was reviewed: $teacherRating. Feedback: ${teacherFeedback ?? "Masha\'Allah excellent effort."}',
+      type: 'homework_review',
     );
   }
 }

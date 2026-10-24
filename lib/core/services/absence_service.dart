@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import '../models/absence_request.dart';
 import 'auth_session_service.dart';
+import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
@@ -68,10 +69,11 @@ class AbsenceService {
     _requests.insert(0, request);
     _requestsController.add(List.from(_requests));
 
-    // DISPATCH SYSTEM NOTIFICATION TO TEACHER
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center
+    NotificationCenterService.instance.addNotification(
       title: 'Absence Excuse Request Received 📝',
       body: '${request.parentName} submitted an absence excuse for ${request.studentName} on ${date.toIso8601String().substring(0, 10)} (${request.reasonLabel}). Review required.',
+      type: 'absence_request',
     );
 
     // Cloud sync to Supabase if connected
@@ -120,10 +122,11 @@ class AbsenceService {
       markedBy: reviewer,
     );
 
-    // DISPATCH SYSTEM NOTIFICATION TO PARENT
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center
+    NotificationCenterService.instance.addNotification(
       title: 'Absence Excuse Approved ✅',
       body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} has been approved by $reviewer.',
+      type: 'absence_approved',
     );
   }
 
@@ -151,10 +154,11 @@ class AbsenceService {
     _requests[index] = updated;
     _requestsController.add(List.from(_requests));
 
-    // DISPATCH SYSTEM NOTIFICATION TO PARENT
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center
+    NotificationCenterService.instance.addNotification(
       title: 'Absence Request Update ❌',
       body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} was declined. Reason: ${declineReason ?? "Please contact the teacher."}',
+      type: 'absence_declined',
     );
   }
 }

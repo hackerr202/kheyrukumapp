@@ -1,5 +1,6 @@
 import 'dart:async';
 import '../models/chat_message.dart';
+import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 
 /// Messaging service managing:
@@ -149,10 +150,11 @@ class MessagingService {
       );
     }
 
-    // Notification for Parent
-    PushNotificationService.instance.showNotification(
+    // In-App Notification Center
+    NotificationCenterService.instance.addNotification(
       title: 'Message from Ustaz $teacherName 💬',
       body: 'Ustaz $teacherName started a discussion regarding $studentName.',
+      type: 'message',
     );
 
     return convo;
@@ -188,9 +190,10 @@ class MessagingService {
       content: 'As-salamu alaykum parents. Welcome to "$title".',
     );
 
-    PushNotificationService.instance.showNotification(
+    NotificationCenterService.instance.addNotification(
       title: 'New Group Created 👥',
       body: 'Admin created a new discussion group: "$title".',
+      type: 'message_group',
     );
 
     return convo;
