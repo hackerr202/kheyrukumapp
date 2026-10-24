@@ -27,6 +27,11 @@ jobs:
           rm -rf android
           flutter create . --platforms=android --org=com.kheyrukum.portal
           
+          # Copy custom launcher icons into Android res folder
+          if [ -d "android_res" ]; then
+            cp -r android_res/* android/app/src/main/res/
+          fi
+          
           # Add system notification and internet permissions for background push alerts
           sed -i '/<manifest/a \    <uses-permission android:name="android.permission.INTERNET"/>\n    <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>\n    <uses-permission android:name="android.permission.VIBRATE"/>\n    <uses-permission android:name="android.permission.WAKE_LOCK"/>\n    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>' android/app/src/main/AndroidManifest.xml
 
