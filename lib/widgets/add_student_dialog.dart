@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import '../../core/services/halaqah_service.dart';
-import '../../core/services/student_service.dart';
-import '../../core/theme/app_colors.dart';
-import '../admin/halaqah_management_sheet.dart';
+import '../core/services/halaqah_service.dart';
+import '../core/services/student_service.dart';
+import '../core/theme/app_colors.dart';
+import '../screens/admin/halaqah_management_sheet.dart';
 
 /// Modal dialog for adding and enrolling a new student into a halaqah and linking to parent.
 class AddStudentDialog {

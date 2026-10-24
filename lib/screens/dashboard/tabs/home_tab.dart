@@ -149,27 +149,28 @@ class _HomeTabState extends State<HomeTab> {
     required Color subtleBorder,
   }) {
     return AnimatedBuilder(
-      animation: Listenable.merge([
-        HalaqahService.instance.halaqahsNotifier,
-        StudentService.instance.studentsNotifier,
-      ]),
+      animation: HalaqahService.instance.halaqahsNotifier,
       builder: (context, _) {
-        final halaqahs = HalaqahService.instance.halaqahs;
-        final students = StudentService.instance.allStudents;
+        return StreamBuilder<List<Student>>(
+          stream: StudentService.instance.studentsStream,
+          initialData: StudentService.instance.allStudents,
+          builder: (context, studentSnapshot) {
+            final halaqahs = HalaqahService.instance.halaqahs;
+            final students = studentSnapshot.data ?? StudentService.instance.allStudents;
 
-        final hasHalaqah = halaqahs.isNotEmpty;
-        final hasStudent = students.isNotEmpty;
+            final hasHalaqah = halaqahs.isNotEmpty;
+            final hasStudent = students.isNotEmpty;
 
-        return StreamBuilder(
-          stream: SupabaseService.instance.streamInviteCodes(),
-          builder: (context, snapshot) {
-            final codes = snapshot.data ?? [];
-            final hasTeacherCode = codes.any((c) => c.role == 'teacher');
+            return StreamBuilder(
+              stream: SupabaseService.instance.streamInviteCodes(),
+              builder: (context, snapshot) {
+                final codes = snapshot.data ?? [];
+                final hasTeacherCode = codes.any((c) => c.role == 'teacher');
 
-            int completedSteps = 0;
-            if (hasHalaqah) completedSteps++;
-            if (hasTeacherCode) completedSteps++;
-            if (hasStudent) completedSteps++;
+                int completedSteps = 0;
+                if (hasHalaqah) completedSteps++;
+                if (hasTeacherCode) completedSteps++;
+                if (hasStudent) completedSteps++;
 
             // If setup is complete (or students exist), show calm, compact stats row
             if (hasStudent && completedSteps >= 3) {
@@ -342,7 +343,9 @@ class _HomeTabState extends State<HomeTab> {
         );
       },
     );
-  }
+  },
+);
+}
 
   Widget _buildChecklistStep({
     required int stepNum,

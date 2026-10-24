@@ -165,8 +165,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                     // Clean Header: Greeting + Avatar + Notification Bell + Settings Icon
                     ValueListenableBuilder<String>(
-                      valueListenable: AuthSessionService.instance.userNameNotifier,
-                      builder: (context, userName, _) {
+                      valueListenable: AuthSessionService.instance.roleNotifier,
+                      builder: (context, currentRole, _) {
+                        final userName = AuthSessionService.instance.userName;
                         final displayName = userName.isNotEmpty ? userName : 'Administrator';
                         final avatarInitial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A';
 
