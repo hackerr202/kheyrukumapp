@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../../../core/models/announcement.dart';
+import '../../../core/models/student.dart';
 import '../../../core/services/announcement_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
