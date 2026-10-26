@@ -48,30 +48,7 @@ class _HomeTabState extends State<HomeTab> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
           children: [
             if (isAdmin) ...[
-              // Setup Checklist or Compact Stats Row
-              _buildAdminCenterStatusCard(
-                context: context,
-                isDark: isDark,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                subtleBorder: subtleBorder,
-              ),
-
-              const SizedBox(height: 28),
-
-              // Quick Actions Row (4 icons: Post notice, Invite codes, Add student, Create halaqah)
-              _buildQuickActionsRow(
-                context: context,
-                isDark: isDark,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtleBorder: subtleBorder,
-              ),
-
-              const SizedBox(height: 28),
-
-              // Announcements (latest 1 item only with View all link & + action)
+              // Latest Announcement at the top
               _buildAnnouncementsSection(
                 context: context,
                 isDark: isDark,
@@ -82,7 +59,18 @@ class _HomeTabState extends State<HomeTab> {
                 subtleBorder: subtleBorder,
               ),
 
-              const SizedBox(height: 28),
+              const SizedBox(height: 24),
+
+              // Quick Actions Row (4 icons: Post notice, Invite codes, Add student, Create halaqah)
+              _buildQuickActionsRow(
+                context: context,
+                isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtleBorder: subtleBorder,
+              ),
+
+              const SizedBox(height: 24),
 
               // Invite Codes collapsed single row
               _buildInviteCodesCollapsedRow(
@@ -95,6 +83,16 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ] else if (isTeacher) ...[
               // Teacher Experience
+              _buildAnnouncementsSection(
+                context: context,
+                isDark: isDark,
+                isAdmin: false,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtextColor: subtextColor,
+                subtleBorder: subtleBorder,
+              ),
+              const SizedBox(height: 24),
               _buildTeacherOverviewCard(
                 isDark: isDark,
                 cardBg: cardBg,
@@ -102,30 +100,20 @@ class _HomeTabState extends State<HomeTab> {
                 subtextColor: subtextColor,
                 subtleBorder: subtleBorder,
               ),
-              const SizedBox(height: 28),
-              _buildAnnouncementsSection(
-                context: context,
-                isDark: isDark,
-                isAdmin: false,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                subtleBorder: subtleBorder,
-              ),
             ] else ...[
               // Parent Experience
-              _buildParentOverviewCard(
+              _buildAnnouncementsSection(
+                context: context,
                 isDark: isDark,
+                isAdmin: false,
                 cardBg: cardBg,
                 textColor: textColor,
                 subtextColor: subtextColor,
                 subtleBorder: subtleBorder,
               ),
-              const SizedBox(height: 28),
-              _buildAnnouncementsSection(
-                context: context,
+              const SizedBox(height: 24),
+              _buildParentOverviewCard(
                 isDark: isDark,
-                isAdmin: false,
                 cardBg: cardBg,
                 textColor: textColor,
                 subtextColor: subtextColor,
