@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import '../models/halaqah.dart';
+import 'local_storage_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
 
@@ -11,13 +12,35 @@ import 'supabase_service.dart';
 /// - Delete or edit circles
 /// - Stream live halaqahs to all dashboard tabs
 class HalaqahService {
-  HalaqahService._();
+  HalaqahService._() {
+    _loadFromCache();
+  }
   static final HalaqahService instance = HalaqahService._();
 
   final List<Halaqah> _halaqahs = [];
   final ValueNotifier<List<Halaqah>> halaqahsNotifier = ValueNotifier<List<Halaqah>>([]);
 
   List<Halaqah> get halaqahs => List.unmodifiable(_halaqahs);
+
+  Future<void> _loadFromCache() async {
+    try {
+      final cached = await LocalStorageService.instance.getJsonList('cached_halaqahs');
+      if (cached.isNotEmpty) {
+        _halaqahs.clear();
+        for (final item in cached) {
+          _halaqahs.add(Halaqah.fromJson(item));
+        }
+        halaqahsNotifier.value = List.from(_halaqahs);
+
+        // Save to offline cache
+        final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+        await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+        debugPrint('[HalaqahService] Loaded ${_halaqahs.length} halaqahs from offline cache.');
+      }
+    } catch (e) {
+      debugPrint('[HalaqahService] Cache load error: $e');
+    }
+  }
 
   /// Initialize and fetch halaqahs from Supabase
   Future<void> fetchHalaqahs() async {
@@ -42,6 +65,10 @@ class HalaqahService {
           _halaqahs.add(halaqah);
         }
         halaqahsNotifier.value = List.from(_halaqahs);
+
+        // Save to offline cache
+        final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+        await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
       }
     } catch (e) {
       debugPrint('[HalaqahService] Notice: Supabase fetch halaqahs: $e');
@@ -87,6 +114,10 @@ class HalaqahService {
           if (idx != -1) {
             _halaqahs[idx] = halaqah.copyWith(id: cloudId);
             halaqahsNotifier.value = List.from(_halaqahs);
+
+        // Save to offline cache
+        final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+        await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
             return _halaqahs[idx];
           }
         }

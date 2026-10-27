@@ -4,6 +4,7 @@ import '../models/attendance.dart';
 import '../models/student.dart';
 import '../models/weekly_report.dart';
 import 'auth_session_service.dart';
+import 'local_storage_service.dart';
 import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
@@ -15,7 +16,24 @@ import 'supabase_service.dart';
 /// - Cloud sync with Supabase tables: public.students, public.parent_students, public.student_attendance
 class StudentService {
   StudentService._() {
+    _loadFromCache();
     fetchStudentsFromCloud();
+  }
+
+  Future<void> _loadFromCache() async {
+    try {
+      final cached = await LocalStorageService.instance.getJsonList('cached_students');
+      if (cached.isNotEmpty) {
+        _students.clear();
+        for (final item in cached) {
+          _students.add(Student.fromJson(item));
+        }
+        _studentsController.add(List.from(_students));
+        debugPrint('[StudentService] Loaded ${_students.length} students from offline cache.');
+      }
+    } catch (e) {
+      debugPrint('[StudentService] Cache load error: $e');
+    }
   }
 
   static final StudentService instance = StudentService._();
@@ -52,6 +70,10 @@ class StudentService {
           _students.add(Student.fromJson(item as Map<String, dynamic>));
         }
         _studentsController.add(List.from(_students));
+
+        // Save to offline cache
+        final jsonList = _students.map((s) => s.toJson()).toList();
+        await LocalStorageService.instance.saveJsonList('cached_students', jsonList);
       }
     } catch (e) {
       debugPrint('[StudentService] Cloud fetch notice: $e');

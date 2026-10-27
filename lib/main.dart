@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'core/routes/app_routes.dart';
+import 'core/services/local_storage_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/supabase_service.dart';
 import 'core/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await LocalStorageService.instance.initialize();
   await SupabaseService.initialize();
   await PushNotificationService.instance.initialize();
   runApp(const KheyrukumApp());
