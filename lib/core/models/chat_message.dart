@@ -8,10 +8,10 @@ class Conversation {
   final DateTime lastMessageTime;
   final String? halaqahId;
   final String groupType; // 'broadcast', 'parent_group', 'direct_admin', 'direct_teacher'
-  final int unreadCount;
+  int unreadCount;
   final bool isPinned;
 
-  const Conversation({
+  Conversation({
     required this.id,
     required this.title,
     this.isGroup = false,

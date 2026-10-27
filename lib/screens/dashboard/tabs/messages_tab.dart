@@ -45,8 +45,9 @@ class _MessagesTabState extends State<MessagesTab> {
         final isParent = currentRole == 'parent';
         final currentUserId = AuthSessionService.instance.userId;
 
-        return StreamBuilder<List<ChatMessage>>(
-          stream: MessagingService.instance.messagesStream,
+        return StreamBuilder<List<Conversation>>(
+          stream: MessagingService.instance.conversationsStream,
+          initialData: MessagingService.instance.allConversations,
           builder: (context, _) {
             final allConvos = MessagingService.instance.getConversationsForUser(
               currentUserId,
