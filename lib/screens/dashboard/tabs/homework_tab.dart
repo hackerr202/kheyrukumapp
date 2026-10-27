@@ -1323,6 +1323,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
                       notes: notesCtrl.text.trim(),
                     );
                     Navigator.of(ctx).pop();
+                    if (!mounted) return;
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(content: Text('Marked practiced for ${student.fullName}! Ustaz notified.')),

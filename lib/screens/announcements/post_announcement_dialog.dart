@@ -70,6 +70,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       isPinned: _isPinned,
     );
 
+    if (!mounted) return;
     setState(() => _isBroadcasting = false);
 
     if (res['success'] == true) {

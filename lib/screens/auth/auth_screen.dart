@@ -120,6 +120,7 @@ class _AuthScreenState extends State<AuthScreen>
       password: password,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
@@ -180,6 +181,7 @@ class _AuthScreenState extends State<AuthScreen>
 
     final res = await SupabaseService.instance.checkInviteCode(code);
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['valid'] == true) {
@@ -251,6 +253,7 @@ class _AuthScreenState extends State<AuthScreen>
       password: password,
     );
 
+    if (!mounted) return;
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {

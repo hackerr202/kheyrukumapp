@@ -184,8 +184,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                             teacherId: teacher['id'],
                             teacherName: teacher['full_name'] ?? 'Ustaz',
                           );
-                          setState(() {});
                           if (mounted) {
+                            setState(() {});
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text('${teacher['full_name']} assigned to circle successfully.'),

@@ -214,7 +214,7 @@ class _StudentsTabState extends State<StudentsTab> {
                           firstDate: DateTime.now().subtract(const Duration(days: 90)),
                           lastDate: DateTime.now().add(const Duration(days: 7)),
                         );
-                        if (picked != null) {
+                        if (picked != null && mounted) {
                           setState(() => _teacherSelectedDate = picked);
                         }
                       },
@@ -254,6 +254,7 @@ class _StudentsTabState extends State<StudentsTab> {
                           markedBy: AuthSessionService.instance.userName,
                           date: _teacherSelectedDate,
                         );
+                        if (!mounted) return;
                         setState(() {});
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
@@ -374,6 +375,7 @@ class _StudentsTabState extends State<StudentsTab> {
                                           req.id,
                                           reviewedBy: AuthSessionService.instance.userName,
                                         );
+                                        if (!mounted) return;
                                         setState(() {});
                                         if (context.mounted) {
                                           ScaffoldMessenger.of(context).showSnackBar(
@@ -401,6 +403,7 @@ class _StudentsTabState extends State<StudentsTab> {
                                           req.id,
                                           reviewedBy: AuthSessionService.instance.userName,
                                         );
+                                        if (!mounted) return;
                                         setState(() {});
                                       },
                                       icon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
@@ -768,6 +771,7 @@ class _StudentsTabState extends State<StudentsTab> {
             markedBy: AuthSessionService.instance.userName,
             sessionDate: _teacherSelectedDate,
           );
+          if (!mounted) return;
           setState(() {});
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
@@ -2117,6 +2121,7 @@ class _StudentsTabState extends State<StudentsTab> {
                       notes: notesCtrl.text.trim(),
                     );
                     Navigator.of(ctx).pop();
+                    if (!mounted) return;
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
