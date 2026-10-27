@@ -5,7 +5,6 @@ import '../models/announcement.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
-
 /// Service to handle real-time announcement broadcasting, streaming,
 /// and instant notification delivery for Kheyrukum.
 class AnnouncementService {
@@ -40,7 +39,6 @@ class AnnouncementService {
           title: 'Welcome to Kheyrukum Quranic Portal (ኸይሩኩም)',
           content:
               'Assalamu Alaikum. Welcome to the official parent-teacher communication system. Daily recitation submissions and Halaqah attendance tracking are now active.',
-          category: 'event',
           targetAudience: 'all',
           authorName: 'Center Administration',
           isPinned: true,
@@ -66,20 +64,22 @@ class AnnouncementService {
   Future<Map<String, dynamic>> broadcastAnnouncement({
     required String title,
     required String content,
-    String category = 'general',
     String targetAudience = 'all',
     String authorName = 'Center Administration',
     bool isPinned = false,
+    String? attachmentUrl,
+    String? attachmentName,
   }) async {
     final client = SupabaseService.instance.client;
 
     final newRecord = {
       'title': title.trim(),
       'content': content.trim(),
-      'category': category,
       'target_audience': targetAudience,
       'author_name': authorName.trim(),
       'is_pinned': isPinned,
+      'attachment_url': attachmentUrl,
+      'attachment_name': attachmentName,
       'created_at': DateTime.now().toUtc().toIso8601String(),
     };
 
@@ -89,10 +89,11 @@ class AnnouncementService {
         id: 'local-${DateTime.now().millisecondsSinceEpoch}',
         title: title,
         content: content,
-        category: category,
         targetAudience: targetAudience,
         authorName: authorName,
         isPinned: isPinned,
+        attachmentUrl: attachmentUrl,
+        attachmentName: attachmentName,
         createdAt: DateTime.now(),
       );
       _incomingAlertController.add(mock);
@@ -108,7 +109,7 @@ class AnnouncementService {
       await PushNotificationService.instance.dispatchPushNotificationToAll(
         title: title,
         body: content,
-        data: {'announcement_id': announcement.id, 'category': category},
+        data: {'announcement_id': announcement.id},
       );
 
       return {'success': true, 'data': announcement};
@@ -116,7 +117,6 @@ class AnnouncementService {
       debugPrint('[AnnouncementService] Error posting announcement: $e');
       return {'success': false, 'error': e.toString()};
     }
-
   }
 
   /// 3. Delete an announcement (Admin)

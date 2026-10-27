@@ -17,27 +17,8 @@ class AnnouncementBanner extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    Color badgeColor = const Color(0xFF00BCD4);
-    String badgeText = 'General';
-
-    switch (announcement.category) {
-      case 'urgent':
-        badgeColor = const Color(0xFFFF4B72);
-        badgeText = 'URGENT';
-        break;
-      case 'event':
-        badgeColor = const Color(0xFFFFA000);
-        badgeText = 'EVENT';
-        break;
-      case 'quran_halaqah':
-        badgeColor = const Color(0xFF10B981);
-        badgeText = 'HALAQAH';
-        break;
-      case 'holiday':
-        badgeColor = const Color(0xFFC9F24A);
-        badgeText = 'HOLIDAY';
-        break;
-    }
+    const Color badgeColor = Color(0xFFC9F24A);
+    const String badgeText = 'NOTICE';
 
     return Material(
       color: Colors.transparent,

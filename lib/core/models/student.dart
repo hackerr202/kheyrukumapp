@@ -63,10 +63,18 @@ class Student {
       'id': id,
       'full_name': fullName,
       'halaqah_id': halaqahId,
+      'halaqah_name': halaqahName,
+      'parent_id': parentId,
+      'parent_name': parentName,
+      'parent_phone': parentPhone,
+      'parent_email': parentEmail,
       'current_juz': currentJuz,
       'current_surah': currentSurah,
       'current_ayah': currentAyah,
+      'monthly_fee_status': monthlyFeeStatus,
+      'monthly_fee_amount': monthlyFeeAmount,
       'date_of_birth': dateOfBirth?.toIso8601String(),
+      'created_at': createdAt.toIso8601String(),
     };
   }
 

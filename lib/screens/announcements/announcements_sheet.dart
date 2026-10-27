@@ -253,11 +253,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                     return const Center(child: CircularProgressIndicator());
                   }
 
-                  var list = snapshot.data ?? [];
-
-                  if (_selectedFilter != 'all') {
-                    list = list.where((a) => a.category == _selectedFilter).toList();
-                  }
+                  final list = snapshot.data ?? [];
 
                   if (list.isEmpty) {
                     return Center(
@@ -407,27 +403,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   }
 
   Widget _buildAnnouncementCard(Announcement item) {
-    Color badgeColor = const Color(0xFF00BCD4);
-    String badgeLabel = 'General';
-
-    switch (item.category) {
-      case 'urgent':
-        badgeColor = const Color(0xFFFF4B72);
-        badgeLabel = 'URGENT ALERT';
-        break;
-      case 'event':
-        badgeColor = const Color(0xFFFFA000);
-        badgeLabel = 'QURAN EVENT';
-        break;
-      case 'quran_halaqah':
-        badgeColor = const Color(0xFF10B981);
-        badgeLabel = 'HALAQAH';
-        break;
-      case 'holiday':
-        badgeColor = const Color(0xFFC9F24A);
-        badgeLabel = 'HOLIDAY';
-        break;
-    }
+    const Color badgeColor = Color(0xFFC9F24A);
+    const String badgeLabel = 'OFFICIAL NOTICE';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
 

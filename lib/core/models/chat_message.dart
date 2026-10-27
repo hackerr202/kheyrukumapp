@@ -8,6 +8,8 @@ class Conversation {
   final DateTime lastMessageTime;
   final String? halaqahId;
   final String groupType; // 'broadcast', 'parent_group', 'direct_admin', 'direct_teacher'
+  final int unreadCount;
+  final bool isPinned;
 
   const Conversation({
     required this.id,
@@ -19,6 +21,8 @@ class Conversation {
     required this.lastMessageTime,
     this.halaqahId,
     this.groupType = 'direct_admin',
+    this.unreadCount = 0,
+    this.isPinned = false,
   });
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
@@ -34,6 +38,8 @@ class Conversation {
           : DateTime.now(),
       halaqahId: json['halaqah_id']?.toString(),
       groupType: json['group_type']?.toString() ?? 'direct_admin',
+      unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
+      isPinned: json['is_pinned'] == true,
     );
   }
 
@@ -48,6 +54,8 @@ class Conversation {
       'last_message_time': lastMessageTime.toIso8601String(),
       'halaqah_id': halaqahId,
       'group_type': groupType,
+      'unread_count': unreadCount,
+      'is_pinned': isPinned,
     };
   }
 }
@@ -61,6 +69,10 @@ class ChatMessage {
   final String content;
   final DateTime timestamp;
   final bool isRead;
+  final String messageType; // 'text', 'voice', 'image', 'document'
+  final String? attachmentUrl;
+  final String? attachmentName;
+  final int? audioDurationSeconds;
 
   const ChatMessage({
     required this.id,
@@ -71,6 +83,10 @@ class ChatMessage {
     required this.content,
     required this.timestamp,
     this.isRead = false,
+    this.messageType = 'text',
+    this.attachmentUrl,
+    this.attachmentName,
+    this.audioDurationSeconds,
   });
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
@@ -83,8 +99,14 @@ class ChatMessage {
       content: json['content']?.toString() ?? '',
       timestamp: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+          : (json['timestamp'] != null
+              ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
+              : DateTime.now()),
       isRead: json['is_read'] == true,
+      messageType: json['message_type']?.toString() ?? 'text',
+      attachmentUrl: json['attachment_url']?.toString(),
+      attachmentName: json['attachment_name']?.toString(),
+      audioDurationSeconds: (json['audio_duration'] as num?)?.toInt(),
     );
   }
 
@@ -98,6 +120,10 @@ class ChatMessage {
       'content': content,
       'created_at': timestamp.toIso8601String(),
       'is_read': isRead,
+      'message_type': messageType,
+      'attachment_url': attachmentUrl,
+      'attachment_name': attachmentName,
+      'audio_duration': audioDurationSeconds,
     };
   }
 }

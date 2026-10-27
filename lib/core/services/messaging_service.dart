@@ -8,11 +8,11 @@ import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
-/// Full-featured real-time Messaging Service with offline sync & push notifications:
+/// Full-featured real-time Messaging Service with offline sync & targeted push notifications:
 /// - Persists conversations & messages locally so UI renders instantaneously offline.
 /// - Synchronizes seamlessly with Supabase Realtime when network is available.
-/// - Listens for incoming real-time messages and delivers instant system push notifications.
-/// - Queues and caches outbound messages so they never get lost offline.
+/// - Only delivers push notification to the recipient (NEVER to the sender or other unrelated users).
+/// - Supports attachments (media/documents) and audio voice notes.
 class MessagingService {
   MessagingService._() {
     _loadFromCache();
@@ -57,10 +57,8 @@ class MessagingService {
     if (client == null) return;
 
     try {
-      // 1. Fetch conversations from Supabase
       await fetchConversationsFromCloud();
 
-      // 2. Subscribe to real-time message inserts
       _realtimeMessagesSubscription?.unsubscribe();
       _realtimeMessagesSubscription = client
           .channel('public:messages')
@@ -101,7 +99,6 @@ class MessagingService {
         }
         _conversationsController.add(List.from(_conversations));
 
-        // Save to offline cache
         final jsonList = _conversations.map((c) => c.toJson()).toList();
         await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
       }
@@ -110,19 +107,40 @@ class MessagingService {
     }
   }
 
-  /// Handle incoming real-time message from other users
+  /// Handle incoming real-time message:
+  /// STRICT RULE: Push notifications are ONLY delivered to the recipient, never to the sender!
   void _handleIncomingCloudMessage(Map<String, dynamic> json) {
     try {
       final msg = ChatMessage.fromJson(json);
       final currentUserId = AuthSessionService.instance.userId;
 
-      // Avoid duplicating messages already sent by self
-      final list = _messagesMap.putIfAbsent(msg.conversationId, () => []);
-      if (list.any((m) => m.id == msg.id)) return;
+      // 1. If this device is the sender, ignore notification
+      if (msg.senderId == currentUserId) return;
 
-      list.add(msg);
-      _chatControllers[msg.conversationId]?.add(List.from(list));
-      _saveMessagesToCache(msg.conversationId);
+      // 2. Check if current user is a participant in this conversation
+      final convo = _conversations.firstWhere(
+        (c) => c.id == msg.conversationId,
+        orElse: () => Conversation(
+          id: msg.conversationId,
+          title: 'Direct Chat',
+          participantIds: [msg.senderId, currentUserId],
+          participantNames: [msg.senderName, 'User'],
+          lastMessageTime: msg.timestamp,
+        ),
+      );
+
+      final isParticipant = convo.participantIds.contains(currentUserId) ||
+          (convo.isGroup && AuthSessionService.instance.isParent && convo.groupType == 'parent_group');
+
+      if (!isParticipant) return; // Not for this user!
+
+      // Add to thread
+      final list = _messagesMap.putIfAbsent(msg.conversationId, () => []);
+      if (!list.any((m) => m.id == msg.id)) {
+        list.add(msg);
+        _chatControllers[msg.conversationId]?.add(List.from(list));
+        _saveMessagesToCache(msg.conversationId);
+      }
 
       // Update conversation last message in list
       final idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
@@ -134,29 +152,37 @@ class MessagingService {
           isGroup: existing.isGroup,
           participantIds: existing.participantIds,
           participantNames: existing.participantNames,
-          lastMessage: msg.content,
+          lastMessage: msg.messageType == 'voice' ? '🎤 Voice message' : msg.content,
           lastMessageTime: msg.timestamp,
           halaqahId: existing.halaqahId,
           groupType: existing.groupType,
+          unreadCount: existing.unreadCount + 1,
         );
         _conversationsController.add(List.from(_conversations));
       }
 
-      // If sent by someone else, trigger a system push notification!
-      if (msg.senderId != currentUserId) {
-        PushNotificationService.instance.showNotification(
-          title: 'New message from ${msg.senderName} 💬',
-          body: msg.content,
-          payload: msg.conversationId,
-        );
-
-        NotificationCenterService.instance.addNotification(
-          title: 'New message from ${msg.senderName} 💬',
-          body: msg.content,
-          type: 'message',
-          data: {'conversation_id': msg.conversationId},
-        );
+      // Deliver system push notification strictly to this recipient
+      String notifBody = msg.content;
+      if (msg.messageType == 'voice') {
+        notifBody = '🎤 Voice message (${msg.audioDurationSeconds ?? 5}s)';
+      } else if (msg.messageType == 'image') {
+        notifBody = '📷 Photo attachment';
+      } else if (msg.messageType == 'document') {
+        notifBody = '📎 Document: ${msg.attachmentName ?? "File"}';
       }
+
+      PushNotificationService.instance.showNotification(
+        title: '${msg.senderName} 💬',
+        body: notifBody,
+        payload: msg.conversationId,
+      );
+
+      NotificationCenterService.instance.addNotification(
+        title: '${msg.senderName} 💬',
+        body: notifBody,
+        type: 'message',
+        data: {'conversation_id': msg.conversationId},
+      );
     } catch (e) {
       debugPrint('[MessagingService] Error handling incoming message: $e');
     }
@@ -178,14 +204,12 @@ class MessagingService {
       _chatControllers[conversationId] = StreamController<List<ChatMessage>>.broadcast();
     }
 
-    // 1. Immediately emit in-memory or cached messages so UI is instant (zero wait time)
     _loadMessagesFromCache(conversationId).then((cached) {
       final current = _messagesMap[conversationId] ?? cached;
       _messagesMap[conversationId] = current;
       _chatControllers[conversationId]?.add(List.from(current));
     });
 
-    // 2. Fetch latest messages from Supabase in background
     _fetchMessagesFromCloud(conversationId);
 
     return _chatControllers[conversationId]!.stream;
@@ -236,16 +260,21 @@ class MessagingService {
     }
   }
 
-  /// Send a message:
-  /// - Instantly displays in UI and caches locally (no offline freeze)
-  /// - Syncs to Supabase cloud table
-  /// - Sends a native push notification to other participants
+  /// Send a message (text, voice, image, or document)
+  /// - Instantly renders in local UI
+  /// - Persists locally in offline storage
+  /// - Pushes to Supabase cloud
+  /// - Does NOT notify the sender itself!
   Future<ChatMessage> sendMessage({
     required String conversationId,
     required String senderId,
     required String senderName,
     required String senderRole,
     required String content,
+    String messageType = 'text',
+    String? attachmentUrl,
+    String? attachmentName,
+    int? audioDurationSeconds,
   }) async {
     final msg = ChatMessage(
       id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
@@ -256,6 +285,10 @@ class MessagingService {
       content: content.trim(),
       timestamp: DateTime.now(),
       isRead: false,
+      messageType: messageType,
+      attachmentUrl: attachmentUrl,
+      attachmentName: attachmentName,
+      audioDurationSeconds: audioDurationSeconds,
     );
 
     // 1. Immediately store in memory and emit to UI
@@ -267,6 +300,11 @@ class MessagingService {
 
     // 3. Update conversation's last message
     final idx = _conversations.indexWhere((c) => c.id == conversationId);
+    String displayPreview = content.trim();
+    if (messageType == 'voice') displayPreview = '🎤 Voice message';
+    if (messageType == 'image') displayPreview = '📷 Photo';
+    if (messageType == 'document') displayPreview = '📎 Document';
+
     if (idx != -1) {
       final existing = _conversations[idx];
       _conversations[idx] = Conversation(
@@ -275,7 +313,7 @@ class MessagingService {
         isGroup: existing.isGroup,
         participantIds: existing.participantIds,
         participantNames: existing.participantNames,
-        lastMessage: msg.content,
+        lastMessage: displayPreview,
         lastMessageTime: msg.timestamp,
         halaqahId: existing.halaqahId,
         groupType: existing.groupType,
@@ -286,21 +324,7 @@ class MessagingService {
       await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
     }
 
-    // 4. Send notification with every message!
-    PushNotificationService.instance.showNotification(
-      title: 'Message sent by $senderName 💬',
-      body: content.trim(),
-      payload: conversationId,
-    );
-
-    NotificationCenterService.instance.addNotification(
-      title: 'Message: $senderName 💬',
-      body: content.trim(),
-      type: 'message',
-      data: {'conversation_id': conversationId},
-    );
-
-    // 5. Cloud synchronization to Supabase
+    // 4. Cloud synchronization to Supabase
     final client = SupabaseService.instance.client;
     if (client != null) {
       try {
@@ -310,13 +334,16 @@ class MessagingService {
           'sender_name': senderName,
           'sender_role': senderRole,
           'content': content.trim(),
+          'message_type': messageType,
+          'attachment_url': attachmentUrl,
+          'attachment_name': attachmentName,
+          'audio_duration': audioDurationSeconds,
           'created_at': msg.timestamp.toUtc().toIso8601String(),
           'is_read': false,
         });
 
-        // Also update conversation in Supabase if exists
         await client.from('conversations').update({
-          'last_message': content.trim(),
+          'last_message': displayPreview,
           'last_message_time': msg.timestamp.toUtc().toIso8601String(),
         }).eq('id', conversationId);
       } catch (e) {
@@ -360,7 +387,7 @@ class MessagingService {
 
     final convo = Conversation(
       id: 'convo-teach-par-${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Parent: $parentName ($studentName\'s Parent)',
+      title: '$parentName ($studentName\'s Parent)',
       isGroup: false,
       participantIds: [teacherId, parentId],
       participantNames: [teacherName, parentName],
@@ -373,11 +400,9 @@ class MessagingService {
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
-    // Save locally
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    // Sync conversation to Supabase
     final client = SupabaseService.instance.client;
     if (client != null) {
       try {
@@ -422,11 +447,9 @@ class MessagingService {
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
-    // Save locally
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    // Sync to Supabase
     final client = SupabaseService.instance.client;
     if (client != null) {
       try {
@@ -472,7 +495,7 @@ class MessagingService {
 
     final convo = Conversation(
       id: 'convo-dir-${DateTime.now().millisecondsSinceEpoch}',
-      title: 'Direct Chat: $parentName',
+      title: parentName,
       isGroup: false,
       participantIds: ['admin-001', parentId],
       participantNames: ['Admin Director', parentName],
@@ -513,14 +536,14 @@ class MessagingService {
   Future<Conversation> startParentChat({
     required String parentId,
     required String parentName,
-    required String targetRole, // 'admin' or 'teacher'
+    required String targetRole,
     required String targetName,
     String? halaqahName,
     String? initialMessage,
   }) async {
     final title = targetRole == 'admin'
-        ? 'Center Director (Ustaz Muhammed)'
-        : '$targetName (${halaqahName ?? 'Halaqah Teacher'})';
+        ? 'Center Director'
+        : '$targetName (${halaqahName ?? 'Teacher'})';
 
     final targetId = targetRole == 'admin' ? 'admin-001' : 'teach-001';
 

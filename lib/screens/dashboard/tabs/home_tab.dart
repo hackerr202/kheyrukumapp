@@ -658,14 +658,20 @@ class _HomeTabState extends State<HomeTab> {
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text(
-                          latest.category.toUpperCase(),
-                          style: const TextStyle(
-                            color: _limeAccent,
-                            fontSize: 10.5,
-                            fontWeight: FontWeight.w700,
-                            letterSpacing: 0.5,
-                          ),
+                        const Row(
+                          children: [
+                            Icon(Icons.campaign_rounded, size: 16, color: _limeAccent),
+                            SizedBox(width: 6),
+                            Text(
+                              'CENTER NOTICE',
+                              style: TextStyle(
+                                color: _limeAccent,
+                                fontSize: 10.5,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ],
                         ),
                         Text(
                           _formatDate(latest.createdAt),

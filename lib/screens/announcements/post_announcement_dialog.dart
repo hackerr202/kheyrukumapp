@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/services/announcement_service.dart';
-
 import '../../core/services/auth_session_service.dart';
+import '../../core/theme/app_colors.dart';
 
-/// Modal dialog for Admins to compose and broadcast real-time announcements.
+/// Redesigned Modern Modal dialog for Admins to compose and broadcast real-time announcements
+/// with quick attachment/URL pasting and clean aesthetic (no cluttered categories).
 class PostAnnouncementDialog extends StatefulWidget {
   const PostAnnouncementDialog({super.key});
 
@@ -14,7 +16,14 @@ class PostAnnouncementDialog extends StatefulWidget {
 class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
+  final _attachmentUrlController = TextEditingController();
   late final TextEditingController _authorController;
+
+  String _selectedAudience = 'all';
+  bool _isPinned = false;
+  bool _isBroadcasting = false;
+  String? _errorMessage;
+  bool _showAttachmentField = false;
 
   @override
   void initState() {
@@ -25,34 +34,41 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
     );
   }
 
-  String _selectedCategory = 'general';
-  String _selectedAudience = 'all';
-  bool _isPinned = false;
-  bool _isBroadcasting = false;
-  String? _errorMessage;
-
-  final List<Map<String, dynamic>> _categories = const [
-    {'id': 'general', 'label': 'General', 'color': Color(0xFF00BCD4)},
-    {'id': 'urgent', 'label': 'Urgent Alert', 'color': Color(0xFFFF4B72)},
-    {'id': 'event', 'label': 'Quran Event', 'color': Color(0xFFFFA000)},
-    {'id': 'quran_halaqah', 'label': 'Halaqah Notice', 'color': Color(0xFF10B981)},
-    {'id': 'holiday', 'label': 'Holiday', 'color': Color(0xFFC9F24A)},
-  ];
-
   @override
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
+    _attachmentUrlController.dispose();
     _authorController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pasteFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    if (data?.text != null && data!.text!.isNotEmpty) {
+      setState(() {
+        _showAttachmentField = true;
+        _attachmentUrlController.text = data.text!.trim();
+      });
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Pasted attachment link from clipboard! 📎'),
+            duration: Duration(seconds: 2),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    }
   }
 
   Future<void> _handleBroadcast() async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
+    final attachment = _attachmentUrlController.text.trim();
 
     if (title.isEmpty || content.isEmpty) {
-      setState(() => _errorMessage = 'Please enter both title and content.');
+      setState(() => _errorMessage = 'Please provide both title and circular text.');
       return;
     }
 
@@ -64,287 +80,338 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
     final res = await AnnouncementService.instance.broadcastAnnouncement(
       title: title,
       content: content,
-      category: _selectedCategory,
       targetAudience: _selectedAudience,
       authorName: _authorController.text.trim(),
       isPinned: _isPinned,
+      attachmentUrl: attachment.isNotEmpty ? attachment : null,
+      attachmentName: attachment.isNotEmpty ? 'Attached Document' : null,
     );
 
     if (!mounted) return;
     setState(() => _isBroadcasting = false);
 
     if (res['success'] == true) {
-      if (mounted) {
-        Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Announcement broadcasted to all users successfully!'),
-            backgroundColor: Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
-          ),
-        );
-      }
+      Navigator.of(context).pop(true);
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Announcement broadcasted to all users successfully! 📢'),
+          backgroundColor: Color(0xFF10B981),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
     } else {
-      setState(() => _errorMessage = res['error'] ?? 'Broadcast failed.');
+      setState(() {
+        _errorMessage = res['error'] ?? 'Broadcast failed. Please check your connection.';
+      });
     }
   }
 
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final dialogBg = isDark ? const Color(0xFF161927) : Colors.white;
+    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
+    final fieldBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
     final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
     final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final borderColor = isDark ? const Color(0xFF2E334D) : const Color(0xFFE2E8F0);
-    final inputBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
+    final subtleBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    const limeGreen = Color(0xFFC9F24A);
 
     return Dialog(
-      backgroundColor: dialogBg,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: borderColor, width: 1.2),
-      ),
-      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.all(20),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            // Header
-            Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(8),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFFFFA000).withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(10),
-                  ),
-                  child: const Icon(
-                    Icons.campaign_rounded,
-                    color: Color(0xFFFFA000),
-                    size: 22,
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
+      backgroundColor: cardBg,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 500),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Header
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
                     children: [
-                      Text(
-                        'Broadcast Announcement',
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold,
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: limeGreen.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
                         ),
+                        child: const Icon(Icons.campaign_rounded, color: limeGreen, size: 22),
                       ),
-                      Text(
-                        'Instant push notification to all users',
-                        style: TextStyle(
-                          color: subtextColor,
-                          fontSize: 11,
+                      const SizedBox(width: 12),
+                      Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Broadcast Circular',
+                            style: TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.bold,
+                              color: textColor,
+                            ),
+                          ),
+                          Text(
+                            'Push notice to parents & teachers',
+                            style: TextStyle(fontSize: 11.5, color: subtextColor),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                  IconButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    icon: Icon(Icons.close_rounded, size: 20, color: subtextColor),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints(),
+                  ),
+                ],
+              ),
+
+              const SizedBox(height: 18),
+
+              // Title Field
+              Text(
+                'CIRCULAR TITLE',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _titleController,
+                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textColor),
+                decoration: InputDecoration(
+                  hintText: 'e.g. Ramadan Recitation Schedule & Timings',
+                  hintStyle: TextStyle(color: subtextColor.withOpacity(0.6), fontSize: 13),
+                  filled: true,
+                  fillColor: fieldBg,
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: limeGreen, width: 1.5)),
+                ),
+              ),
+
+              const SizedBox(height: 16),
+
+              // Body Content Field
+              Text(
+                'MESSAGE CONTENT',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _contentController,
+                maxLines: 4,
+                style: TextStyle(fontSize: 13.5, color: textColor, height: 1.4),
+                decoration: InputDecoration(
+                  hintText: 'Write the complete circular text here...',
+                  hintStyle: TextStyle(color: subtextColor.withOpacity(0.6), fontSize: 13),
+                  filled: true,
+                  fillColor: fieldBg,
+                  contentPadding: const EdgeInsets.all(14),
+                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: limeGreen, width: 1.5)),
+                ),
+              ),
+
+              const SizedBox(height: 14),
+
+              // Attachment Pasting Section
+              if (!_showAttachmentField)
+                InkWell(
+                  onTap: _pasteFromClipboard,
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: fieldBg,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: subtleBorder, style: BorderStyle.solid),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.attachment_rounded, size: 18, color: subtextColor),
+                        const SizedBox(width: 8),
+                        Text(
+                          'Paste Document / Media Link from Clipboard',
+                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
                         ),
+                      ],
+                    ),
+                  ),
+                )
+              else
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'ATTACHMENT URL / DOCUMENT',
+                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                        ),
+                        InkWell(
+                          onTap: _pasteFromClipboard,
+                          child: const Text('Paste from clipboard', style: TextStyle(fontSize: 11, color: limeGreen, fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: _attachmentUrlController,
+                      style: TextStyle(fontSize: 13, color: textColor),
+                      decoration: InputDecoration(
+                        hintText: 'https://... or file document link',
+                        prefixIcon: const Icon(Icons.link_rounded, size: 18),
+                        suffixIcon: IconButton(
+                          icon: const Icon(Icons.clear_rounded, size: 16),
+                          onPressed: () => _attachmentUrlController.clear(),
+                        ),
+                        filled: true,
+                        fillColor: fieldBg,
+                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
+                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
+                      ),
+                    ),
+                  ],
+                ),
+
+              const SizedBox(height: 14),
+
+              // Target Audience Selector
+              Text(
+                'TARGET AUDIENCE',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 8),
+              Row(
+                children: [
+                  _buildAudienceChip('all', 'Everyone', Icons.groups_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                  const SizedBox(width: 8),
+                  _buildAudienceChip('parents', 'Parents Only', Icons.family_restroom_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                  const SizedBox(width: 8),
+                  _buildAudienceChip('teachers', 'Teachers Only', Icons.school_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                ],
+              ),
+
+              const SizedBox(height: 12),
+
+              // Pin to Top Checkbox
+              InkWell(
+                onTap: () => setState(() => _isPinned = !_isPinned),
+                borderRadius: BorderRadius.circular(10),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
+                        color: _isPinned ? limeGreen : subtextColor,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        'Pin this circular to the top of Home screen',
+                        style: TextStyle(fontSize: 12.5, color: _isPinned ? textColor : subtextColor),
                       ),
                     ],
                   ),
                 ),
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  icon: const Icon(Icons.close_rounded, color: Color(0xFF64748B)),
-                ),
+              ),
+
+              if (_errorMessage != null) ...[
+                const SizedBox(height: 10),
+                Text(_errorMessage!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
               ],
-            ),
-            const SizedBox(height: 16),
 
-            // Error display
-            if (_errorMessage != null)
-              Container(
-                margin: const EdgeInsets.only(bottom: 12),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  color: Colors.red.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: Colors.redAccent.withOpacity(0.4)),
-                ),
-                child: Text(
-                  _errorMessage!,
-                  style: const TextStyle(color: Colors.redAccent, fontSize: 12),
-                ),
-              ),
+              const SizedBox(height: 20),
 
-            // Category Chips
-            const Text(
-              'Category',
-              style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 8),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: _categories.map((c) {
-                final isSelected = _selectedCategory == c['id'];
-                final color = c['color'] as Color;
-                return ChoiceChip(
-                  label: Text(c['label']),
-                  selected: isSelected,
-                  selectedColor: color.withOpacity(0.25),
-                  backgroundColor: const Color(0xFF1E293B),
-                  side: BorderSide(
-                    color: isSelected ? color : const Color(0xFF334155),
-                    width: isSelected ? 1.5 : 1,
+              // Action Buttons
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        side: BorderSide(color: subtleBorder),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                      child: Text('Cancel', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                    ),
                   ),
-                  labelStyle: TextStyle(
-                    color: isSelected ? color : const Color(0xFF94A3B8),
-                    fontSize: 11,
-                    fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  const SizedBox(width: 12),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton.icon(
+                      onPressed: _isBroadcasting ? null : _handleBroadcast,
+                      icon: _isBroadcasting
+                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
+                          : const Icon(Icons.send_rounded, size: 16, color: Colors.black),
+                      label: Text(
+                        _isBroadcasting ? 'Broadcasting...' : 'Broadcast Notice',
+                        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13.5),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: limeGreen,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        elevation: 0,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      ),
+                    ),
                   ),
-                  onSelected: (val) {
-                    if (val) setState(() => _selectedCategory = c['id']);
-                  },
-                );
-              }).toList(),
-            ),
-            const SizedBox(height: 14),
-
-            // Target Audience
-            const Text(
-              'Target Audience',
-              style: TextStyle(color: Color(0xFFCBD5E1), fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            Row(
-              children: [
-                _buildAudienceChip('all', 'All Users (Parents & Teachers)'),
-                const SizedBox(width: 8),
-                _buildAudienceChip('parents', 'Parents Only'),
-              ],
-            ),
-            const SizedBox(height: 14),
-
-            // Title
-            Text(
-              'Announcement Title',
-              style: TextStyle(color: subtextColor, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _titleController,
-              style: TextStyle(color: textColor, fontSize: 14),
-              decoration: InputDecoration(
-                hintText: 'e.g. Ramadan Recitation Competition 1448H',
-                hintStyle: TextStyle(color: subtextColor.withOpacity(0.7), fontSize: 12),
-                filled: true,
-                fillColor: inputBg,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor),
-                ),
+                ],
               ),
-            ),
-            const SizedBox(height: 14),
-
-            // Content
-            Text(
-              'Announcement Message',
-              style: TextStyle(color: subtextColor, fontSize: 12, fontWeight: FontWeight.w600),
-            ),
-            const SizedBox(height: 6),
-            TextField(
-              controller: _contentController,
-              maxLines: 4,
-              style: TextStyle(color: textColor, fontSize: 13, height: 1.4),
-              decoration: InputDecoration(
-                hintText: 'Write the complete announcement details here...',
-                hintStyle: TextStyle(color: subtextColor.withOpacity(0.7), fontSize: 12),
-                filled: true,
-                fillColor: inputBg,
-                contentPadding: const EdgeInsets.all(14),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  borderSide: BorderSide(color: borderColor),
-                ),
-              ),
-            ),
-            const SizedBox(height: 10),
-
-            // Pin to Top
-            SwitchListTile(
-              contentPadding: EdgeInsets.zero,
-              value: _isPinned,
-              activeColor: const Color(0xFFFFA000),
-              title: const Text(
-                'Pin to top of feed',
-                style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.w500),
-              ),
-              subtitle: const Text(
-                'Keeps announcement prominently featured at the top',
-                style: TextStyle(color: Color(0xFF64748B), fontSize: 10),
-              ),
-              onChanged: (val) => setState(() => _isPinned = val),
-            ),
-            const SizedBox(height: 16),
-
-            // Submit Button
-            SizedBox(
-              width: double.infinity,
-              height: 48,
-              child: ElevatedButton.icon(
-                onPressed: _isBroadcasting ? null : _handleBroadcast,
-                icon: _isBroadcasting
-                    ? const SizedBox(
-                        width: 18,
-                        height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Color(0xFF0F172A)),
-                      )
-                    : const Icon(Icons.send_rounded, size: 18),
-                label: Text(
-                  _isBroadcasting ? 'Broadcasting...' : 'Broadcast Announcement',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: const Color(0xFFFFA000),
-                  foregroundColor: const Color(0xFF0F172A),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  elevation: 6,
-                ),
-              ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 
-  Widget _buildAudienceChip(String id, String label) {
+  Widget _buildAudienceChip(
+    String id,
+    String label,
+    IconData icon,
+    Color activeColor,
+    Color textColor,
+    Color fieldBg,
+    Color subtleBorder,
+  ) {
     final isSelected = _selectedAudience == id;
-    return InkWell(
-      onTap: () => setState(() => _selectedAudience = id),
-      borderRadius: BorderRadius.circular(8),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-        decoration: BoxDecoration(
-          color: isSelected ? const Color(0xFF00BCD4).withOpacity(0.2) : const Color(0xFF1E293B),
-          borderRadius: BorderRadius.circular(8),
-          border: Border.all(
-            color: isSelected ? const Color(0xFF00BCD4) : const Color(0xFF334155),
+    return Expanded(
+      child: InkWell(
+        onTap: () => setState(() => _selectedAudience = id),
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          decoration: BoxDecoration(
+            color: isSelected ? activeColor.withOpacity(0.18) : fieldBg,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: isSelected ? activeColor : subtleBorder),
           ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            color: isSelected ? const Color(0xFF00BCD4) : const Color(0xFF94A3B8),
-            fontSize: 11,
-            fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+          child: Column(
+            children: [
+              Icon(icon, size: 16, color: isSelected ? activeColor : textColor),
+              const SizedBox(height: 4),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 10.5,
+                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                  color: isSelected ? activeColor : textColor,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
           ),
         ),
       ),

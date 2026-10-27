@@ -71,7 +71,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         id: 'prayer-${DateTime.now().millisecondsSinceEpoch}',
         title: alert['title'] ?? 'Don\'t forget to pray 🕌',
         content: alert['body'] ?? 'Take a peaceful moment to remember Allah.',
-        category: 'urgent',
         targetAudience: 'all',
         authorName: 'Adhan & Prayer Reminder',
         isPinned: true,

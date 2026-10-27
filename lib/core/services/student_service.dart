@@ -65,10 +65,15 @@ class StudentService {
           .order('created_at', ascending: false);
 
       if (res is List && res.isNotEmpty) {
-        _students.clear();
-        for (final item in res) {
-          _students.add(Student.fromJson(item as Map<String, dynamic>));
+        final cloudStudents = res.map((item) => Student.fromJson(item as Map<String, dynamic>)).toList();
+        // Merge cloud students with locally created students that may not be in cloud yet
+        for (final local in _students) {
+          if (!cloudStudents.any((c) => c.id == local.id || (c.fullName.toLowerCase() == local.fullName.toLowerCase() && c.halaqahName == local.halaqahName))) {
+            cloudStudents.add(local);
+          }
         }
+        _students.clear();
+        _students.addAll(cloudStudents);
         _studentsController.add(List.from(_students));
 
         // Save to offline cache
@@ -220,6 +225,10 @@ class StudentService {
 
     _students.insert(0, newStudent);
     _studentsController.add(List.from(_students));
+
+    // Persist immediately to local cache so student is never lost
+    final jsonList = _students.map((s) => s.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_students', jsonList);
 
     // Notify Parent of Enrollment
     NotificationCenterService.instance.addNotification(
