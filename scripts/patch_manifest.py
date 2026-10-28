@@ -16,6 +16,21 @@ permissions = """
     <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 """
 
+queries = """
+    <queries>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="https" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tel" />
+        </intent>
+        <package android:name="org.telegram.messenger" />
+        <package android:name="com.whatsapp" />
+    </queries>
+"""
+
 receivers = """
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
@@ -29,6 +44,10 @@ receivers = """
 # Insert permissions right after <manifest ...>
 if '<uses-permission' not in content:
     content = re.sub(r'(<manifest\b[^>]*>)', r'\1' + permissions, content, count=1)
+
+# Insert queries right after permissions or after <manifest ...>
+if '<queries>' not in content:
+    content = re.sub(r'(<manifest\b[^>]*>)', r'\1' + queries, content, count=1)
 
 # Insert receivers right after <application ...>
 if 'ScheduledNotificationReceiver' not in content:

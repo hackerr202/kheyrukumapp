@@ -1,11 +1,18 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/supabase_service.dart';
 
-/// Neumorphic (Soft UI) Login & Sign-Up Screen with a true 3D perspective flip
-/// and a two-step school invitation verification workflow.
+/// Islamic Emerald/Teal & Gold Luxury Login & Sign-Up Screen
+/// Faithfully matching Kheyrukum Islamic Center branding:
+/// - Amharic: ኸይሩኩም እስላማዊ ማዕከል
+/// - English: Kheyrukum Islamic Center
+/// - Arabic Hadith: خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ
+/// - Subtitle: Parent & Teacher Quranic Collaborative Portal
+/// - Gold framed input fields and glowing Gold "LOGIN" button
+/// - Direct Telegram & WhatsApp social contact links from kheyrukum.com (+251 943 42 22 22 / +251 913 49 44 28)
 class AuthScreen extends StatefulWidget {
   const AuthScreen({super.key});
 
@@ -13,100 +20,45 @@ class AuthScreen extends StatefulWidget {
   State<AuthScreen> createState() => _AuthScreenState();
 }
 
-class _AuthScreenState extends State<AuthScreen>
-    with SingleTickerProviderStateMixin {
-  // 3D Flip animation controller
-  late AnimationController _flipController;
-  late Animation<double> _flipAnimation;
+class _AuthScreenState extends State<AuthScreen> {
+  // Toggle between Login and Sign-Up modes
+  bool _isSignUpMode = false;
 
-  // Sign-in controllers
-  final _loginEmailController = TextEditingController();
-  final _loginPasswordController = TextEditingController();
-  bool _rememberMe = true;
-  bool _isSignInPressed = false;
+  // Controllers
+  final _emailCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _obscurePassword = true;
 
-  // Sign-up controllers
-  final _inviteCodeController = TextEditingController();
-  final _regNameController = TextEditingController();
-  final _regEmailController = TextEditingController();
-  final _regPasswordController = TextEditingController();
-  bool _isVerifyPressed = false;
-  bool _isCreatePressed = false;
-
-  // State Management
+  // Sign-up specific controllers
+  final _inviteCodeCtrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
   bool _isInviteVerified = false;
-  bool _isLoading = false;
-  String? _errorMessage;
   String? _verifiedRole;
 
-  // Neumorphic Soft UI Palette
-  static const Color bgColor = Color(0xFFE0E5EC);
-  static const Color darkShadow = Color(0xFFA3B1C6);
-  static const Color lightShadow = Colors.white;
-  static const Color primaryNavy = Color(0xFF1E293B);
-  static const Color accentCoral = Color(0xFFFF4B72);
-  static const Color subtitleGray = Color(0xFF64748B);
+  bool _isLoading = false;
+  String? _errorMessage;
 
-  @override
-  void initState() {
-    super.initState();
-    _flipController = AnimationController(
-      vsync: this,
-      duration: const Duration(milliseconds: 650),
-    );
-
-    _flipAnimation = Tween<double>(begin: 0.0, end: math.pi).animate(
-      CurvedAnimation(parent: _flipController, curve: Curves.easeInOutCubic),
-    );
-
-    _flipController.addStatusListener((status) {
-      if (status == AnimationStatus.dismissed) {
-        // Automatically reset two-step invite state when card flips back to Login
-        setState(() {
-          _isInviteVerified = false;
-          _errorMessage = null;
-        });
-      }
-    });
-  }
+  // Website official contact details
+  static const String phonePrimary = '+251943422222';
+  static const String phoneSecondary = '+251913494428';
+  static const String telegramLink = 'https://t.me/+251943422222';
+  static const String whatsappLink = 'https://wa.me/251943422222';
 
   @override
   void dispose() {
-    _flipController.dispose();
-    _loginEmailController.dispose();
-    _loginPasswordController.dispose();
-    _inviteCodeController.dispose();
-    _regNameController.dispose();
-    _regEmailController.dispose();
-    _regPasswordController.dispose();
+    _emailCtrl.dispose();
+    _passwordCtrl.dispose();
+    _inviteCodeCtrl.dispose();
+    _nameCtrl.dispose();
     super.dispose();
   }
 
-  void _flipToSignUp() {
-    setState(() => _errorMessage = null);
-    _flipController.forward();
-  }
-
-  void _flipToLogin() {
-    setState(() => _errorMessage = null);
-    _flipController.reverse();
-  }
-
   Future<void> _handleSignIn() async {
-    final email = _loginEmailController.text.trim();
-    final password = _loginPasswordController.text;
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
 
     if (email.isEmpty || password.isEmpty) {
-      const msg = 'Please enter your username/email and password.';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(msg),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      _showToast('Please enter your username/email and password.');
       return;
     }
 
@@ -139,38 +91,15 @@ class _AuthScreenState extends State<AuthScreen>
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
     } else {
-      if (res['requiresEmailVerification'] == true) {
-        _showEmailVerificationDialog(email);
-      } else {
-        final msg = res['message'] ?? 'Sign in failed.';
-        setState(() => _errorMessage = msg);
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(msg),
-              backgroundColor: const Color(0xFFDC2626),
-              behavior: SnackBarBehavior.floating,
-              duration: const Duration(seconds: 4),
-            ),
-          );
-        }
-      }
+      final msg = res['message'] ?? 'Sign in failed.';
+      _showToast(msg);
     }
   }
 
-  Future<void> _handleVerifyCode() async {
-    final code = _inviteCodeController.text.trim().toUpperCase();
+  Future<void> _handleVerifyInvite() async {
+    final code = _inviteCodeCtrl.text.trim().toUpperCase();
     if (code.isEmpty) {
-      const msg = 'Please enter your school invite code.';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(msg),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      _showToast('Please enter your school invite code.');
       return;
     }
 
@@ -188,56 +117,27 @@ class _AuthScreenState extends State<AuthScreen>
       setState(() {
         _isInviteVerified = true;
         _verifiedRole = res['role'];
-        if (res['target_email'] != null && _regEmailController.text.isEmpty) {
-          _regEmailController.text = res['target_email'];
+        if (res['target_email'] != null && _emailCtrl.text.isEmpty) {
+          _emailCtrl.text = res['target_email'];
         }
       });
     } else {
-      final msg = res['message'] ?? 'Invalid code.';
-      setState(() => _errorMessage = msg);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
+      _showToast(res['message'] ?? 'Invalid invite code.');
     }
   }
 
   Future<void> _handleCreateAccount() async {
-    final name = _regNameController.text.trim();
-    final email = _regEmailController.text.trim();
-    final password = _regPasswordController.text;
+    final name = _nameCtrl.text.trim();
+    final email = _emailCtrl.text.trim();
+    final password = _passwordCtrl.text;
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      const msg = 'Please complete all fields.';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(msg),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      _showToast('Please complete all fields.');
       return;
     }
 
     if (password.length < 6) {
-      const msg = 'Password must be at least 6 characters.';
-      setState(() => _errorMessage = msg);
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: const Text(msg),
-          backgroundColor: const Color(0xFFDC2626),
-          behavior: SnackBarBehavior.floating,
-          duration: const Duration(seconds: 3),
-        ),
-      );
+      _showToast('Password must be at least 6 characters.');
       return;
     }
 
@@ -247,7 +147,7 @@ class _AuthScreenState extends State<AuthScreen>
     });
 
     final res = await SupabaseService.instance.registerWithInviteCode(
-      code: _inviteCodeController.text.trim(),
+      code: _inviteCodeCtrl.text.trim(),
       fullName: name,
       email: email,
       password: password,
@@ -257,216 +157,299 @@ class _AuthScreenState extends State<AuthScreen>
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
-      if (res['requiresEmailVerification'] == true) {
-        _showEmailVerificationDialog(email, onConfirmed: () {
-          _flipToLogin();
-        });
-      } else {
-        AuthSessionService.instance.setRole(
-          res['role'] ?? 'parent',
-          name: name,
-          email: email,
-        );
-        if (mounted) {
-          Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-        }
+      AuthSessionService.instance.setRole(
+        res['role'] ?? 'parent',
+        name: name,
+        email: email,
+      );
+      if (mounted) {
+        Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
     } else {
-      final msg = res['message'] ?? 'Account creation failed.';
-      setState(() => _errorMessage = msg);
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(msg),
-            backgroundColor: const Color(0xFFDC2626),
-            behavior: SnackBarBehavior.floating,
-            duration: const Duration(seconds: 4),
-          ),
-        );
-      }
+      _showToast(res['message'] ?? 'Registration failed.');
     }
   }
 
-  void _showEmailVerificationDialog(String email, {VoidCallback? onConfirmed}) {
-    showDialog(
+  void _showToast(String message) {
+    setState(() => _errorMessage = message);
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        backgroundColor: const Color(0xFFE53935),
+        behavior: SnackBarBehavior.floating,
+        duration: const Duration(seconds: 4),
+      ),
+    );
+  }
+
+  Future<void> _launchExternalUrl(String url) async {
+    try {
+      final uri = Uri.parse(url);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri, mode: LaunchMode.externalApplication);
+      } else {
+        _showContactSheet();
+      }
+    } catch (_) {
+      _showContactSheet();
+    }
+  }
+
+  void _showContactSheet() {
+    showModalBottomSheet(
       context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: bgColor,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
-          children: [
-            Icon(Icons.mark_email_read_rounded, color: accentCoral),
-            SizedBox(width: 8),
-            Text(
-              'Verify Your Email',
-              style: TextStyle(color: primaryNavy, fontWeight: FontWeight.bold, fontSize: 18),
-            ),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              'A verification email has been sent to:\n$email',
-              style: const TextStyle(color: primaryNavy, fontSize: 14),
-            ),
-            const SizedBox(height: 12),
-            const Text(
-              'Please check your inbox and verify your email before logging in.',
-              style: TextStyle(color: subtitleGray, fontSize: 12),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              await SupabaseService.instance.resendVerificationEmail(email);
-              if (mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Verification email resent.')),
-                );
-              }
-            },
-            child: const Text('Resend Email', style: TextStyle(color: subtitleGray)),
+      backgroundColor: const Color(0xFF0C2431),
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Row(
+                children: [
+                  Icon(Icons.support_agent_rounded, color: Color(0xFFF7B928), size: 24),
+                  SizedBox(width: 10),
+                  Text(
+                    'Kheyrukum Islamic Center Contact',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              const Text(
+                'Addis Ababa, Bethel / Near Bethel Hospital\nContact our support team directly via Telegram or WhatsApp:',
+                style: TextStyle(color: Color(0xFF88A0B2), fontSize: 12),
+              ),
+              const SizedBox(height: 18),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF229ED9).withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.send_rounded, color: Color(0xFF229ED9), size: 20),
+                ),
+                title: const Text('Telegram Official', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('+251 943 42 22 22', style: TextStyle(color: Color(0xFF88A0B2), fontSize: 12)),
+                trailing: const Icon(Icons.open_in_new_rounded, color: Color(0xFF88A0B2), size: 18),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchExternalUrl(telegramLink);
+                },
+              ),
+              const Divider(color: Color(0xFF1E3A4B), height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFF25D366).withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.chat_rounded, color: Color(0xFF25D366), size: 20),
+                ),
+                title: const Text('WhatsApp Official', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('+251 943 42 22 22', style: TextStyle(color: Color(0xFF88A0B2), fontSize: 12)),
+                trailing: const Icon(Icons.open_in_new_rounded, color: Color(0xFF88A0B2), size: 18),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchExternalUrl(whatsappLink);
+                },
+              ),
+              const Divider(color: Color(0xFF1E3A4B), height: 1),
+              ListTile(
+                contentPadding: EdgeInsets.zero,
+                leading: Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFF7B928).withOpacity(0.18),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: const Icon(Icons.phone_rounded, color: Color(0xFFF7B928), size: 20),
+                ),
+                title: const Text('Direct Phone Support', style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold)),
+                subtitle: const Text('+251 913 49 44 28', style: TextStyle(color: Color(0xFF88A0B2), fontSize: 12)),
+                trailing: const Icon(Icons.call_rounded, color: Color(0xFF88A0B2), size: 18),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  _launchExternalUrl('tel:$phoneSecondary');
+                },
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.of(ctx).pop();
-              if (onConfirmed != null) {
-                onConfirmed();
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: accentCoral,
-              foregroundColor: Colors.white,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-            ),
-            child: const Text('Proceed to Login'),
-          ),
-        ],
+        ),
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final screenSize = MediaQuery.of(context).size;
-    final cardDiameter = (math.min(screenSize.width * 0.96, 480.0)).clamp(380.0, 500.0);
+    final size = MediaQuery.of(context).size;
 
     return Scaffold(
-      backgroundColor: bgColor,
-      body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            physics: const BouncingScrollPhysics(),
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-            child: Column(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                // 1. Centerpiece Round Logo Placed Just Above Card
-                _buildRoundLogo(size: 64),
-                const SizedBox(height: 12),
-
-                // 2. 3D Flipping Circular Card (Enlarged to fit all contents comfortably)
-                AnimatedBuilder(
-                  animation: _flipAnimation,
-                  builder: (context, child) {
-                    final angle = _flipAnimation.value;
-                    final isFront = angle < (math.pi / 2);
-
-                    return Transform(
-                      alignment: Alignment.center,
-                      transform: Matrix4.identity()
-                        ..setEntry(3, 2, 0.001) // 3D Perspective Depth
-                        ..rotateY(angle),
-                      child: Container(
-                        width: cardDiameter,
-                        height: cardDiameter,
-                        decoration: const BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: bgColor,
-                          boxShadow: [
-                            BoxShadow(
-                              color: lightShadow,
-                              offset: Offset(-9, -9),
-                              blurRadius: 18,
-                              spreadRadius: 1,
-                            ),
-                            BoxShadow(
-                              color: darkShadow,
-                              offset: Offset(9, 9),
-                              blurRadius: 18,
-                              spreadRadius: 1,
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Padding(
-                            padding: const EdgeInsets.symmetric(horizontal: 38, vertical: 24),
-                            child: isFront
-                                ? _buildFrontLogin()
-                                : Transform(
-                                    // Mirror back side so text reads correctly
-                                    alignment: Alignment.center,
-                                    transform: Matrix4.identity()..rotateY(math.pi),
-                                    child: _buildBackSignUp(),
-                                  ),
-                          ),
-                        ),
-                      ),
-                    );
-                  },
-                ),
-              ],
+      backgroundColor: const Color(0xFF071B26),
+      body: Stack(
+        children: [
+          // 1. Rich Background Gradient (Deep Navy to Dark Teal)
+          Container(
+            width: double.infinity,
+            height: double.infinity,
+            decoration: const BoxDecoration(
+              gradient: RadialGradient(
+                center: Alignment(0.0, -0.4),
+                radius: 1.25,
+                colors: [
+                  Color(0xFF0F3B4C), // Radiant center teal
+                  Color(0xFF08222F), // Deep emerald-navy
+                  Color(0xFF05151E), // Midnight base
+                ],
+              ),
             ),
           ),
-        ),
-      ),
-    );
-  }
 
-  Widget _buildRoundLogo({double size = 64}) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: const BoxDecoration(
-        shape: BoxShape.circle,
-        color: bgColor,
-        boxShadow: [
-          BoxShadow(
-            color: lightShadow,
-            offset: Offset(-5, -5),
-            blurRadius: 10,
+          // 2. Islamic Arabesque Arch & Mandala Corner Ornaments
+          Positioned.fill(
+            child: CustomPaint(
+              painter: _IslamicOrnamentPainter(),
+            ),
           ),
-          BoxShadow(
-            color: darkShadow,
-            offset: Offset(5, 5),
-            blurRadius: 10,
+
+          // 3. Foreground Interactive Content
+          SafeArea(
+            child: Center(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 28, vertical: 16),
+                child: ConstrainedBox(
+                  constraints: const BoxConstraints(maxWidth: 420),
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      const SizedBox(height: 10),
+
+                      // Circular Centerpiece Logo with Arch Frame
+                      _buildCenterpieceLogo(),
+                      const SizedBox(height: 14),
+
+                      // Amharic Title: ኸይሩኩም እስላማዊ ማዕከል
+                      const Text(
+                        'ኸይሩኩም እስላማዊ ማዕከል',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFF38B2AC), // Bright Tiffany/Teal
+                          fontSize: 21,
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 0.2,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+
+                      // English Title: Kheyrukum Islamic Center
+                      const Text(
+                        'Kheyrukum Islamic Center',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFFF3C06B), // Golden Tan
+                          fontSize: 17,
+                          fontWeight: FontWeight.w700,
+                          letterSpacing: 0.3,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+
+                      // Arabic Hadith: خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ
+                      const Text(
+                        'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
+                        textAlign: TextAlign.center,
+                        textDirection: TextDirection.rtl,
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 17,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.8,
+                          height: 1.4,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+
+                      // Portal Tagline
+                      const Text(
+                        'Parent & Teacher Quranic Collaborative Portal',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          color: Color(0xFFD4A373),
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      const SizedBox(height: 32),
+
+                      // Form Body (Login or Sign-Up)
+                      AnimatedSwitcher(
+                        duration: const Duration(milliseconds: 300),
+                        child: _isSignUpMode ? _buildSignUpForm() : _buildLoginForm(),
+                      ),
+
+                      const SizedBox(height: 24),
+
+                      // Social Connect Options: Telegram & WhatsApp from kheyrukum.com
+                      _buildSocialLinksRow(),
+                      const SizedBox(height: 12),
+                    ],
+                  ),
+                ),
+              ),
+            ),
           ),
         ],
       ),
-      padding: const EdgeInsets.all(5),
-      child: Container(
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white,
-          border: Border.all(
-            color: const Color(0xFF007A78).withOpacity(0.35),
-            width: 1.5,
+    );
+  }
+
+  Widget _buildCenterpieceLogo() {
+    return Container(
+      width: 104,
+      height: 104,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        color: Colors.white,
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFF38B2AC).withOpacity(0.35),
+            blurRadius: 26,
+            spreadRadius: 2,
+            offset: const Offset(0, 4),
           ),
+          BoxShadow(
+            color: const Color(0xFFF7B928).withOpacity(0.2),
+            blurRadius: 18,
+            spreadRadius: 1,
+          ),
+        ],
+        border: Border.all(
+          color: const Color(0xFF38B2AC).withOpacity(0.8),
+          width: 2.5,
         ),
-        child: ClipOval(
+      ),
+      child: ClipOval(
+        child: Padding(
+          padding: const EdgeInsets.all(4.0),
           child: Image.asset(
             'assets/images/logo.png',
-            width: size,
-            height: size,
-            fit: BoxFit.cover,
-            errorBuilder: (_, __, ___) => Icon(
-              Icons.menu_book_rounded,
-              color: const Color(0xFF007A78),
-              size: size * 0.5,
+            fit: BoxFit.contain,
+            errorBuilder: (_, __, ___) => const Center(
+              child: Icon(Icons.school_rounded, color: Color(0xFF0F3B4C), size: 48),
             ),
           ),
         ),
@@ -474,558 +457,469 @@ class _AuthScreenState extends State<AuthScreen>
     );
   }
 
-  /// Fixed-height error banner: reserves layout space so errors never push the signup link downward
-  Widget _buildErrorBanner() {
-    return SizedBox(
-      height: 22,
-      child: _errorMessage != null
-          ? AnimatedOpacity(
-              duration: const Duration(milliseconds: 200),
-              opacity: 1.0,
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
-                decoration: BoxDecoration(
-                  color: accentCoral.withOpacity(0.12),
-                  borderRadius: BorderRadius.circular(8),
-                  border: Border.all(color: accentCoral.withOpacity(0.35)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(Icons.error_outline_rounded, size: 12, color: accentCoral),
-                    const SizedBox(width: 4),
-                    Flexible(
-                      child: Text(
-                        _errorMessage!,
-                        style: const TextStyle(
-                          color: accentCoral,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w600,
-                        ),
-                        textAlign: TextAlign.center,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            )
-          : const SizedBox.shrink(),
-    );
-  }
-
   // ===========================================================================
-  // FRONT SIDE (LOGIN)
+  // LOGIN FORM
   // ===========================================================================
-  Widget _buildFrontLogin() {
+  Widget _buildLoginForm() {
     return Column(
-      mainAxisAlignment: MainAxisAlignment.center,
+      key: const ValueKey('login_form'),
       children: [
-        // Header
-        const Text(
-          'Login',
-          style: TextStyle(
-            fontSize: 25,
-            fontWeight: FontWeight.w800,
-            color: primaryNavy,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          'Sign in to your account',
-          style: TextStyle(
-            fontSize: 12,
-            color: subtitleGray,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 6),
-
-        // Fixed-height Error Banner (does not shift layout)
-        _buildErrorBanner(),
-        const SizedBox(height: 4),
-
-        // Recessed Field: Username
-        _buildRecessedTextField(
-          controller: _loginEmailController,
-          hintText: 'Username or Email',
-          icon: Icons.person_outline_rounded,
-        ),
-        const SizedBox(height: 10),
-
-        // Recessed Field: Password
-        _buildRecessedTextField(
-          controller: _loginPasswordController,
-          hintText: 'Password',
-          icon: Icons.lock_outline_rounded,
-          isPassword: true,
-        ),
-        const SizedBox(height: 8),
-
-        // Tactile Toggle Switch: Remember Me
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            const Text(
-              'Remember me',
-              style: TextStyle(
-                fontSize: 11.5,
-                color: primaryNavy,
-                fontWeight: FontWeight.w600,
-              ),
-            ),
-            _buildTactileSwitch(
-              value: _rememberMe,
-              onChanged: (val) => setState(() => _rememberMe = val),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-
-        // Raised Neumorphic Button: SIGN IN
-        _buildRaisedButton(
-          text: 'SIGN IN',
-          isPressed: _isSignInPressed,
-          isLoading: _isLoading,
-          onTapDown: () => setState(() => _isSignInPressed = true),
-          onTapUp: () => setState(() => _isSignInPressed = false),
-          onTap: _handleSignIn,
-        ),
-        const SizedBox(height: 10),
-
-        // Footer Text (positioned comfortably away from circle's bottom edge)
-        GestureDetector(
-          onTap: _flipToSignUp,
-          child: const Padding(
-            padding: EdgeInsets.symmetric(horizontal: 10.0, vertical: 6.0),
-            child: Text.rich(
-              TextSpan(
-                text: "Don't have an account? ",
-                style: TextStyle(fontSize: 11.5, color: subtitleGray),
-                children: [
-                  TextSpan(
-                    text: 'Sign up',
-                    style: TextStyle(
-                      color: accentCoral,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-        ),
-      ],
-    );
-  }
-
-  // ===========================================================================
-  // BACK SIDE (SIGN UP - TWO STEP FLOW)
-  // ===========================================================================
-  Widget _buildBackSignUp() {
-    return AnimatedSwitcher(
-      duration: const Duration(milliseconds: 280),
-      transitionBuilder: (child, animation) {
-        return FadeTransition(opacity: animation, child: child);
-      },
-      child: _isInviteVerified ? _buildSignUpStep2() : _buildSignUpStep1(),
-    );
-  }
-
-  // Step 1: Invite Code Verification
-  Widget _buildSignUpStep1() {
-    return Column(
-      key: const ValueKey('step1_invite'),
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const Text(
-          'Sign Up',
-          style: TextStyle(
-            fontSize: 25,
-            fontWeight: FontWeight.w800,
-            color: primaryNavy,
-            letterSpacing: -0.5,
-          ),
-        ),
-        const SizedBox(height: 2),
-        const Text(
-          'Enter your school invite code',
-          style: TextStyle(
-            fontSize: 12,
-            color: subtitleGray,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        _buildErrorBanner(),
-        const SizedBox(height: 6),
-
-        // Recessed Field: Invite Code
-        _buildRecessedTextField(
-          controller: _inviteCodeController,
-          hintText: 'Invite Code (e.g. KHY-TEA-1234)',
-          icon: Icons.confirmation_number_outlined,
-          textCapitalization: TextCapitalization.characters,
+        // Username / Email Input Box
+        _buildInputField(
+          controller: _emailCtrl,
+          hintText: 'Username / Email',
+          prefixIcon: Icons.person_outline_rounded,
         ),
         const SizedBox(height: 16),
 
-        // Raised Neumorphic Button: VERIFY CODE
-        _buildRaisedButton(
-          text: 'VERIFY CODE',
-          isPressed: _isVerifyPressed,
-          isLoading: _isLoading,
-          onTapDown: () => setState(() => _isVerifyPressed = true),
-          onTapUp: () => setState(() => _isVerifyPressed = false),
-          onTap: _handleVerifyCode,
+        // Password Input Box with Visibility Toggle
+        _buildInputField(
+          controller: _passwordCtrl,
+          hintText: 'Password',
+          prefixIcon: Icons.lock_outline_rounded,
+          isPassword: true,
+          obscureText: _obscurePassword,
+          onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
         ),
-        const SizedBox(height: 14),
+        const SizedBox(height: 10),
 
-        // Footer: Flip back to login
-        GestureDetector(
-          onTap: _flipToLogin,
-          child: const Padding(
-            padding: EdgeInsets.all(4.0),
-            child: Text.rich(
-              TextSpan(
-                text: 'Already have an account? ',
-                style: TextStyle(fontSize: 11, color: subtitleGray),
-                children: [
-                  TextSpan(
-                    text: 'Login',
-                    style: TextStyle(
-                      color: accentCoral,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ],
+        // Forgot Password Link
+        Align(
+          alignment: Alignment.centerRight,
+          child: TextButton(
+            onPressed: () {
+              _showToast('Please contact your center administrator or Ustaz to reset your password.');
+            },
+            style: TextButton.styleFrom(
+              padding: EdgeInsets.zero,
+              minimumSize: const Size(50, 24),
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: const Text(
+              'Forgot Password?',
+              style: TextStyle(
+                color: Color(0xFFD4A373),
+                fontSize: 12,
+                fontWeight: FontWeight.w500,
               ),
             ),
           ),
         ),
-        const SizedBox(height: 6),
-      ],
-    );
-  }
+        const SizedBox(height: 22),
 
-  // Step 2: User Information
-  Widget _buildSignUpStep2() {
-    return Column(
-      key: const ValueKey('step2_profile'),
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        const SizedBox(height: 8),
+        // Glowing Golden LOGIN Button
+        _buildGoldButton(
+          title: 'LOGIN',
+          isLoading: _isLoading,
+          onTap: _handleSignIn,
+        ),
+        const SizedBox(height: 20),
+
+        // Don't have an account? Sign Up
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              'Welcome',
-              style: TextStyle(
-                fontSize: 22,
-                fontWeight: FontWeight.w800,
-                color: primaryNavy,
-                letterSpacing: -0.5,
+              "Don't have an account? ",
+              style: TextStyle(color: Color(0xFF88A0B2), fontSize: 13),
+            ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isSignUpMode = true;
+                  _errorMessage = null;
+                });
+              },
+              child: const Text(
+                'Sign Up',
+                style: TextStyle(
+                  color: Color(0xFFF3C06B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
+                ),
               ),
             ),
-            if (_verifiedRole != null) ...[
-              const SizedBox(width: 6),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                decoration: BoxDecoration(
-                  color: accentCoral.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: Text(
-                  _verifiedRole!.toUpperCase(),
-                  style: const TextStyle(
-                    color: accentCoral,
-                    fontSize: 9,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-              ),
-            ],
           ],
         ),
-        const SizedBox(height: 2),
-        const Text(
-          'Complete your profile',
-          style: TextStyle(
-            fontSize: 11.5,
-            color: subtitleGray,
-            fontWeight: FontWeight.w500,
-          ),
-        ),
-        const SizedBox(height: 10),
-
-        _buildErrorBanner(),
-
-        // Recessed Field: Full name
-        _buildRecessedTextField(
-          controller: _regNameController,
-          hintText: 'Full name',
-          icon: Icons.badge_outlined,
-        ),
-        const SizedBox(height: 8),
-
-        // Recessed Field: Email
-        _buildRecessedTextField(
-          controller: _regEmailController,
-          hintText: 'Email',
-          icon: Icons.alternate_email_rounded,
-          keyboardType: TextInputType.emailAddress,
-        ),
-        const SizedBox(height: 8),
-
-        // Recessed Field: Password
-        _buildRecessedTextField(
-          controller: _regPasswordController,
-          hintText: 'Password',
-          icon: Icons.lock_outline_rounded,
-          isPassword: true,
-        ),
-        const SizedBox(height: 12),
-
-        // Raised Neumorphic Button: CREATE ACCOUNT
-        _buildRaisedButton(
-          text: 'CREATE ACCOUNT',
-          isPressed: _isCreatePressed,
-          isLoading: _isLoading,
-          onTapDown: () => setState(() => _isCreatePressed = true),
-          onTapUp: () => setState(() => _isCreatePressed = false),
-          onTap: _handleCreateAccount,
-        ),
-        const SizedBox(height: 8),
-
-        // Footer: Cancel Sign Up
-        GestureDetector(
-          onTap: () {
-            setState(() => _isInviteVerified = false);
-            _flipToLogin();
-          },
-          child: const Padding(
-            padding: EdgeInsets.all(4.0),
-            child: Text(
-              'Cancel Sign Up',
-              style: TextStyle(
-                fontSize: 11,
-                color: subtitleGray,
-                fontWeight: FontWeight.w600,
-                decoration: TextDecoration.underline,
-              ),
-            ),
-          ),
-        ),
-        const SizedBox(height: 6),
       ],
     );
   }
 
   // ===========================================================================
-  // NEUMORPHIC RECESSED TEXT FIELD (INSET SHADOW EFFECT)
+  // SIGN UP FORM
   // ===========================================================================
-  Widget _buildRecessedTextField({
-    required TextEditingController controller,
-    required String hintText,
-    required IconData icon,
-    bool isPassword = false,
-    TextInputType keyboardType = TextInputType.text,
-    TextCapitalization textCapitalization = TextCapitalization.none,
-  }) {
-    return Container(
-      height: 42,
-      decoration: BoxDecoration(
-        color: bgColor,
-        borderRadius: BorderRadius.circular(12),
-        // Inset/Recessed shadow simulation
-        boxShadow: const [
-          BoxShadow(
-            color: darkShadow,
-            offset: Offset(2, 2),
-            blurRadius: 4,
-            spreadRadius: 0.5,
+  Widget _buildSignUpForm() {
+    return Column(
+      key: const ValueKey('signup_form'),
+      children: [
+        if (!_isInviteVerified) ...[
+          // Step 1: Invite Code Verification
+          _buildInputField(
+            controller: _inviteCodeCtrl,
+            hintText: 'School Invite Code (e.g. KHY-TEA-1234)',
+            prefixIcon: Icons.card_membership_rounded,
+            textCapitalization: TextCapitalization.characters,
           ),
-          BoxShadow(
-            color: lightShadow,
-            offset: Offset(-2, -2),
-            blurRadius: 4,
-            spreadRadius: 0.5,
+          const SizedBox(height: 20),
+          _buildGoldButton(
+            title: 'VERIFY CODE',
+            isLoading: _isLoading,
+            onTap: _handleVerifyInvite,
+          ),
+        ] else ...[
+          // Step 2: Account details
+          if (_verifiedRole != null)
+            Container(
+              margin: const EdgeInsets.only(bottom: 14),
+              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              decoration: BoxDecoration(
+                color: const Color(0xFF38B2AC).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: const Color(0xFF38B2AC)),
+              ),
+              child: Text(
+                'Verified as ${_verifiedRole!.toUpperCase()}',
+                style: const TextStyle(
+                  color: Color(0xFF38B2AC),
+                  fontSize: 12,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ),
+          _buildInputField(
+            controller: _nameCtrl,
+            hintText: 'Full Name',
+            prefixIcon: Icons.badge_outlined,
+          ),
+          const SizedBox(height: 14),
+          _buildInputField(
+            controller: _emailCtrl,
+            hintText: 'Email Address',
+            prefixIcon: Icons.email_outlined,
+          ),
+          const SizedBox(height: 14),
+          _buildInputField(
+            controller: _passwordCtrl,
+            hintText: 'Create Password (min. 6 characters)',
+            prefixIcon: Icons.lock_outline_rounded,
+            isPassword: true,
+            obscureText: _obscurePassword,
+            onToggleVisibility: () => setState(() => _obscurePassword = !_obscurePassword),
+          ),
+          const SizedBox(height: 20),
+          _buildGoldButton(
+            title: 'CREATE ACCOUNT',
+            isLoading: _isLoading,
+            onTap: _handleCreateAccount,
           ),
         ],
-      ),
-      child: Container(
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          gradient: LinearGradient(
-            colors: [
-              darkShadow.withOpacity(0.18),
-              lightShadow.withOpacity(0.35),
-            ],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        padding: const EdgeInsets.symmetric(horizontal: 10),
-        child: Row(
+        const SizedBox(height: 20),
+
+        // Already have an account? Login
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            Icon(icon, size: 18, color: primaryNavy.withOpacity(0.7)),
-            const SizedBox(width: 8),
-            Expanded(
-              child: TextField(
-                controller: controller,
-                obscureText: isPassword,
-                keyboardType: keyboardType,
-                textCapitalization: textCapitalization,
-                style: const TextStyle(
-                  fontSize: 12.5,
-                  color: primaryNavy,
-                  fontWeight: FontWeight.w600,
-                ),
-                decoration: InputDecoration(
-                  hintText: hintText,
-                  hintStyle: TextStyle(
-                    fontSize: 12,
-                    color: subtitleGray.withOpacity(0.75),
-                    fontWeight: FontWeight.w500,
-                  ),
-                  border: InputBorder.none,
-                  isDense: true,
-                  contentPadding: const EdgeInsets.symmetric(vertical: 10),
+            const Text(
+              'Already have an account? ',
+              style: TextStyle(color: Color(0xFF88A0B2), fontSize: 13),
+            ),
+            GestureDetector(
+              onTap: () {
+                setState(() {
+                  _isSignUpMode = false;
+                  _isInviteVerified = false;
+                  _errorMessage = null;
+                });
+              },
+              child: const Text(
+                'Login',
+                style: TextStyle(
+                  color: Color(0xFFF3C06B),
+                  fontWeight: FontWeight.bold,
+                  fontSize: 13,
                 ),
               ),
             ),
           ],
         ),
+      ],
+    );
+  }
+
+  // Styled Gold-Trimmed Glass Input Box
+  Widget _buildInputField({
+    required TextEditingController controller,
+    required String hintText,
+    required IconData prefixIcon,
+    bool isPassword = false,
+    bool obscureText = false,
+    VoidCallback? onToggleVisibility,
+    TextCapitalization textCapitalization = TextCapitalization.none,
+  }) {
+    return Container(
+      decoration: BoxDecoration(
+        color: const Color(0xFF0B2836).withOpacity(0.72), // Dark Slate Glass
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: const Color(0xFF3A697F).withOpacity(0.85), // Soft Blue-Gold border
+          width: 1.5,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: TextField(
+        controller: controller,
+        obscureText: isPassword && obscureText,
+        textCapitalization: textCapitalization,
+        style: const TextStyle(color: Colors.white, fontSize: 14),
+        decoration: InputDecoration(
+          isDense: true,
+          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 15),
+          border: InputBorder.none,
+          hintText: hintText,
+          hintStyle: TextStyle(
+            color: const Color(0xFF7A97A6).withOpacity(0.8),
+            fontSize: 13.5,
+          ),
+          prefixIcon: Icon(
+            prefixIcon,
+            color: const Color(0xFF8DB6C7),
+            size: 20,
+          ),
+          suffixIcon: isPassword
+              ? IconButton(
+                  icon: Icon(
+                    obscureText ? Icons.visibility_off_outlined : Icons.visibility_outlined,
+                    color: const Color(0xFF7A97A6),
+                    size: 19,
+                  ),
+                  onPressed: onToggleVisibility,
+                )
+              : null,
+        ),
       ),
     );
   }
 
-  // ===========================================================================
-  // RAISED NEUMORPHIC BUTTON
-  // ===========================================================================
-  Widget _buildRaisedButton({
-    required String text,
-    required bool isPressed,
+  // Golden Amber Gradient Button with Smooth Corners
+  Widget _buildGoldButton({
+    required String title,
     required bool isLoading,
-    required VoidCallback onTapDown,
-    required VoidCallback onTapUp,
     required VoidCallback onTap,
   }) {
-    return GestureDetector(
-      onTapDown: (_) => onTapDown(),
-      onTapUp: (_) => onTapUp(),
-      onTapCancel: () => onTapUp(),
-      onTap: isLoading ? null : onTap,
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 100),
-        width: double.infinity,
-        height: 42,
-        decoration: BoxDecoration(
-          color: bgColor,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: isPressed
-              ? [
-                  const BoxShadow(
-                    color: darkShadow,
-                    offset: Offset(2, 2),
-                    blurRadius: 3,
-                  ),
-                  const BoxShadow(
-                    color: lightShadow,
-                    offset: Offset(-2, -2),
-                    blurRadius: 3,
-                  ),
-                ]
-              : const [
-                  BoxShadow(
-                    color: darkShadow,
-                    offset: Offset(4, 4),
-                    blurRadius: 8,
-                  ),
-                  BoxShadow(
-                    color: lightShadow,
-                    offset: Offset(-4, -4),
-                    blurRadius: 8,
-                  ),
-                ],
-        ),
-        child: Center(
-          child: isLoading
-              ? const SizedBox(
-                  width: 18,
-                  height: 18,
-                  child: CircularProgressIndicator(
-                    strokeWidth: 2,
-                    valueColor: AlwaysStoppedAnimation<Color>(accentCoral),
-                  ),
-                )
-              : Text(
-                  text,
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w800,
-                    letterSpacing: 1.1,
-                    color: primaryNavy,
-                  ),
-                ),
-        ),
-      ),
-    );
-  }
-
-  // ===========================================================================
-  // TACTILE TOGGLE SWITCH
-  // ===========================================================================
-  Widget _buildTactileSwitch({
-    required bool value,
-    required ValueChanged<bool> onChanged,
-  }) {
-    return GestureDetector(
-      onTap: () => onChanged(!value),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        width: 44,
-        height: 24,
-        padding: const EdgeInsets.all(2.5),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          color: bgColor,
-          boxShadow: const [
-            BoxShadow(
-              color: darkShadow,
-              offset: Offset(1.5, 1.5),
-              blurRadius: 3,
-            ),
-            BoxShadow(
-              color: lightShadow,
-              offset: Offset(-1.5, -1.5),
-              blurRadius: 3,
-            ),
+    return Container(
+      width: double.infinity,
+      height: 52,
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: const LinearGradient(
+          colors: [
+            Color(0xFFF7BD38), // Golden Yellow
+            Color(0xFFE5A118), // Rich Gold
+            Color(0xFFCA8200), // Deep Amber Gold
           ],
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
         ),
-        child: AnimatedAlign(
-          duration: const Duration(milliseconds: 180),
-          alignment: value ? Alignment.centerRight : Alignment.centerLeft,
-          child: Container(
-            width: 19,
-            height: 19,
-            decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              color: value ? accentCoral : darkShadow,
-              boxShadow: const [
-                BoxShadow(
-                  color: Colors.black12,
-                  offset: Offset(1, 1),
-                  blurRadius: 2,
-                ),
-              ],
-            ),
+        boxShadow: [
+          BoxShadow(
+            color: const Color(0xFFF7BD38).withOpacity(0.4),
+            blurRadius: 16,
+            spreadRadius: 1,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Material(
+        color: Colors.transparent,
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: isLoading ? null : onTap,
+          child: Center(
+            child: isLoading
+                ? const SizedBox(
+                    width: 22,
+                    height: 22,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.5,
+                      valueColor: AlwaysStoppedAnimation<Color>(Color(0xFF0F3B4C)),
+                    ),
+                  )
+                : Text(
+                    title,
+                    style: const TextStyle(
+                      color: Color(0xFF162A35), // Dark Midnight Green font for high contrast
+                      fontSize: 15,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
           ),
         ),
       ),
     );
   }
+
+  // Telegram and WhatsApp Quick Connect Row from kheyrukum.com
+  Widget _buildSocialLinksRow() {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        // Telegram Button
+        _buildSocialIconBox(
+          icon: Icons.send_rounded,
+          color: const Color(0xFFF3C06B),
+          tooltip: 'Telegram: +251 943 42 22 22',
+          onTap: () => _launchExternalUrl(telegramLink),
+        ),
+        const SizedBox(width: 14),
+        const Text(
+          'or',
+          style: TextStyle(
+            color: Color(0xFF6A8696),
+            fontSize: 12,
+            fontStyle: FontStyle.italic,
+          ),
+        ),
+        const SizedBox(width: 14),
+        // WhatsApp Button
+        _buildSocialIconBox(
+          icon: Icons.chat_bubble_outline_rounded,
+          color: const Color(0xFF38B2AC),
+          tooltip: 'WhatsApp: +251 943 42 22 22',
+          onTap: () => _launchExternalUrl(whatsappLink),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildSocialIconBox({
+    required IconData icon,
+    required Color color,
+    required String tooltip,
+    required VoidCallback onTap,
+  }) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0A222F).withOpacity(0.7),
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: color.withOpacity(0.55),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: color.withOpacity(0.15),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
+              ),
+            ],
+          ),
+          child: Icon(icon, color: color, size: 19),
+        ),
+      ),
+    );
+  }
+}
+
+/// Custom Painter for the top Islamic Mihrab Arch and bottom arabesque flourishes
+class _IslamicOrnamentPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paintStroke = Paint()
+      ..color = const Color(0xFF38B2AC).withOpacity(0.14)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.2;
+
+    // Top Mihrab Arch Outline
+    final archPath = Path();
+    archPath.moveTo(0, size.height * 0.18);
+    archPath.quadraticBezierTo(
+      size.width * 0.15,
+      size.height * 0.16,
+      size.width * 0.28,
+      size.height * 0.08,
+    );
+    archPath.quadraticBezierTo(
+      size.width * 0.40,
+      size.height * 0.02,
+      size.width * 0.50,
+      size.height * 0.005,
+    );
+    archPath.quadraticBezierTo(
+      size.width * 0.60,
+      size.height * 0.02,
+      size.width * 0.72,
+      size.height * 0.08,
+    );
+    archPath.quadraticBezierTo(
+      size.width * 0.85,
+      size.height * 0.16,
+      size.width,
+      size.height * 0.18,
+    );
+    canvas.drawPath(archPath, paintStroke);
+
+    // Secondary Nested Arch
+    final innerArch = Path();
+    innerArch.moveTo(size.width * 0.08, size.height * 0.17);
+    innerArch.quadraticBezierTo(
+      size.width * 0.22,
+      size.height * 0.14,
+      size.width * 0.32,
+      size.height * 0.09,
+    );
+    innerArch.quadraticBezierTo(
+      size.width * 0.42,
+      size.height * 0.04,
+      size.width * 0.50,
+      size.height * 0.025,
+    );
+    innerArch.quadraticBezierTo(
+      size.width * 0.58,
+      size.height * 0.04,
+      size.width * 0.68,
+      size.height * 0.09,
+    );
+    innerArch.quadraticBezierTo(
+      size.width * 0.78,
+      size.height * 0.14,
+      size.width * 0.92,
+      size.height * 0.17,
+    );
+    canvas.drawPath(
+      innerArch,
+      paintStroke..color = const Color(0xFFF7BD38).withOpacity(0.08),
+    );
+
+    // Bottom Decorative Corner Arabesque Mandalas
+    _drawMandalaCorner(canvas, size.width, size.height, isBottomRight: true);
+    _drawMandalaCorner(canvas, 0, 0, isBottomRight: false);
+  }
+
+  void _drawMandalaCorner(Canvas canvas, double cx, double cy, {required bool isBottomRight}) {
+    final mandalaPaint = Paint()
+      ..color = const Color(0xFF38B2AC).withOpacity(0.12)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.0;
+
+    for (int r = 30; r <= 150; r += 28) {
+      canvas.drawCircle(Offset(cx, cy), r.toDouble(), mandalaPaint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

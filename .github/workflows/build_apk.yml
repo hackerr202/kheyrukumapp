@@ -94,6 +94,8 @@ jobs:
           find "$PUB_DIR" -type f -name "build.gradle" -exec sed -i 's/compileSdkVersion 34/compileSdkVersion 35/g' {} + || true
           find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = flutter\.compileSdkVersion/compileSdk = 35/g' {} + || true
           find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = 34/compileSdk = 35/g' {} + || true
+          # Remove legacy package attribute in plugin AndroidManifests for AGP 8+ compatibility
+          find "$PUB_DIR" -type f -name "AndroidManifest.xml" -exec sed -i 's/package="[a-zA-Z0-9_\.]*"//g' {} + || true
 
       - name: Build Release APK
         run: |
