@@ -39,7 +39,7 @@ class AppTheme {
         onSurface: AppColors.textPrimaryLight,
         onBackground: AppColors.textPrimaryLight,
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceCardLight,
         elevation: 6,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
@@ -134,7 +134,7 @@ class AppTheme {
         onSurface: AppColors.textPrimary,
         onBackground: AppColors.textPrimary,
       ),
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: AppColors.surfaceCard,
         elevation: 8,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
