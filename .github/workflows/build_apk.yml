@@ -96,6 +96,8 @@ jobs:
           find "$PUB_DIR" -type f -name "build.gradle.kts" -exec sed -i 's/compileSdk = 34/compileSdk = 35/g' {} + || true
           # Remove legacy package attribute in plugin AndroidManifests for AGP 8+ compatibility
           find "$PUB_DIR" -type f -name "AndroidManifest.xml" -exec sed -i 's/package="[a-zA-Z0-9_\.]*"//g' {} + || true
+          # Fix record_linux missing implementation of record_platform_interface members during static analysis
+          find "$PUB_DIR" -type f -name "record_linux.dart" -exec sed -i 's/class RecordLinux extends RecordPlatform/abstract class RecordLinux extends RecordPlatform/g' {} + || true
 
       - name: Build Release APK
         run: |
