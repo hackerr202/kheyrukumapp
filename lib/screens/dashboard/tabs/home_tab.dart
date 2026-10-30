@@ -48,7 +48,7 @@ class _HomeTabState extends State<HomeTab> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
           children: [
             if (isAdmin) ...[
-              // Latest Announcement at the top
+              // Announcements Carousel at the top (displays >= 3 announcements)
               _buildAnnouncementsSection(
                 context: context,
                 isDark: isDark,
@@ -59,7 +59,19 @@ class _HomeTabState extends State<HomeTab> {
                 subtleBorder: subtleBorder,
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
+
+              // Center Status Card (Setup checklist or live center stats: Students, Halaqahs, Teachers)
+              _buildAdminCenterStatusCard(
+                context: context,
+                isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtextColor: subtextColor,
+                subtleBorder: subtleBorder,
+              ),
+
+              const SizedBox(height: 20),
 
               // Quick Actions Row (4 icons: Post notice, Invite codes, Add student, Create halaqah)
               _buildQuickActionsRow(
@@ -70,7 +82,7 @@ class _HomeTabState extends State<HomeTab> {
                 subtleBorder: subtleBorder,
               ),
 
-              const SizedBox(height: 24),
+              const SizedBox(height: 20),
 
               // Invite Codes collapsed single row
               _buildInviteCodesCollapsedRow(
@@ -639,71 +651,14 @@ class _HomeTabState extends State<HomeTab> {
               );
             }
 
-            // Exactly 1 latest announcement as a simple card without heavy borders
-            final latest = announcements.first;
-
-            return InkWell(
-              onTap: () => AnnouncementsSheet.show(context),
-              borderRadius: BorderRadius.circular(16),
-              child: Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: subtleBorder, width: 1),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        const Row(
-                          children: [
-                            Icon(Icons.campaign_rounded, size: 16, color: _limeAccent),
-                            SizedBox(width: 6),
-                            Text(
-                              'CENTER NOTICE',
-                              style: TextStyle(
-                                color: _limeAccent,
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.w700,
-                                letterSpacing: 0.5,
-                              ),
-                            ),
-                          ],
-                        ),
-                        Text(
-                          _formatDate(latest.createdAt),
-                          style: TextStyle(fontSize: 11, color: subtextColor),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      latest.title,
-                      style: TextStyle(
-                        fontSize: 14.5,
-                        fontWeight: FontWeight.bold,
-                        color: textColor,
-                      ),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      latest.content,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: subtextColor,
-                        height: 1.35,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+            // Prominently display at least 3 announcements in an interactive swipeable carousel
+            return _AnnouncementsCarousel(
+              announcements: announcements,
+              isDark: isDark,
+              cardBg: cardBg,
+              textColor: textColor,
+              subtextColor: subtextColor,
+              subtleBorder: subtleBorder,
             );
           },
         ),
@@ -903,5 +858,234 @@ class _HomeTabState extends State<HomeTab> {
     } else {
       return '${dt.month}/${dt.day}';
     }
+  }
+}
+
+class _AnnouncementsCarousel extends StatefulWidget {
+  final List<Announcement> announcements;
+  final bool isDark;
+  final Color cardBg;
+  final Color textColor;
+  final Color subtextColor;
+  final Color subtleBorder;
+
+  const _AnnouncementsCarousel({
+    required this.announcements,
+    required this.isDark,
+    required this.cardBg,
+    required this.textColor,
+    required this.subtextColor,
+    required this.subtleBorder,
+  });
+
+  @override
+  State<_AnnouncementsCarousel> createState() => _AnnouncementsCarouselState();
+}
+
+class _AnnouncementsCarouselState extends State<_AnnouncementsCarousel> {
+  late final PageController _pageController;
+  int _currentPage = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _pageController = PageController();
+  }
+
+  @override
+  void dispose() {
+    _pageController.dispose();
+    super.dispose();
+  }
+
+  String _formatAnnouncementDate(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 60) {
+      return diff.inMinutes <= 1 ? 'Just now' : '${diff.inMinutes}m ago';
+    } else if (diff.inHours < 24) {
+      return '${diff.inHours}h ago';
+    } else {
+      return '${dt.month}/${dt.day}';
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    // Prominently display at least 3 announcements (up to 5)
+    final items = widget.announcements.take(5).toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          height: 154,
+          child: PageView.builder(
+            controller: _pageController,
+            itemCount: items.length,
+            onPageChanged: (index) {
+              setState(() {
+                _currentPage = index;
+              });
+            },
+            itemBuilder: (context, index) {
+              final item = items[index];
+              final isPinned = item.isPinned;
+
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 2),
+                child: InkWell(
+                  onTap: () => AnnouncementsSheet.show(context),
+                  borderRadius: BorderRadius.circular(16),
+                  child: Container(
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: widget.cardBg,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: isPinned ? AppColors.accentAmber.withOpacity(0.4) : widget.subtleBorder,
+                        width: isPinned ? 1.5 : 1,
+                      ),
+                      boxShadow: [
+                        if (isPinned)
+                          BoxShadow(
+                            color: AppColors.accentAmber.withOpacity(0.08),
+                            blurRadius: 10,
+                            offset: const Offset(0, 2),
+                          ),
+                      ],
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  isPinned ? Icons.push_pin_rounded : Icons.campaign_rounded,
+                                  size: 16,
+                                  color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
+                                ),
+                                const SizedBox(width: 6),
+                                Text(
+                                  isPinned ? 'PINNED NOTICE' : 'CENTER NOTICE',
+                                  style: TextStyle(
+                                    color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                                if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
+                                  const SizedBox(width: 8),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                    decoration: BoxDecoration(
+                                      color: widget.isDark
+                                          ? const Color(0xFF334155)
+                                          : const Color(0xFFE2E8F0),
+                                      borderRadius: BorderRadius.circular(4),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(Icons.attach_file_rounded, size: 11, color: widget.subtextColor),
+                                        const SizedBox(width: 2),
+                                        Text(
+                                          'Attachment',
+                                          style: TextStyle(
+                                            fontSize: 9.5,
+                                            fontWeight: FontWeight.w600,
+                                            color: widget.subtextColor,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ],
+                            ),
+                            Text(
+                              _formatAnnouncementDate(item.createdAt),
+                              style: TextStyle(fontSize: 11, color: widget.subtextColor),
+                            ),
+                          ],
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          item.title,
+                          style: TextStyle(
+                            fontSize: 14.5,
+                            fontWeight: FontWeight.bold,
+                            color: widget.textColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: Text(
+                            item.content,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: widget.subtextColor,
+                              height: 1.35,
+                            ),
+                          ),
+                        ),
+                        if (item.authorName.isNotEmpty) ...[
+                          const SizedBox(height: 2),
+                          Text(
+                            'By ${item.authorName}',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontStyle: FontStyle.italic,
+                              color: widget.subtextColor.withOpacity(0.8),
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        if (items.length > 1) ...[
+          const SizedBox(height: 8),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              ...List.generate(items.length, (idx) {
+                final isSelected = idx == _currentPage;
+                return AnimatedContainer(
+                  duration: const Duration(milliseconds: 200),
+                  margin: const EdgeInsets.symmetric(horizontal: 3),
+                  width: isSelected ? 16 : 6,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: isSelected ? const Color(0xFFC9F24A) : widget.subtextColor.withOpacity(0.35),
+                    borderRadius: BorderRadius.circular(3),
+                  ),
+                );
+              }),
+              const SizedBox(width: 8),
+              Text(
+                '${_currentPage + 1} of ${items.length}',
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: widget.subtextColor,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
   }
 }

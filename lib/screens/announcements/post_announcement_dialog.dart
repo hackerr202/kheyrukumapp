@@ -1,11 +1,14 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/storage_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Redesigned Modern Modal dialog for Admins to compose and broadcast real-time announcements
-/// with quick attachment/URL pasting and clean aesthetic (no cluttered categories).
+/// with genuine native device file picker and Supabase Storage uploads.
 class PostAnnouncementDialog extends StatefulWidget {
   const PostAnnouncementDialog({super.key});
 
@@ -16,14 +19,18 @@ class PostAnnouncementDialog extends StatefulWidget {
 class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  final _attachmentUrlController = TextEditingController();
   late final TextEditingController _authorController;
 
   String _selectedAudience = 'all';
   bool _isPinned = false;
   bool _isBroadcasting = false;
   String? _errorMessage;
-  bool _showAttachmentField = false;
+
+  // Real device media & storage state
+  String? _attachmentName;
+  String? _attachmentUrl;
+  int? _attachmentSize;
+  bool _isUploadingAttachment = false;
 
   @override
   void initState() {
@@ -38,34 +45,91 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   void dispose() {
     _titleController.dispose();
     _contentController.dispose();
-    _attachmentUrlController.dispose();
     _authorController.dispose();
     super.dispose();
   }
 
-  Future<void> _pasteFromClipboard() async {
-    final data = await Clipboard.getData('text/plain');
-    if (data?.text != null && data!.text!.isNotEmpty) {
+  String _formatFileSize(int bytes) {
+    if (bytes < 1024) return '$bytes B';
+    if (bytes < 1024 * 1024) return '${(bytes / 1024).toStringAsFixed(1)} KB';
+    return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
+  }
+
+  /// Pick file directly from device storage and upload to Supabase Storage
+  Future<void> _pickAndUploadAttachment() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt'],
+        withData: true,
+      );
+
+      if (result == null || result.files.isEmpty) return;
+
+      final pickedFile = result.files.first;
+      final fileName = pickedFile.name;
+      final fileBytes = pickedFile.bytes ??
+          (pickedFile.path != null ? await File(pickedFile.path!).readAsBytes() : null);
+
+      if (fileBytes == null) {
+        setState(() => _errorMessage = 'Could not read selected file data from device.');
+        return;
+      }
+
       setState(() {
-        _showAttachmentField = true;
-        _attachmentUrlController.text = data.text!.trim();
+        _isUploadingAttachment = true;
+        _errorMessage = null;
       });
-      if (mounted) {
+
+      final uploadedUrl = await StorageService.uploadAnnouncementAttachment(
+        fileName: fileName,
+        bytes: fileBytes,
+      );
+
+      if (!mounted) return;
+
+      if (uploadedUrl != null) {
+        setState(() {
+          _attachmentName = fileName;
+          _attachmentUrl = uploadedUrl;
+          _attachmentSize = pickedFile.size;
+          _isUploadingAttachment = false;
+        });
+
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Pasted attachment link from clipboard! 📎'),
-            duration: Duration(seconds: 2),
+          SnackBar(
+            content: Text('Attached "$fileName" from device successfully! 📎'),
+            backgroundColor: const Color(0xFF10B981),
             behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
           ),
         );
+      } else {
+        setState(() {
+          _isUploadingAttachment = false;
+          _errorMessage = 'Cloud upload failed. Please check network connection and try again.';
+        });
       }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingAttachment = false;
+        _errorMessage = 'Failed to select file: ${SupabaseService.cleanErrorMessage(e)}';
+      });
     }
+  }
+
+  void _removeAttachment() {
+    setState(() {
+      _attachmentName = null;
+      _attachmentUrl = null;
+      _attachmentSize = null;
+    });
   }
 
   Future<void> _handleBroadcast() async {
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
-    final attachment = _attachmentUrlController.text.trim();
 
     if (title.isEmpty || content.isEmpty) {
       setState(() => _errorMessage = 'Please provide both title and circular text.');
@@ -77,32 +141,43 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       _errorMessage = null;
     });
 
-    final res = await AnnouncementService.instance.broadcastAnnouncement(
-      title: title,
-      content: content,
-      targetAudience: _selectedAudience,
-      authorName: _authorController.text.trim(),
-      isPinned: _isPinned,
-      attachmentUrl: attachment.isNotEmpty ? attachment : null,
-      attachmentName: attachment.isNotEmpty ? 'Attached Document' : null,
-    );
-
-    if (!mounted) return;
-    setState(() => _isBroadcasting = false);
-
-    if (res['success'] == true) {
-      Navigator.of(context).pop(true);
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Announcement broadcasted to all users successfully! 📢'),
-          backgroundColor: Color(0xFF10B981),
-          behavior: SnackBarBehavior.floating,
-        ),
+    try {
+      final res = await AnnouncementService.instance.broadcastAnnouncement(
+        title: title,
+        content: content,
+        targetAudience: _selectedAudience,
+        authorName: _authorController.text.trim(),
+        isPinned: _isPinned,
+        attachmentUrl: _attachmentUrl,
+        attachmentName: _attachmentName,
       );
-    } else {
-      setState(() {
-        _errorMessage = res['error'] ?? 'Broadcast failed. Please check your connection.';
-      });
+
+      if (!mounted) return;
+
+      if (res['success'] == true) {
+        Navigator.of(context).pop(true);
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Announcement broadcasted to all users successfully! 📢'),
+            backgroundColor: Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      } else {
+        setState(() {
+          _errorMessage = res['error'] ?? 'Broadcast failed. Please check your connection.';
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _errorMessage = SupabaseService.cleanErrorMessage(e);
+        });
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isBroadcasting = false);
+      }
     }
   }
 
@@ -218,72 +293,129 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                 ),
               ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
-              // Attachment Pasting Section
-              if (!_showAttachmentField)
+              // Native Device File Upload Section
+              Text(
+                'ATTACHMENT',
+                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+              ),
+              const SizedBox(height: 6),
+
+              if (_isUploadingAttachment)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  decoration: BoxDecoration(
+                    color: fieldBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: subtleBorder),
+                  ),
+                  child: Row(
+                    children: [
+                      const SizedBox(
+                        width: 18,
+                        height: 18,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: limeGreen),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Text(
+                          'Uploading attachment to cloud storage...',
+                          style: TextStyle(fontSize: 12.5, color: textColor, fontWeight: FontWeight.w500),
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              else if (_attachmentUrl != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  decoration: BoxDecoration(
+                    color: fieldBg,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: limeGreen.withOpacity(0.5)),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: limeGreen.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: const Icon(Icons.insert_drive_file_rounded, color: limeGreen, size: 20),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _attachmentName ?? 'Attached File',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                            const SizedBox(height: 2),
+                            Row(
+                              children: [
+                                if (_attachmentSize != null) ...[
+                                  Text(
+                                    _formatFileSize(_attachmentSize!),
+                                    style: TextStyle(fontSize: 11, color: subtextColor),
+                                  ),
+                                  const SizedBox(width: 8),
+                                ],
+                                Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                  decoration: BoxDecoration(
+                                    color: const Color(0xFF10B981).withOpacity(0.15),
+                                    borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: const Text(
+                                    'Ready to Broadcast',
+                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFEF4444)),
+                        onPressed: _removeAttachment,
+                        tooltip: 'Remove Attachment',
+                      ),
+                    ],
+                  ),
+                )
+              else
                 InkWell(
-                  onTap: _pasteFromClipboard,
-                  borderRadius: BorderRadius.circular(12),
+                  onTap: _pickAndUploadAttachment,
+                  borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                     decoration: BoxDecoration(
                       color: fieldBg,
-                      borderRadius: BorderRadius.circular(12),
-                      border: Border.all(color: subtleBorder, style: BorderStyle.solid),
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: subtleBorder),
                     ),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        Icon(Icons.attachment_rounded, size: 18, color: subtextColor),
+                        const Icon(Icons.upload_file_rounded, size: 20, color: limeGreen),
                         const SizedBox(width: 8),
                         Text(
-                          'Paste Document / Media Link from Clipboard',
-                          style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: textColor),
+                          'Upload Document / Media from Device',
+                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
                         ),
                       ],
                     ),
                   ),
-                )
-              else
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'ATTACHMENT URL / DOCUMENT',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
-                        ),
-                        InkWell(
-                          onTap: _pasteFromClipboard,
-                          child: const Text('Paste from clipboard', style: TextStyle(fontSize: 11, color: limeGreen, fontWeight: FontWeight.bold)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 6),
-                    TextField(
-                      controller: _attachmentUrlController,
-                      style: TextStyle(fontSize: 13, color: textColor),
-                      decoration: InputDecoration(
-                        hintText: 'https://... or file document link',
-                        prefixIcon: const Icon(Icons.link_rounded, size: 18),
-                        suffixIcon: IconButton(
-                          icon: const Icon(Icons.clear_rounded, size: 16),
-                          onPressed: () => _attachmentUrlController.clear(),
-                        ),
-                        filled: true,
-                        fillColor: fieldBg,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                      ),
-                    ),
-                  ],
                 ),
 
-              const SizedBox(height: 14),
+              const SizedBox(height: 16),
 
               // Target Audience Selector
               Text(
@@ -351,7 +483,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: _isBroadcasting ? null : _handleBroadcast,
+                      onPressed: (_isBroadcasting || _isUploadingAttachment) ? null : _handleBroadcast,
                       icon: _isBroadcasting
                           ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
                           : const Icon(Icons.send_rounded, size: 16, color: Colors.black),

@@ -8,9 +8,15 @@ class SupabaseService {
   SupabaseService._();
   static final SupabaseService instance = SupabaseService._();
 
-  // Project credentials: Supabase Cloud
-  static const String supabaseUrl = 'https://tjhqpzvjzmpyrridtpsj.supabase.co';
-  static const String supabaseAnonKey = 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g';
+  // Project credentials: Support --dart-define with safe fallbacks
+  static const String supabaseUrl = String.fromEnvironment(
+    'SUPABASE_URL',
+    defaultValue: 'https://tjhqpzvjzmpyrridtpsj.supabase.co',
+  );
+  static const String supabaseAnonKey = String.fromEnvironment(
+    'SUPABASE_ANON_KEY',
+    defaultValue: 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g',
+  );
 
   static bool _isInitialized = false;
   static String? _initializationError;
@@ -110,9 +116,87 @@ class SupabaseService {
   /// Converts any raw backend/auth/database exception into a human-friendly message
   static String cleanErrorMessage(dynamic e) {
     if (e == null) return 'An unexpected error occurred. Please try again.';
+
+    // 1. Direct typed inspection if PostgrestException
+    if (e is PostgrestException) {
+      final code = e.code?.trim().toUpperCase();
+      final msg = e.message.trim();
+      final lowerMsg = msg.toLowerCase();
+
+      if (code == '42501' ||
+          lowerMsg.contains('row-level security') ||
+          lowerMsg.contains('violates row-level') ||
+          lowerMsg.contains('permission denied')) {
+        return 'Access denied: You do not have permission to perform this action.';
+      }
+      if (code == '23505' || lowerMsg.contains('unique constraint') || lowerMsg.contains('already exists')) {
+        return 'A record with this information already exists.';
+      }
+      if (code == '23503' || lowerMsg.contains('foreign key')) {
+        return 'The referenced item (study circle, parent, or teacher) was not found.';
+      }
+      if (code == '23502' || lowerMsg.contains('not-null constraint') || lowerMsg.contains('null value in column')) {
+        return 'Please fill in all required fields.';
+      }
+      if (code == 'PGRST204' || lowerMsg.contains('schema cache')) {
+        return 'Database schema is currently updating. Please try again in a few moments.';
+      }
+      if (code == 'PGRST116') {
+        return 'The requested record could not be found.';
+      }
+      if (code == '22P02') {
+        return 'Invalid format or identifier provided.';
+      }
+      if (code == '42P01') {
+        return 'Service is temporarily unavailable. Please try again later.';
+      }
+
+      // Check if message contains Postgres internals
+      if (lowerMsg.contains('violates') ||
+          lowerMsg.contains('relation ') ||
+          lowerMsg.contains('column ') ||
+          lowerMsg.contains('syntax error')) {
+        return 'Database operation failed. Please check your details and try again.';
+      }
+
+      if (msg.isNotEmpty) {
+        return msg;
+      }
+    }
+
     final str = e.toString();
     final lower = str.toLowerCase();
 
+    // 2. PostgreSQL & PostgREST codes and phrases in String form
+    if (lower.contains('42501') ||
+        lower.contains('violates row-level security policy') ||
+        lower.contains('row-level security') ||
+        lower.contains('permission denied')) {
+      return 'Access denied: You do not have permission to perform this action.';
+    }
+    if (lower.contains('23505') || lower.contains('unique constraint') || lower.contains('already exists')) {
+      return 'A record with this information already exists.';
+    }
+    if (lower.contains('23503') || lower.contains('foreign key constraint')) {
+      return 'The referenced item (study circle, parent, or teacher) was not found.';
+    }
+    if (lower.contains('23502') || lower.contains('not-null constraint') || lower.contains('null value in column')) {
+      return 'Please fill in all required fields.';
+    }
+    if (lower.contains('pgrst204') || lower.contains('schema cache')) {
+      return 'Database schema is currently updating. Please try again in a few moments.';
+    }
+    if (lower.contains('pgrst116')) {
+      return 'The requested record could not be found.';
+    }
+    if (lower.contains('22p02')) {
+      return 'Invalid format or identifier provided.';
+    }
+    if (lower.contains('42p01')) {
+      return 'Service is temporarily unavailable. Please try again later.';
+    }
+
+    // 3. Auth error patterns
     if (lower.contains('invalid login credentials') || lower.contains('invalid credentials')) {
       return 'Incorrect email or password. Please check your details and try again.';
     }
@@ -130,17 +214,54 @@ class SupabaseService {
     if (lower.contains('rate limit') || lower.contains('too many requests')) {
       return 'Too many attempts. Please wait a moment before trying again.';
     }
+    if (lower.contains('jwt expired') || lower.contains('token expired') || lower.contains('session expired')) {
+      return 'Your session has expired. Please sign in again.';
+    }
+
+    // 4. Network / Socket errors
     if (lower.contains('socketexception') ||
         lower.contains('failed host lookup') ||
         lower.contains('clientexception') ||
         lower.contains('network') ||
-        lower.contains('connection')) {
+        lower.contains('connection refused') ||
+        lower.contains('connection reset') ||
+        lower.contains('timeoutexception') ||
+        lower.contains('timed out')) {
       return 'Unable to reach the server. Please verify your internet connection.';
     }
 
-    return str
-        .replaceAll(RegExp(r'^(AuthApiException|AuthException|PostgrestException|Exception):\s*'), '')
+    // 5. Storage errors
+    if (lower.contains('bucket not found')) {
+      return 'Storage service bucket was not found. Please contact administration.';
+    }
+    if (lower.contains('payload too large') || lower.contains('entity too large')) {
+      return 'The selected file exceeds the maximum allowed upload size.';
+    }
+    if (lower.contains('storage') && (lower.contains('not found') || lower.contains('404'))) {
+      return 'Requested file was not found on cloud storage.';
+    }
+
+    // 6. Platform / Permission errors
+    if (lower.contains('permission_denied') || lower.contains('permission denied')) {
+      return 'Device permission was denied. Please grant permission in settings.';
+    }
+
+    // 7. Strip exception type names and PostgrestException wrappers
+    final cleaned = str
+        .replaceAll(RegExp(r'^(AuthApiException|AuthException|PostgrestException|StorageException|Exception|PlatformException):\s*'), '')
+        .replaceAll(RegExp(r'^PostgrestException\s*\(\s*message:\s*([^,]+).*?\)$', dotAll: true), r'$1')
         .trim();
+
+    final lowerCleaned = cleaned.toLowerCase();
+    if (lowerCleaned.contains('violates') ||
+        lowerCleaned.contains('relation ') ||
+        lowerCleaned.contains('syntax error') ||
+        lowerCleaned.contains('fkey') ||
+        lowerCleaned.contains('pkey')) {
+      return 'An unexpected database error occurred. Please try again.';
+    }
+
+    return cleaned.isNotEmpty ? cleaned : 'An unexpected error occurred. Please try again.';
   }
 
   /// 2. Register new Parent or Teacher using an Invitation Code + Email + Password

@@ -1,13 +1,25 @@
+import os
 import re
 import sys
 
 manifest_path = sys.argv[1] if len(sys.argv) > 1 else 'android/app/src/main/AndroidManifest.xml'
+
+if not os.path.exists(manifest_path):
+    os.makedirs(os.path.dirname(manifest_path), exist_ok=True)
+    with open(manifest_path, 'w', encoding='utf-8') as f:
+        f.write('<manifest xmlns:android="http://schemas.android.com/apk/res/android">\n    <application>\n    </application>\n</manifest>\n')
 
 with open(manifest_path, 'r', encoding='utf-8') as f:
     content = f.read()
 
 permissions = """
     <uses-permission android:name="android.permission.INTERNET"/>
+    <uses-permission android:name="android.permission.RECORD_AUDIO"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
+    <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
+    <uses-permission android:name="android.permission.CAMERA"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
@@ -44,6 +56,11 @@ receivers = """
 # Insert permissions right after <manifest ...>
 if '<uses-permission' not in content:
     content = re.sub(r'(<manifest\b[^>]*>)', r'\1' + permissions, content, count=1)
+else:
+    for perm_line in permissions.strip().splitlines():
+        perm_line = perm_line.strip()
+        if perm_line and perm_line not in content:
+            content = re.sub(r'(<manifest\b[^>]*>)', r'\1\n    ' + perm_line, content, count=1)
 
 # Insert queries right after permissions or after <manifest ...>
 if '<queries>' not in content:

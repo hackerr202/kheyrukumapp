@@ -61,6 +61,7 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
     final descCtrl = TextEditingController();
     String? selectedTeacherId;
     String? selectedTeacherName;
+    bool isCreating = false;
 
     showDialog(
       context: context,
@@ -82,6 +83,7 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                 children: [
                   TextField(
                     controller: nameCtrl,
+                    onChanged: (_) => setDialogState(() {}),
                     decoration: const InputDecoration(
                       labelText: 'Halaqah Name *',
                       hintText: 'e.g. Halaqah Bilal (حلقة بلال)',
@@ -151,42 +153,64 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
             ),
             actions: [
               TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
+                onPressed: isCreating ? null : () => Navigator.of(ctx).pop(),
                 child: const Text('Cancel'),
               ),
               ElevatedButton(
-                onPressed: () async {
-                  final name = nameCtrl.text.trim();
-                  if (name.isEmpty) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Please enter a circle name.')),
-                    );
-                    return;
-                  }
+                onPressed: (isCreating || nameCtrl.text.trim().isEmpty)
+                    ? null
+                    : () async {
+                        final name = nameCtrl.text.trim();
+                        setDialogState(() => isCreating = true);
+                        try {
+                          final halaqah = await HalaqahService.instance.createHalaqah(
+                            name: name,
+                            teacherId: selectedTeacherId,
+                            teacherName: selectedTeacherName,
+                            schedule: scheduleCtrl.text.trim(),
+                            description: descCtrl.text.trim(),
+                          );
 
-                  Navigator.of(ctx).pop();
-                  await HalaqahService.instance.createHalaqah(
-                    name: name,
-                    teacherId: selectedTeacherId,
-                    teacherName: selectedTeacherName,
-                    schedule: scheduleCtrl.text.trim(),
-                    description: descCtrl.text.trim(),
-                  );
-
-                  if (mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text('Study Circle "$name" created successfully.'),
-                        backgroundColor: AppColors.accentEmerald,
-                      ),
-                    );
-                  }
-                },
+                          if (ctx.mounted) {
+                            Navigator.of(ctx).pop();
+                          }
+                          if (mounted) {
+                            final isOfflineOnly = halaqah.id.startsWith('hal-');
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(isOfflineOnly
+                                    ? 'Study Circle "$name" created in offline cache.'
+                                    : 'Study Circle "$name" created successfully.'),
+                                backgroundColor: isOfflineOnly ? const Color(0xFFF59E0B) : AppColors.accentEmerald,
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (ctx.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to create circle: ${SupabaseService.cleanErrorMessage(e)}'),
+                                backgroundColor: const Color(0xFFEF4444),
+                              ),
+                            );
+                          }
+                        } finally {
+                          if (ctx.mounted) {
+                            setDialogState(() => isCreating = false);
+                          }
+                        }
+                      },
                 style: ElevatedButton.styleFrom(
                   backgroundColor: AppColors.accentEmerald,
                   foregroundColor: Colors.black,
                 ),
-                child: const Text('Create Circle'),
+                child: isCreating
+                    ? const SizedBox(
+                        width: 16,
+                        height: 16,
+                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black),
+                      )
+                    : const Text('Create Circle'),
               ),
             ],
           );

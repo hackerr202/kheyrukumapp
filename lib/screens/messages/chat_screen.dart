@@ -1,16 +1,27 @@
 import 'dart:async';
+import 'dart:io';
+import 'dart:math';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/messaging_service.dart';
+import '../../core/services/storage_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 
 /// Telegram-style Chat Screen with:
 /// - Distinct Telegram-like chat bubble layout (received vs sent)
-/// - Media attachment picker (Photo, Document, Ayah quote)
-/// - Voice message recorder button with waveform visualization & timer
-/// - Audio voice bubble playback
-/// - Online presence banner and delivered/read checkmarks
+/// - Genuine native media attachment pickers (Camera, Gallery, Video, Document/PDF)
+/// - Direct cloud upload to Supabase Storage
+/// - Real hardware microphone voice recording using `record` (AAC .m4a format)
+/// - Real streaming voice playback using `audioplayers.AudioPlayer` with interactive progress
+/// - Clickable document bubbles opening files via `url_launcher`
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String conversationTitle;
@@ -30,22 +41,82 @@ class ChatScreen extends StatefulWidget {
 class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateMixin {
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
+  final ImagePicker _imagePicker = ImagePicker();
 
-  // Voice recording simulation states
+  // Voice recording engine
+  late final AudioRecorder _audioRecorder;
+  String? _currentRecordingPath;
   bool _isRecordingVoice = false;
   int _recordingSeconds = 0;
   Timer? _recordingTimer;
 
-  // Active playing voice message id
+  // Voice playback engine
+  late final AudioPlayer _audioPlayer;
   String? _currentlyPlayingId;
+  PlayerState _playerState = PlayerState.stopped;
+  Duration _playbackPosition = Duration.zero;
+  Duration _playbackDuration = Duration.zero;
+
+  StreamSubscription<PlayerState>? _playerStateSub;
+  StreamSubscription<Duration>? _playerPositionSub;
+  StreamSubscription<Duration>? _playerDurationSub;
+  StreamSubscription<void>? _playerCompleteSub;
+
+  // Media uploading state
+  bool _isUploadingAttachment = false;
 
   String get _currentUserId => AuthSessionService.instance.userId;
   String get _currentUserName => AuthSessionService.instance.userName;
   String get _currentUserRole => AuthSessionService.instance.currentRole;
 
   @override
+  void initState() {
+    super.initState();
+    _audioRecorder = AudioRecorder();
+    _audioPlayer = AudioPlayer();
+
+    // Setup audio player event subscriptions
+    _playerStateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      setState(() {
+        _playerState = state;
+        if (state == PlayerState.completed || state == PlayerState.stopped) {
+          _currentlyPlayingId = null;
+          _playbackPosition = Duration.zero;
+        }
+      });
+    });
+
+    _playerPositionSub = _audioPlayer.onPositionChanged.listen((position) {
+      if (!mounted) return;
+      setState(() => _playbackPosition = position);
+    });
+
+    _playerDurationSub = _audioPlayer.onDurationChanged.listen((duration) {
+      if (!mounted) return;
+      setState(() => _playbackDuration = duration);
+    });
+
+    _playerCompleteSub = _audioPlayer.onPlayerComplete.listen((_) {
+      if (!mounted) return;
+      setState(() {
+        _currentlyPlayingId = null;
+        _playbackPosition = Duration.zero;
+      });
+    });
+  }
+
+  @override
   void dispose() {
     _recordingTimer?.cancel();
+    _playerStateSub?.cancel();
+    _playerPositionSub?.cancel();
+    _playerDurationSub?.cancel();
+    _playerCompleteSub?.cancel();
+
+    _audioPlayer.dispose();
+    _audioRecorder.dispose();
+
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
     super.dispose();
@@ -87,47 +158,330 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
   }
 
-  void _startVoiceRecording() {
-    setState(() {
-      _isRecordingVoice = true;
-      _recordingSeconds = 0;
-    });
-    _recordingTimer?.cancel();
-    _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
+  // --- Real Voice Message Recording ---
+
+  Future<void> _startVoiceRecording() async {
+    try {
+      final hasPermission = await _audioRecorder.hasPermission();
+      if (!hasPermission) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Microphone permission is required to record voice notes.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
+      }
+
+      final tempDir = await getTemporaryDirectory();
+      final timestamp = DateTime.now().millisecondsSinceEpoch;
+      final filePath = '${tempDir.path}/voice_${widget.conversationId}_$timestamp.m4a';
+      _currentRecordingPath = filePath;
+
+      await _audioRecorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: filePath,
+      );
+
       setState(() {
-        _recordingSeconds++;
+        _isRecordingVoice = true;
+        _recordingSeconds = 0;
       });
-    });
+
+      _recordingTimer?.cancel();
+      _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted) return;
+        setState(() => _recordingSeconds++);
+      });
+    } catch (e) {
+      debugPrint('[ChatScreen] Error starting voice record: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not start recording: ${SupabaseService.cleanErrorMessage(e)}')),
+        );
+      }
+    }
   }
 
-  void _cancelVoiceRecording() {
+  Future<void> _cancelVoiceRecording() async {
     _recordingTimer?.cancel();
+    try {
+      if (await _audioRecorder.isRecording()) {
+        await _audioRecorder.stop();
+      }
+      if (_currentRecordingPath != null) {
+        final f = File(_currentRecordingPath!);
+        if (await f.exists()) await f.delete();
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error cancelling record: $e');
+    }
+
     setState(() {
       _isRecordingVoice = false;
       _recordingSeconds = 0;
+      _currentRecordingPath = null;
     });
   }
 
-  void _finishAndSendVoiceRecording() {
+  Future<void> _finishAndSendVoiceRecording() async {
     _recordingTimer?.cancel();
-    final duration = _recordingSeconds > 0 ? _recordingSeconds : 3;
+    final duration = _recordingSeconds > 0 ? _recordingSeconds : 1;
+
     setState(() {
       _isRecordingVoice = false;
       _recordingSeconds = 0;
+      _isUploadingAttachment = true;
     });
 
-    _sendMessage(
-      type: 'voice',
-      contentOverride: 'Voice message (${_formatDuration(duration)})',
-      audioDurationSeconds: duration,
-    );
+    try {
+      final path = await _audioRecorder.stop();
+      final resolvedPath = path ?? _currentRecordingPath;
+      if (resolvedPath == null) return;
+
+      final file = File(resolvedPath);
+      if (!await file.exists()) return;
+
+      final bytes = await file.readAsBytes();
+      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      // Upload audio file to Supabase Storage bucket 'voice_messages'
+      final audioUrl = await StorageService.uploadVoiceNote(
+        fileName: fileName,
+        bytes: bytes,
+        conversationId: widget.conversationId,
+      );
+
+      if (audioUrl != null) {
+        await _sendMessage(
+          type: 'voice',
+          contentOverride: 'Voice message (${_formatDuration(duration)})',
+          attachmentUrl: audioUrl,
+          attachmentName: fileName,
+          audioDurationSeconds: duration,
+        );
+      } else {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Failed to upload voice recording to cloud storage.'),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error sending voice note: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isUploadingAttachment = false);
+      }
+      _currentRecordingPath = null;
+    }
+  }
+
+  // --- Real Streaming Voice Playback ---
+
+  Future<void> _togglePlayVoice(ChatMessage msg) async {
+    final url = msg.attachmentUrl;
+    if (url == null || url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Voice audio URL is not available.'),
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+      return;
+    }
+
+    try {
+      if (_currentlyPlayingId == msg.id) {
+        if (_playerState == PlayerState.playing) {
+          await _audioPlayer.pause();
+        } else if (_playerState == PlayerState.paused) {
+          await _audioPlayer.resume();
+        } else {
+          await _audioPlayer.play(UrlSource(url));
+        }
+      } else {
+        await _audioPlayer.stop();
+        setState(() {
+          _currentlyPlayingId = msg.id;
+          _playbackPosition = Duration.zero;
+          if (msg.audioDurationSeconds != null) {
+            _playbackDuration = Duration(seconds: msg.audioDurationSeconds!);
+          }
+        });
+        await _audioPlayer.play(UrlSource(url));
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Error playing voice note: $e');
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error playing audio: $e')),
+        );
+      }
+    }
   }
 
   String _formatDuration(int seconds) {
     final m = seconds ~/ 60;
     final s = seconds % 60;
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
+  }
+
+  // --- Real Native Device Media Attachment Pickers ---
+
+  Future<void> _pickAndSendImage({required ImageSource source}) async {
+    try {
+      final picked = await _imagePicker.pickImage(
+        source: source,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      setState(() => _isUploadingAttachment = true);
+
+      final bytes = await picked.readAsBytes();
+      final fileName = picked.name;
+      final publicUrl = await StorageService.uploadChatAttachment(
+        fileName: fileName,
+        bytes: bytes,
+        conversationId: widget.conversationId,
+      );
+
+      if (!mounted) return;
+      setState(() => _isUploadingAttachment = false);
+
+      if (publicUrl != null) {
+        await _sendMessage(
+          type: 'image',
+          contentOverride: fileName,
+          attachmentUrl: publicUrl,
+          attachmentName: fileName,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to upload image to cloud storage.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingAttachment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to attach image: ${SupabaseService.cleanErrorMessage(e)}')),
+        );
+      }
+      debugPrint('[ChatScreen] Error picking image: $e');
+    }
+  }
+
+  Future<void> _pickAndSendVideo() async {
+    try {
+      final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
+      if (picked == null) return;
+
+      setState(() => _isUploadingAttachment = true);
+
+      final bytes = await picked.readAsBytes();
+      final fileName = picked.name;
+      final publicUrl = await StorageService.uploadChatAttachment(
+        fileName: fileName,
+        bytes: bytes,
+        conversationId: widget.conversationId,
+      );
+
+      if (!mounted) return;
+      setState(() => _isUploadingAttachment = false);
+
+      if (publicUrl != null) {
+        await _sendMessage(
+          type: 'video',
+          contentOverride: fileName,
+          attachmentUrl: publicUrl,
+          attachmentName: fileName,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to upload video to cloud storage.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingAttachment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to attach video: ${SupabaseService.cleanErrorMessage(e)}')),
+        );
+      }
+      debugPrint('[ChatScreen] Error picking video: $e');
+    }
+  }
+
+  Future<void> _pickAndSendDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'],
+        withData: true,
+      );
+      if (result == null || result.files.isEmpty) return;
+
+      final file = result.files.first;
+      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      if (bytes == null) return;
+
+      setState(() => _isUploadingAttachment = true);
+
+      final publicUrl = await StorageService.uploadChatAttachment(
+        fileName: file.name,
+        bytes: bytes,
+        conversationId: widget.conversationId,
+      );
+
+      if (!mounted) return;
+      setState(() => _isUploadingAttachment = false);
+
+      if (publicUrl != null) {
+        await _sendMessage(
+          type: 'document',
+          contentOverride: file.name,
+          attachmentUrl: publicUrl,
+          attachmentName: file.name,
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Failed to upload document to cloud storage.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploadingAttachment = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Failed to attach document: ${SupabaseService.cleanErrorMessage(e)}')),
+        );
+      }
+      debugPrint('[ChatScreen] Error picking document: $e');
+    }
   }
 
   void _showAttachmentSheet(BuildContext context) {
@@ -156,36 +510,44 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                   mainAxisAlignment: MainAxisAlignment.spaceAround,
                   children: [
                     _buildAttachmentOption(
+                      icon: Icons.camera_alt_rounded,
+                      label: 'Camera',
+                      color: const Color(0xFFE11D48),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickAndSendImage(source: ImageSource.camera);
+                      },
+                    ),
+                    _buildAttachmentOption(
                       icon: Icons.photo_library_rounded,
-                      label: 'Photo / Media',
+                      label: 'Gallery',
                       color: const Color(0xFF3B82F6),
                       onTap: () {
                         Navigator.pop(ctx);
-                        _showAddLinkDialog(
-                          context,
-                          title: 'Paste Image URL',
-                          hint: 'https://images.unsplash.com/... or paste link',
-                          type: 'image',
-                        );
+                        _pickAndSendImage(source: ImageSource.gallery);
+                      },
+                    ),
+                    _buildAttachmentOption(
+                      icon: Icons.videocam_rounded,
+                      label: 'Video',
+                      color: const Color(0xFF8B5CF6),
+                      onTap: () {
+                        Navigator.pop(ctx);
+                        _pickAndSendVideo();
                       },
                     ),
                     _buildAttachmentOption(
                       icon: Icons.insert_drive_file_rounded,
-                      label: 'Document / PDF',
+                      label: 'Document',
                       color: const Color(0xFF10B981),
                       onTap: () {
                         Navigator.pop(ctx);
-                        _showAddLinkDialog(
-                          context,
-                          title: 'Attach Document or Link',
-                          hint: 'https://docs.google.com/... or document URL',
-                          type: 'document',
-                        );
+                        _pickAndSendDocument();
                       },
                     ),
                     _buildAttachmentOption(
                       icon: Icons.auto_stories_rounded,
-                      label: 'Quran Ayah',
+                      label: 'Ayah Quote',
                       color: AppColors.accentEmerald,
                       onTap: () {
                         Navigator.pop(ctx);
@@ -214,86 +576,18 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       child: Column(
         children: [
           Container(
-            width: 54,
-            height: 54,
+            width: 52,
+            height: 52,
             decoration: BoxDecoration(
               color: color.withOpacity(0.18),
-              borderRadius: BorderRadius.circular(18),
+              borderRadius: BorderRadius.circular(16),
             ),
-            child: Icon(icon, color: color, size: 26),
+            child: Icon(icon, color: color, size: 24),
           ),
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showAddLinkDialog(BuildContext context, {required String title, required String hint, required String type}) {
-    final linkCtrl = TextEditingController();
-    final nameCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        backgroundColor: Theme.of(context).brightness == Brightness.dark
-            ? AppColors.surfaceCard
-            : AppColors.surfaceCardLight,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: nameCtrl,
-              decoration: InputDecoration(
-                labelText: 'Title / File Name (optional)',
-                hintText: type == 'image' ? 'Student Certificate.jpg' : 'Curriculum Schedule.pdf',
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: linkCtrl,
-              decoration: InputDecoration(
-                labelText: 'URL or Link',
-                hintText: hint,
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                isDense: true,
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final link = linkCtrl.text.trim();
-              if (link.isNotEmpty) {
-                final name = nameCtrl.text.trim().isNotEmpty
-                    ? nameCtrl.text.trim()
-                    : (type == 'image' ? 'Shared Photo' : 'Shared Document');
-                Navigator.pop(ctx);
-                _sendMessage(
-                  type: type,
-                  contentOverride: name,
-                  attachmentUrl: link,
-                  attachmentName: name,
-                );
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppColors.accentEmerald,
-              foregroundColor: Colors.black,
-            ),
-            child: const Text('Attach & Send'),
+            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
           ),
         ],
       ),
@@ -428,6 +722,27 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             ),
           ),
 
+          // Uploading Attachment Progress Bar
+          if (_isUploadingAttachment)
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
+              color: AppColors.accentEmerald.withOpacity(0.12),
+              child: Row(
+                children: [
+                  const SizedBox(
+                    width: 14,
+                    height: 14,
+                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentEmerald),
+                  ),
+                  const SizedBox(width: 10),
+                  Text(
+                    'Uploading attachment to cloud...',
+                    style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
+                  ),
+                ],
+              ),
+            ),
+
           // Bottom Telegram Input Bar or Voice Recording Bar
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
@@ -436,7 +751,9 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               border: Border(top: BorderSide(color: borderColor, width: 0.8)),
             ),
             child: SafeArea(
-              child: _isRecordingVoice ? _buildVoiceRecordingBar() : _buildStandardInputBar(textColor, subtextColor, isDark, borderColor),
+              child: _isRecordingVoice
+                  ? _buildVoiceRecordingBar()
+                  : _buildStandardInputBar(textColor, subtextColor, isDark, borderColor),
             ),
           ),
         ],
@@ -451,7 +768,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         IconButton(
           icon: const Icon(Icons.attach_file_rounded, size: 22),
           color: subtextColor,
-          onPressed: () => _showAttachmentSheet(context),
+          onPressed: _isUploadingAttachment ? null : () => _showAttachmentSheet(context),
         ),
 
         // Text input field
@@ -493,7 +810,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             ),
             child: IconButton(
               icon: const Icon(Icons.send_rounded, size: 18, color: Colors.black),
-              onPressed: () => _sendMessage(),
+              onPressed: _isUploadingAttachment ? null : () => _sendMessage(),
             ),
           )
         else
@@ -502,8 +819,9 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Hold to record voice message, release to send.'),
-                  duration: Duration(milliseconds: 1400),
+                  content: Text('Hold mic button to record voice note, tap arrow to send.'),
+                  duration: Duration(milliseconds: 1600),
+                  behavior: SnackBarBehavior.floating,
                 ),
               );
             },
@@ -543,7 +861,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           const SizedBox(width: 12),
           const Expanded(
             child: Text(
-              'Recording voice...',
+              'Recording microphone...',
               style: TextStyle(fontSize: 12, color: Colors.grey),
             ),
           ),
@@ -576,7 +894,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     required Color textColor,
     required Color subtextColor,
   }) {
-    // Telegram dark bubble palettes
     final bubbleBg = isMe
         ? (isDark ? const Color(0xFF2E7D32).withOpacity(0.85) : const Color(0xFFD1FAE5))
         : (isDark ? const Color(0xFF1E293B) : Colors.white);
@@ -648,11 +965,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               const SizedBox(height: 4),
             ],
 
-            // Message Body (Voice, Image, Document or Standard Text)
-            if (msg.messageType == 'voice')
+            // Message Body (Voice, Image, Video, Document or Standard Text)
+            if (msg.messageType == 'voice' || msg.messageType == 'audio')
               _buildVoiceBubbleContent(msg, isMe, bubbleTextColor, timeColor)
             else if (msg.messageType == 'image')
               _buildImageBubbleContent(msg, isMe, bubbleTextColor)
+            else if (msg.messageType == 'video')
+              _buildVideoBubbleContent(msg, isMe, bubbleTextColor)
             else if (msg.messageType == 'document')
               _buildDocumentBubbleContent(msg, isMe, bubbleTextColor)
             else
@@ -690,31 +1009,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildVoiceBubbleContent(ChatMessage msg, bool isMe, Color textColor, Color timeColor) {
-    final isPlaying = _currentlyPlayingId == msg.id;
+    final isCurrentMsg = _currentlyPlayingId == msg.id;
+    final isPlaying = isCurrentMsg && _playerState == PlayerState.playing;
     final durationSec = msg.audioDurationSeconds ?? 5;
+
+    final progressRatio = isCurrentMsg && _playbackDuration.inMilliseconds > 0
+        ? min(1.0, _playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds)
+        : 0.0;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         GestureDetector(
-          onTap: () {
-            setState(() {
-              if (isPlaying) {
-                _currentlyPlayingId = null;
-              } else {
-                _currentlyPlayingId = msg.id;
-                // Auto reset after duration
-                Future.delayed(Duration(seconds: durationSec), () {
-                  if (mounted && _currentlyPlayingId == msg.id) {
-                    setState(() => _currentlyPlayingId = null);
-                  }
-                });
-              }
-            });
-          },
+          onTap: () => _togglePlayVoice(msg),
           child: Container(
-            width: 36,
-            height: 36,
+            width: 38,
+            height: 38,
             decoration: BoxDecoration(
               color: isMe ? Colors.white.withOpacity(0.2) : AppColors.accentEmerald.withOpacity(0.2),
               shape: BoxShape.circle,
@@ -722,35 +1032,41 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             child: Icon(
               isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
               color: isMe ? Colors.white : AppColors.accentEmerald,
-              size: 22,
+              size: 24,
             ),
           ),
         ),
-        const SizedBox(width: 8),
+        const SizedBox(width: 10),
         Expanded(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Waveform representation
+              // Waveform representation reacting to real playback position
               Row(
-                children: List.generate(18, (index) {
-                  final heights = [12, 18, 6, 14, 22, 10, 16, 20, 8, 14, 18, 12, 22, 14, 8, 16, 10, 6];
+                children: List.generate(20, (index) {
+                  final heights = [10, 16, 6, 14, 22, 12, 18, 20, 8, 14, 18, 10, 22, 14, 8, 16, 12, 8, 14, 6];
                   final h = heights[index % heights.length].toDouble();
-                  final active = isPlaying && (index < 10);
+                  final barThreshold = index / 20.0;
+                  final isBarActive = isCurrentMsg && progressRatio >= barThreshold;
+
                   return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 1.2),
-                    width: 2.5,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.1),
+                    width: 2.4,
                     height: h,
                     decoration: BoxDecoration(
-                      color: active ? Colors.white : textColor.withOpacity(0.4),
+                      color: isBarActive
+                          ? (isMe ? Colors.white : AppColors.accentEmerald)
+                          : textColor.withOpacity(0.35),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   );
                 }),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 4),
               Text(
-                isPlaying ? 'Playing...' : _formatDuration(durationSec),
+                isCurrentMsg
+                    ? '${_formatDuration(_playbackPosition.inSeconds)} / ${_formatDuration(_playbackDuration.inSeconds > 0 ? _playbackDuration.inSeconds : durationSec)}'
+                    : _formatDuration(durationSec),
                 style: TextStyle(fontSize: 10, color: timeColor),
               ),
             ],
@@ -767,7 +1083,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         ClipRRect(
           borderRadius: BorderRadius.circular(10),
           child: Container(
-            height: 140,
+            height: 150,
             width: double.infinity,
             color: Colors.black26,
             child: msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http')
@@ -794,40 +1110,114 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
+  Widget _buildVideoBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final url = msg.attachmentUrl;
+        if (url != null && url.isNotEmpty) {
+          final uri = Uri.tryParse(url);
+          if (uri != null && await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.all(10),
+        decoration: BoxDecoration(
+          color: Colors.black.withOpacity(0.15),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: const Color(0xFF8B5CF6).withOpacity(0.2),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF8B5CF6), size: 24),
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    msg.attachmentName ?? 'Video File',
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Tap to stream / play video',
+                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7)),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   Widget _buildDocumentBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
-    return Container(
-      padding: const EdgeInsets.symmetric(vertical: 4),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(8),
-            decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.15),
-              borderRadius: BorderRadius.circular(8),
-            ),
-            child: const Icon(Icons.insert_drive_file_rounded, size: 24, color: Color(0xFFFFA000)),
-          ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  msg.attachmentName ?? msg.content,
-                  style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+    return InkWell(
+      borderRadius: BorderRadius.circular(10),
+      onTap: () async {
+        final url = msg.attachmentUrl;
+        if (url != null && url.isNotEmpty) {
+          final uri = Uri.tryParse(url);
+          if (uri != null && await canLaunchUrl(uri)) {
+            await launchUrl(uri, mode: LaunchMode.externalApplication);
+          } else {
+            if (context.mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                const SnackBar(
+                  content: Text('Could not open document URL.'),
+                  behavior: SnackBarBehavior.floating,
                 ),
-                Text(
-                  msg.attachmentUrl ?? 'Attached file',
-                  style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7)),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
-              ],
+              );
+            }
+          }
+        }
+      },
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 2),
+        child: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.18),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Icon(Icons.insert_drive_file_rounded, size: 24, color: Color(0xFFFFA000)),
             ),
-          ),
-        ],
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    msg.attachmentName ?? msg.content,
+                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  Text(
+                    'Tap to view / download document',
+                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.75)),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(Icons.open_in_new_rounded, size: 16, color: textColor.withOpacity(0.7)),
+          ],
+        ),
       ),
     );
   }

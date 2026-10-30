@@ -53,6 +53,13 @@ class StudentService {
 
   List<Student> get allStudents => List.unmodifiable(_students);
 
+  static bool _isValidUuid(String? str) {
+    if (str == null) return false;
+    final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegex.hasMatch(str.trim());
+  }
+
   /// Fetch enrolled students from Supabase Cloud
   Future<void> fetchStudentsFromCloud() async {
     final client = SupabaseService.instance.client;
@@ -61,14 +68,41 @@ class StudentService {
     try {
       final res = await client
           .from('students')
-          .select('id, full_name, halaqah_id, halaqah_name, current_juz, current_surah, current_ayah, monthly_fee_status, monthly_fee_amount, created_at')
+          .select(
+            'id, full_name, halaqah_id, current_juz, current_surah, current_ayah, date_of_birth, created_at, '
+            'halaqahs:halaqah_id(name), '
+            'parent_students(parent_id, profiles:parent_id(full_name, phone, email))',
+          )
           .order('created_at', ascending: false);
 
-      if (res is List && res.isNotEmpty) {
-        final cloudStudents = res.map((item) => Student.fromJson(item as Map<String, dynamic>)).toList();
+      if (res is List) {
+        final List<Student> cloudStudents = [];
+        for (final item in res) {
+          final map = Map<String, dynamic>.from(item as Map<String, dynamic>);
+          if (map['halaqahs'] != null && map['halaqahs'] is Map) {
+            map['halaqah_name'] = map['halaqahs']['name'];
+          }
+          if (map['parent_students'] is List && (map['parent_students'] as List).isNotEmpty) {
+            final firstPs = (map['parent_students'] as List).first;
+            if (firstPs is Map) {
+              map['parent_id'] = firstPs['parent_id']?.toString();
+              if (firstPs['profiles'] is Map) {
+                final prof = firstPs['profiles'] as Map<String, dynamic>;
+                map['parent_name'] = prof['full_name']?.toString() ?? 'Parent';
+                map['parent_phone'] = prof['phone']?.toString() ?? '';
+                map['parent_email'] = prof['email']?.toString();
+              }
+            }
+          }
+          cloudStudents.add(Student.fromJson(map));
+        }
+
         // Merge cloud students with locally created students that may not be in cloud yet
         for (final local in _students) {
-          if (!cloudStudents.any((c) => c.id == local.id || (c.fullName.toLowerCase() == local.fullName.toLowerCase() && c.halaqahName == local.halaqahName))) {
+          if (!cloudStudents.any((c) =>
+              c.id == local.id ||
+              (c.fullName.toLowerCase() == local.fullName.toLowerCase() &&
+                  c.halaqahName == local.halaqahName))) {
             cloudStudents.add(local);
           }
         }
@@ -206,12 +240,55 @@ class StudentService {
     required int currentAyah,
     String? halaqahId,
   }) async {
+    String finalStudentId = 'stu-${DateTime.now().millisecondsSinceEpoch}';
+    final client = SupabaseService.instance.client;
+
+    if (client != null) {
+      try {
+        final Map<String, dynamic> insertPayload = {
+          'full_name': fullName.trim(),
+          'current_juz': currentJuz,
+          'current_surah': currentSurah,
+          'current_ayah': currentAyah,
+        };
+        if (_isValidUuid(halaqahId)) {
+          insertPayload['halaqah_id'] = halaqahId;
+        }
+
+        final inserted = await client
+            .from('students')
+            .insert(insertPayload)
+            .select('id, created_at')
+            .single();
+
+        if (inserted['id'] != null) {
+          finalStudentId = inserted['id'].toString();
+          debugPrint('[StudentService] Persisted student to Supabase cloud: $finalStudentId');
+
+          // Link parent in public.parent_students if valid UUID
+          if (_isValidUuid(parentId)) {
+            try {
+              await client.from('parent_students').insert({
+                'parent_id': parentId,
+                'student_id': finalStudentId,
+              });
+              debugPrint('[StudentService] Linked parent $parentId to student $finalStudentId');
+            } catch (linkError) {
+              debugPrint('[StudentService] parent_students link notice: $linkError');
+            }
+          }
+        }
+      } catch (e) {
+        debugPrint('[StudentService] Cloud insert fallback: $e');
+      }
+    }
+
     final newStudent = Student(
-      id: 'stu-${DateTime.now().millisecondsSinceEpoch}',
+      id: finalStudentId,
       fullName: fullName,
-      halaqahId: halaqahId ?? 'halaqah-001',
+      halaqahId: _isValidUuid(halaqahId) ? halaqahId : null,
       halaqahName: halaqahName,
-      parentId: parentId,
+      parentId: _isValidUuid(parentId) ? parentId : null,
       parentName: parentName,
       parentPhone: parentPhone,
       parentEmail: parentEmail,
@@ -223,10 +300,11 @@ class StudentService {
       createdAt: DateTime.now(),
     );
 
+    _students.removeWhere((s) => s.id == newStudent.id);
     _students.insert(0, newStudent);
     _studentsController.add(List.from(_students));
 
-    // Persist immediately to local cache so student is never lost
+    // Persist immediately to local cache as offline fallback
     final jsonList = _students.map((s) => s.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_students', jsonList);
 
@@ -240,30 +318,6 @@ class StudentService {
         'parent_id': parentId,
       },
     );
-
-    // Cloud sync to Supabase if connected
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        final insertedStudent = await client.from('students').insert({
-          'full_name': fullName,
-          'current_juz': currentJuz,
-          'current_surah': currentSurah,
-          'current_ayah': currentAyah,
-        }).select('id').maybeSingle();
-
-        if (insertedStudent != null && insertedStudent['id'] != null) {
-          final cloudStudentId = insertedStudent['id'];
-          // Link parent to student in public.parent_students table
-          await client.from('parent_students').insert({
-            'parent_id': parentId,
-            'student_id': cloudStudentId,
-          });
-        }
-      } catch (e) {
-        debugPrint('[StudentService] Cloud insert fallback: $e');
-      }
-    }
 
     return newStudent;
   }

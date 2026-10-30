@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chat_message.dart';
@@ -326,11 +327,18 @@ class MessagingService {
 
     // 4. Cloud synchronization to Supabase
     final client = SupabaseService.instance.client;
-    if (client != null) {
+    final effectiveSenderId = (senderId.isNotEmpty && _isValidUuid(senderId))
+        ? senderId
+        : (SupabaseService.instance.currentUser?.id ??
+           (AuthSessionService.instance.userId.isNotEmpty && _isValidUuid(AuthSessionService.instance.userId)
+               ? AuthSessionService.instance.userId
+               : null));
+
+    if (client != null && effectiveSenderId != null && _isValidUuid(conversationId)) {
       try {
         await client.from('messages').insert({
           'conversation_id': conversationId,
-          'sender_id': senderId,
+          'sender_id': effectiveSenderId,
           'sender_name': senderName,
           'sender_role': senderRole,
           'content': content.trim(),
@@ -352,6 +360,58 @@ class MessagingService {
     }
 
     return msg;
+  }
+
+  static String _generateUuidV4() {
+    final random = Random.secure();
+    final values = List<int>.generate(16, (i) => random.nextInt(256));
+    values[6] = (values[6] & 0x0f) | 0x40; // Version 4
+    values[8] = (values[8] & 0x3f) | 0x80; // Variant 10
+    final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
+    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
+  }
+
+  static bool _isValidUuid(String str) {
+    final uuidRegex = RegExp(r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$', caseSensitive: false);
+    return uuidRegex.hasMatch(str);
+  }
+
+  Future<void> _syncConversationToCloud(Conversation convo) async {
+    final client = SupabaseService.instance.client;
+    if (client == null || !_isValidUuid(convo.id)) return;
+
+    try {
+      final payload = <String, dynamic>{
+        'id': convo.id,
+        'title': convo.title,
+        'is_group': convo.isGroup,
+        'participant_ids': convo.participantIds,
+        'participant_names': convo.participantNames,
+        'last_message': convo.lastMessage,
+        'last_message_time': convo.lastMessageTime.toIso8601String(),
+        'group_type': convo.groupType,
+        'unread_count': convo.unreadCount,
+        'is_pinned': convo.isPinned,
+      };
+      if (convo.halaqahId != null && _isValidUuid(convo.halaqahId!)) {
+        payload['halaqah_id'] = convo.halaqahId;
+      }
+
+      await client.from('conversations').upsert(payload);
+
+      for (final pid in convo.participantIds) {
+        if (_isValidUuid(pid)) {
+          try {
+            await client.from('conversation_participants').upsert({
+              'conversation_id': convo.id,
+              'user_id': pid,
+            });
+          } catch (_) {}
+        }
+      }
+    } catch (e) {
+      debugPrint('[MessagingService] Cloud sync convo fallback: $e');
+    }
   }
 
   /// Teacher starts a direct 1-on-1 chat with a parent of his class students
@@ -386,7 +446,7 @@ class MessagingService {
     }
 
     final convo = Conversation(
-      id: 'convo-teach-par-${DateTime.now().millisecondsSinceEpoch}',
+      id: _generateUuidV4(),
       title: '$parentName ($studentName\'s Parent)',
       isGroup: false,
       participantIds: [teacherId, parentId],
@@ -403,14 +463,7 @@ class MessagingService {
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('conversations').insert(convo.toJson());
-      } catch (e) {
-        debugPrint('[MessagingService] Cloud insert convo fallback: $e');
-      }
-    }
+    await _syncConversationToCloud(convo);
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(
@@ -432,11 +485,14 @@ class MessagingService {
     required List<String> parentNames,
     String? halaqahId,
   }) async {
+    final currentUserId = SupabaseService.instance.currentUser?.id ?? AuthSessionService.instance.userId;
+    final adminId = currentUserId.isNotEmpty ? currentUserId : '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
+
     final convo = Conversation(
-      id: 'convo-grp-${DateTime.now().millisecondsSinceEpoch}',
+      id: _generateUuidV4(),
       title: title,
       isGroup: true,
-      participantIds: ['admin-001', ...parentIds],
+      participantIds: [adminId, ...parentIds],
       participantNames: ['Admin Director', ...parentNames],
       lastMessage: 'Group created by Admin.',
       lastMessageTime: DateTime.now(),
@@ -450,18 +506,11 @@ class MessagingService {
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('conversations').insert(convo.toJson());
-      } catch (e) {
-        debugPrint('[MessagingService] Cloud insert group convo fallback: $e');
-      }
-    }
+    await _syncConversationToCloud(convo);
 
     await sendMessage(
       conversationId: convo.id,
-      senderId: 'admin-001',
+      senderId: adminId,
       senderName: 'Admin Director',
       senderRole: 'admin',
       content: 'As-salamu alaykum parents. Welcome to "$title".',
@@ -476,15 +525,18 @@ class MessagingService {
     required String parentName,
     String? initialMessage,
   }) async {
+    final currentUserId = SupabaseService.instance.currentUser?.id ?? AuthSessionService.instance.userId;
+    final adminId = currentUserId.isNotEmpty ? currentUserId : '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
+
     final existingIndex = _conversations.indexWhere(
-      (c) => !c.isGroup && c.participantIds.contains('admin-001') && c.participantIds.contains(parentId),
+      (c) => !c.isGroup && c.participantIds.contains(adminId) && c.participantIds.contains(parentId),
     );
 
     if (existingIndex != -1) {
       if (initialMessage != null && initialMessage.isNotEmpty) {
         await sendMessage(
           conversationId: _conversations[existingIndex].id,
-          senderId: 'admin-001',
+          senderId: adminId,
           senderName: 'Admin Director',
           senderRole: 'admin',
           content: initialMessage,
@@ -494,10 +546,10 @@ class MessagingService {
     }
 
     final convo = Conversation(
-      id: 'convo-dir-${DateTime.now().millisecondsSinceEpoch}',
+      id: _generateUuidV4(),
       title: parentName,
       isGroup: false,
-      participantIds: ['admin-001', parentId],
+      participantIds: [adminId, parentId],
       participantNames: ['Admin Director', parentName],
       lastMessage: initialMessage ?? 'Conversation started with $parentName.',
       lastMessageTime: DateTime.now(),
@@ -510,19 +562,12 @@ class MessagingService {
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('conversations').insert(convo.toJson());
-      } catch (e) {
-        debugPrint('[MessagingService] Cloud insert direct chat fallback: $e');
-      }
-    }
+    await _syncConversationToCloud(convo);
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(
         conversationId: convo.id,
-        senderId: 'admin-001',
+        senderId: adminId,
         senderName: 'Admin Director',
         senderRole: 'admin',
         content: initialMessage,
@@ -545,7 +590,8 @@ class MessagingService {
         ? 'Center Director'
         : '$targetName (${halaqahName ?? 'Teacher'})';
 
-    final targetId = targetRole == 'admin' ? 'admin-001' : 'teach-001';
+    final adminId = '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
+    final targetId = targetRole == 'admin' ? adminId : 'teach-001';
 
     final existingIndex = _conversations.indexWhere(
       (c) => !c.isGroup && c.participantIds.contains(parentId) && c.participantIds.contains(targetId),
@@ -556,7 +602,7 @@ class MessagingService {
     }
 
     final convo = Conversation(
-      id: 'convo-${DateTime.now().millisecondsSinceEpoch}',
+      id: _generateUuidV4(),
       title: title,
       isGroup: false,
       participantIds: [parentId, targetId],
@@ -572,14 +618,7 @@ class MessagingService {
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('conversations').insert(convo.toJson());
-      } catch (e) {
-        debugPrint('[MessagingService] Cloud insert parent chat fallback: $e');
-      }
-    }
+    await _syncConversationToCloud(convo);
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(

@@ -115,7 +115,7 @@ class AnnouncementService {
       return {'success': true, 'data': announcement};
     } catch (e) {
       debugPrint('[AnnouncementService] Error posting announcement: $e');
-      return {'success': false, 'error': e.toString()};
+      return {'success': false, 'error': SupabaseService.cleanErrorMessage(e)};
     }
   }
 

@@ -66,7 +66,7 @@ class _MessagesTabState extends State<MessagesTab> {
             return Scaffold(
               backgroundColor: Colors.transparent,
               body: ListView(
-                padding: const EdgeInsets.fromLTRB(16, 12, 16, 100),
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 130),
                 children: [
                   // Top Header Bar
                   Row(
@@ -197,31 +197,117 @@ class _MessagesTabState extends State<MessagesTab> {
                   // Conversation List (Telegram card style)
                   if (filteredConvos.isEmpty)
                     Container(
-                      padding: const EdgeInsets.symmetric(vertical: 40, horizontal: 20),
+                      padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 24),
                       decoration: BoxDecoration(
                         color: cardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: borderColor),
+                        borderRadius: BorderRadius.circular(20),
+                        border: Border.all(color: borderColor, width: 1),
+                        boxShadow: [
+                          BoxShadow(
+                            color: isDark ? Colors.black.withOpacity(0.25) : Colors.black.withOpacity(0.04),
+                            blurRadius: 16,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
                       ),
                       child: Center(
                         child: Column(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Icon(Icons.mark_chat_unread_outlined, size: 44, color: subtextColor.withOpacity(0.5)),
-                            const SizedBox(height: 12),
+                            // Glowing Icon Container
+                            Container(
+                              width: 72,
+                              height: 72,
+                              decoration: BoxDecoration(
+                                shape: BoxShape.circle,
+                                color: AppColors.accentEmerald.withOpacity(isDark ? 0.12 : 0.1),
+                                border: Border.all(
+                                  color: AppColors.accentEmerald.withOpacity(0.35),
+                                  width: 1.5,
+                                ),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: AppColors.accentEmerald.withOpacity(isDark ? 0.22 : 0.1),
+                                    blurRadius: 20,
+                                    spreadRadius: 2,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.chat_bubble_outline_rounded,
+                                size: 34,
+                                color: AppColors.accentEmerald,
+                              ),
+                            ),
+                            const SizedBox(height: 18),
                             Text(
                               _searchQuery.isNotEmpty ? 'No chats matching "$_searchQuery"' : 'No conversations yet',
-                              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: textColor),
+                              style: TextStyle(
+                                fontWeight: FontWeight.bold,
+                                fontSize: 16,
+                                color: textColor,
+                                letterSpacing: -0.2,
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              isTeacher
-                                  ? 'Tap "Message Class Parent" to begin private chats.'
-                                  : (isParent
-                                      ? 'Tap "Ustaz Direct" to message your child\'s teacher.'
-                                      : 'Tap "+ New Chat" to start a direct or circle conversation.'),
-                              textAlign: TextAlign.center,
-                              style: TextStyle(color: subtextColor, fontSize: 11.5),
+                            const SizedBox(height: 8),
+                            Padding(
+                              padding: const EdgeInsets.symmetric(horizontal: 16),
+                              child: Text(
+                                _searchQuery.isNotEmpty
+                                    ? 'Check spelling or try searching for another name or keyword.'
+                                    : (isTeacher
+                                        ? 'Reach out to parents of your halaqah students or participate in discussions.'
+                                        : (isParent
+                                            ? 'Connect directly with your student\'s Ustaz or the Center Director.'
+                                            : 'Start a direct 1-on-1 dialogue with a parent or create a circle group.')),
+                                textAlign: TextAlign.center,
+                                style: TextStyle(
+                                  color: subtextColor,
+                                  fontSize: 12.5,
+                                  height: 1.4,
+                                ),
+                              ),
                             ),
+                            const SizedBox(height: 22),
+                            if (_searchQuery.isNotEmpty)
+                              OutlinedButton.icon(
+                                onPressed: () {
+                                  _searchCtrl.clear();
+                                  setState(() => _searchQuery = '');
+                                },
+                                style: OutlinedButton.styleFrom(
+                                  foregroundColor: textColor,
+                                  side: BorderSide(color: borderColor),
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+                                ),
+                                icon: const Icon(Icons.clear_rounded, size: 16),
+                                label: const Text('Clear Search', style: TextStyle(fontSize: 13, fontWeight: FontWeight.w600)),
+                              )
+                            else
+                              ElevatedButton.icon(
+                                onPressed: () {
+                                  if (isAdmin) {
+                                    _showAdminActionSheet(context);
+                                  } else if (isTeacher) {
+                                    _showTeacherMessageParentSheet(context);
+                                  } else {
+                                    _startParentDirectChat(context, role: 'teacher');
+                                  }
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: AppColors.accentEmerald,
+                                  foregroundColor: Colors.black,
+                                  elevation: 0,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 12),
+                                ),
+                                icon: const Icon(Icons.add_comment_rounded, size: 18, color: Colors.black),
+                                label: const Text(
+                                  'Start Conversation',
+                                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Colors.black),
+                                ),
+                              ),
                           ],
                         ),
                       ),
@@ -260,16 +346,28 @@ class _MessagesTabState extends State<MessagesTab> {
                     ),
                 ],
               ),
-              floatingActionButton: isAdmin
-                  ? FloatingActionButton.extended(
-                      onPressed: () => _showAdminActionSheet(context),
-                      backgroundColor: AppColors.accentEmerald,
-                      foregroundColor: Colors.black,
-                      elevation: 4,
-                      icon: const Icon(Icons.edit_note_rounded, size: 22),
-                      label: const Text('New Chat', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5)),
-                    )
-                  : null,
+              floatingActionButton: Padding(
+                padding: const EdgeInsets.only(bottom: 98),
+                child: FloatingActionButton.extended(
+                  onPressed: () {
+                    if (isAdmin) {
+                      _showAdminActionSheet(context);
+                    } else if (isTeacher) {
+                      _showTeacherMessageParentSheet(context);
+                    } else {
+                      _startParentDirectChat(context, role: 'teacher');
+                    }
+                  },
+                  backgroundColor: AppColors.accentEmerald,
+                  foregroundColor: Colors.black,
+                  elevation: 4,
+                  icon: const Icon(Icons.add_comment_rounded, size: 20),
+                  label: const Text(
+                    '+ New Chat',
+                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.2),
+                  ),
+                ),
+              ),
             );
           },
         );
@@ -440,16 +538,25 @@ class _MessagesTabState extends State<MessagesTab> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Expanded(
-                        child: Text(
-                          convo.title,
-                          style: TextStyle(
-                            fontWeight: FontWeight.bold,
-                            fontSize: 13.5,
-                            color: textColor,
-                          ),
-                          overflow: TextOverflow.ellipsis,
+                        child: Row(
+                          children: [
+                            Flexible(
+                              child: Text(
+                                convo.title,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.bold,
+                                  fontSize: 13.5,
+                                  color: textColor,
+                                ),
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            const SizedBox(width: 6),
+                            _buildRoleBadge(convo),
+                          ],
                         ),
                       ),
+                      const SizedBox(width: 6),
                       Text(
                         _formatTime(convo.lastMessageTime),
                         style: TextStyle(
@@ -471,17 +578,27 @@ class _MessagesTabState extends State<MessagesTab> {
                       if (hasUnread) ...[
                         const SizedBox(width: 6),
                         Container(
+                          constraints: const BoxConstraints(minWidth: 20, minHeight: 20),
                           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                           decoration: BoxDecoration(
                             color: AppColors.accentEmerald,
                             borderRadius: BorderRadius.circular(10),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.accentEmerald.withOpacity(0.35),
+                                blurRadius: 4,
+                                offset: const Offset(0, 1),
+                              ),
+                            ],
                           ),
+                          alignment: Alignment.center,
                           child: Text(
-                            '${convo.unreadCount}',
+                            convo.unreadCount > 99 ? '99+' : '${convo.unreadCount}',
                             style: const TextStyle(
                               fontSize: 10,
                               fontWeight: FontWeight.bold,
                               color: Colors.black,
+                              height: 1.1,
                             ),
                           ),
                         ),
@@ -736,10 +853,59 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 
+  Widget _buildRoleBadge(Conversation convo) {
+    String badgeText;
+    Color badgeColor;
+
+    final lowerTitle = convo.title.toLowerCase();
+    if (convo.groupType == 'direct_admin' || lowerTitle.contains('director') || lowerTitle.contains('admin')) {
+      badgeText = 'Admin';
+      badgeColor = const Color(0xFFFFA000);
+    } else if (convo.groupType == 'direct_teacher' || lowerTitle.contains('ustaz') || lowerTitle.contains('teacher')) {
+      badgeText = 'Ustaz';
+      badgeColor = AppColors.accentTeal;
+    } else if (convo.isGroup || convo.groupType == 'parent_group' || convo.groupType == 'broadcast') {
+      badgeText = 'Circle';
+      badgeColor = AppColors.accentEmerald;
+    } else {
+      badgeText = 'Parent';
+      badgeColor = const Color(0xFF818CF8);
+    }
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 5.5, vertical: 1.5),
+      decoration: BoxDecoration(
+        color: badgeColor.withOpacity(0.14),
+        borderRadius: BorderRadius.circular(6),
+        border: Border.all(color: badgeColor.withOpacity(0.35), width: 0.8),
+      ),
+      child: Text(
+        badgeText,
+        style: TextStyle(
+          fontSize: 9.5,
+          fontWeight: FontWeight.w700,
+          color: badgeColor,
+          letterSpacing: 0.2,
+        ),
+      ),
+    );
+  }
+
   String _formatTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inSeconds < 60) return 'Just now';
     if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
+    if (diff.inHours < 24 && now.day == dt.day) {
+      final hour = dt.hour == 0 ? 12 : (dt.hour > 12 ? dt.hour - 12 : dt.hour);
+      final period = dt.hour >= 12 ? 'PM' : 'AM';
+      final minute = dt.minute.toString().padLeft(2, '0');
+      return '$hour:$minute $period';
+    }
+    if (diff.inDays < 7) {
+      final weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      return weekdays[dt.weekday - 1];
+    }
     return '${dt.month}/${dt.day}';
   }
 }

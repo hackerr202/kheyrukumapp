@@ -75,6 +75,13 @@ class HalaqahService {
     }
   }
 
+  static bool _isValidUuid(String? str) {
+    if (str == null) return false;
+    final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegex.hasMatch(str.trim());
+  }
+
   /// Admin creates a brand new Halaqah
   Future<Halaqah> createHalaqah({
     required String name,
@@ -83,48 +90,56 @@ class HalaqahService {
     String? schedule,
     String? description,
   }) async {
-    final newId = 'hal-${DateTime.now().millisecondsSinceEpoch}';
+    final cleanSchedule = (schedule != null && schedule.isNotEmpty)
+        ? schedule.trim()
+        : 'Daily Recitation Session';
+    final cleanDescription = description?.trim() ?? '';
+    final cleanTeacherName = (teacherName != null && teacherName.isNotEmpty)
+        ? teacherName
+        : 'Unassigned';
+
+    final client = SupabaseService.instance.client;
+    String finalId = 'hal-${DateTime.now().millisecondsSinceEpoch}';
+
+    if (client != null) {
+      try {
+        final Map<String, dynamic> payload = {
+          'name': name.trim(),
+          'description': cleanDescription,
+          'schedule': cleanSchedule,
+        };
+        if (teacherId != null && _isValidUuid(teacherId)) {
+          payload['teacher_id'] = teacherId;
+        }
+
+        final res = await client.from('halaqahs').insert(payload).select().maybeSingle();
+        if (res != null && res['id'] != null) {
+          finalId = res['id'].toString();
+          debugPrint('[HalaqahService] Persisted halaqah to Supabase: $finalId');
+        }
+      } catch (e) {
+        debugPrint('[HalaqahService] Cloud insert halaqah notice: $e');
+      }
+    }
+
     final halaqah = Halaqah(
-      id: newId,
+      id: finalId,
       name: name.trim(),
-      teacherId: teacherId,
-      teacherName: (teacherName != null && teacherName.isNotEmpty) ? teacherName : 'Unassigned',
-      schedule: (schedule != null && schedule.isNotEmpty) ? schedule.trim() : 'Daily Recitation Session',
-      description: description?.trim() ?? '',
+      teacherId: (teacherId != null && _isValidUuid(teacherId)) ? teacherId : null,
+      teacherName: cleanTeacherName,
+      schedule: cleanSchedule,
+      description: cleanDescription,
       studentCount: 0,
       createdAt: DateTime.now(),
     );
 
+    _halaqahs.removeWhere((h) => h.id == halaqah.id);
     _halaqahs.add(halaqah);
     halaqahsNotifier.value = List.from(_halaqahs);
 
-    // Cloud sync to Supabase
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        final res = await client.from('halaqahs').insert({
-          'name': halaqah.name,
-          'teacher_id': halaqah.teacherId,
-          'description': halaqah.description,
-        }).select().maybeSingle();
-
-        if (res != null && res['id'] != null) {
-          final cloudId = res['id'].toString();
-          final idx = _halaqahs.indexWhere((h) => h.id == newId);
-          if (idx != -1) {
-            _halaqahs[idx] = halaqah.copyWith(id: cloudId);
-            halaqahsNotifier.value = List.from(_halaqahs);
-
-        // Save to offline cache
-        final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-        await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
-            return _halaqahs[idx];
-          }
-        }
-      } catch (e) {
-        debugPrint('[HalaqahService] Cloud insert halaqah: $e');
-      }
-    }
+    // Save to offline cache
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
 
     return halaqah;
   }
@@ -137,14 +152,23 @@ class HalaqahService {
       halaqahsNotifier.value = List.from(_halaqahs);
     }
 
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+
     final client = SupabaseService.instance.client;
-    if (client != null) {
+    if (client != null && _isValidUuid(updated.id)) {
       try {
-        await client.from('halaqahs').update({
-          'name': updated.name,
-          'teacher_id': updated.teacherId,
-          'description': updated.description,
-        }).eq('id', updated.id);
+        final Map<String, dynamic> updatePayload = {
+          'name': updated.name.trim(),
+          'description': updated.description.trim(),
+          'schedule': updated.schedule.trim(),
+        };
+        if (updated.teacherId != null && _isValidUuid(updated.teacherId)) {
+          updatePayload['teacher_id'] = updated.teacherId;
+        } else {
+          updatePayload['teacher_id'] = null;
+        }
+        await client.from('halaqahs').update(updatePayload).eq('id', updated.id);
       } catch (e) {
         debugPrint('[HalaqahService] Cloud update halaqah: $e');
       }
@@ -156,8 +180,11 @@ class HalaqahService {
     _halaqahs.removeWhere((h) => h.id == halaqahId);
     halaqahsNotifier.value = List.from(_halaqahs);
 
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+
     final client = SupabaseService.instance.client;
-    if (client != null) {
+    if (client != null && _isValidUuid(halaqahId)) {
       try {
         await client.from('halaqahs').delete().eq('id', halaqahId);
       } catch (e) {

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/services/halaqah_service.dart';
 import '../core/services/student_service.dart';
+import '../core/services/supabase_service.dart';
 import '../screens/admin/halaqah_management_sheet.dart';
 
 /// Redesigned Modern, Spacious Dialog for Enrolling Students
@@ -318,7 +319,7 @@ class AddStudentDialog {
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: () => Navigator.of(ctx).pop(),
+                            onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
                             style: OutlinedButton.styleFrom(
                               padding: const EdgeInsets.symmetric(vertical: 12),
                               side: BorderSide(color: subtleBorder),
@@ -331,45 +332,77 @@ class AddStudentDialog {
                         Expanded(
                           flex: 2,
                           child: ElevatedButton(
-                            onPressed: canSubmit
+                            onPressed: (canSubmit && !isSaving)
                                 ? () async {
                                     setDialogState(() => isSaving = true);
-                                    String finalParentId = selectedParentId ?? 'par-${DateTime.now().millisecondsSinceEpoch}';
-                                    String finalParentName = parentNameCtrl.text.trim();
-                                    String finalParentPhone = parentPhoneCtrl.text.trim();
+                                    try {
+                                      String finalParentId = '';
+                                      String finalParentName = parentNameCtrl.text.trim();
+                                      String finalParentPhone = parentPhoneCtrl.text.trim();
 
-                                    if (!createNewParent && currentParents.isNotEmpty) {
-                                      final found = currentParents.firstWhere(
-                                        (p) => p['id'] == selectedParentId,
-                                        orElse: () => currentParents.first,
+                                      if (!createNewParent && currentParents.isNotEmpty && selectedParentId != null) {
+                                        final found = currentParents.firstWhere(
+                                          (p) => p['id'] == selectedParentId,
+                                          orElse: () => currentParents.first,
+                                        );
+                                        finalParentId = found['id'] ?? '';
+                                        finalParentName = found['name'] ?? '';
+                                        finalParentPhone = found['phone'] ?? '';
+                                      }
+
+                                      final student = await StudentService.instance.addStudent(
+                                        fullName: nameCtrl.text.trim(),
+                                        halaqahName: selectedHalaqahName,
+                                        halaqahId: selectedHalaqahId,
+                                        parentId: finalParentId,
+                                        parentName: finalParentName.isNotEmpty ? finalParentName : 'Parent',
+                                        parentPhone: finalParentPhone,
+                                        parentEmail: parentEmailCtrl.text.trim(),
+                                        currentJuz: juz,
+                                        currentSurah: surah,
+                                        currentAyah: ayah,
                                       );
-                                      finalParentId = found['id']!;
-                                      finalParentName = found['name']!;
-                                      finalParentPhone = found['phone'] ?? '';
-                                    }
 
-                                    final student = await StudentService.instance.addStudent(
-                                      fullName: nameCtrl.text.trim(),
-                                      halaqahName: selectedHalaqahName,
-                                      halaqahId: selectedHalaqahId,
-                                      parentId: finalParentId,
-                                      parentName: finalParentName.isNotEmpty ? finalParentName : 'Parent',
-                                      parentPhone: finalParentPhone,
-                                      parentEmail: parentEmailCtrl.text.trim(),
-                                      currentJuz: juz,
-                                      currentSurah: surah,
-                                      currentAyah: ayah,
-                                    );
+                                      // If a new parent was entered, generate an invitation code linked to this student
+                                      if (createNewParent && student.id.isNotEmpty && !student.id.startsWith('stu-')) {
+                                        try {
+                                          await SupabaseService.instance.generateInviteCode(
+                                            role: 'parent',
+                                            targetEmail: parentEmailCtrl.text.trim().isNotEmpty ? parentEmailCtrl.text.trim() : null,
+                                            linkedStudentId: student.id,
+                                          );
+                                        } catch (e) {
+                                          debugPrint('[AddStudentDialog] Invite code creation notice: $e');
+                                        }
+                                      }
 
-                                    if (ctx.mounted) {
-                                      Navigator.of(ctx).pop();
-                                      ScaffoldMessenger.of(context).showSnackBar(
-                                        SnackBar(
-                                          content: Text('Student "${student.fullName}" enrolled & saved successfully! 🎓'),
-                                          backgroundColor: limeGreen,
-                                          behavior: SnackBarBehavior.floating,
-                                        ),
-                                      );
+                                      if (ctx.mounted) {
+                                        Navigator.of(ctx).pop();
+                                        final isOfflineOnly = student.id.startsWith('stu-');
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text(isOfflineOnly
+                                                ? 'Student "${student.fullName}" saved locally (will sync to cloud when connected) 🎓'
+                                                : 'Student "${student.fullName}" enrolled & saved successfully! 🎓'),
+                                            backgroundColor: isOfflineOnly ? const Color(0xFFF59E0B) : limeGreen,
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    } catch (e) {
+                                      if (ctx.mounted) {
+                                        ScaffoldMessenger.of(context).showSnackBar(
+                                          SnackBar(
+                                            content: Text('Enrollment failed: ${SupabaseService.cleanErrorMessage(e)}'),
+                                            backgroundColor: const Color(0xFFEF4444),
+                                            behavior: SnackBarBehavior.floating,
+                                          ),
+                                        );
+                                      }
+                                    } finally {
+                                      if (ctx.mounted) {
+                                        setDialogState(() => isSaving = false);
+                                      }
                                     }
                                   }
                                 : null,
