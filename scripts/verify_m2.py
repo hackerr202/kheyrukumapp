@@ -85,7 +85,7 @@ def verify_app_theme():
         return False, "GoogleFonts.poppinsTextTheme(ThemeData.dark().textTheme) not found in darkTheme"
 
     # 2. dialogTheme is defined
-    if 'dialogTheme:' not in content or 'DialogTheme(' not in content:
+    if 'dialogTheme:' not in content or ('DialogTheme(' not in content and 'DialogThemeData(' not in content):
         return False, "dialogTheme is not defined in ThemeData"
 
     # 3. inputDecorationTheme is defined

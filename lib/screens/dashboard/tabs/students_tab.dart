@@ -105,7 +105,8 @@ class _StudentsTabState extends State<StudentsTab> {
     required Color borderColor,
   }) {
     final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
-    final classStudents = StudentService.instance.getStudentsForHalaqah(assignedHalaqah);
+    final assignedHalaqahId = AuthSessionService.instance.assignedHalaqahId;
+    final classStudents = StudentService.instance.getStudentsForHalaqah(assignedHalaqah, halaqahId: assignedHalaqahId);
 
     // Calculate attendance metrics for selected date
     int presentCount = 0;

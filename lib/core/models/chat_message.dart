@@ -73,6 +73,7 @@ class ChatMessage {
   final String? attachmentUrl;
   final String? attachmentName;
   final int? audioDurationSeconds;
+  final bool isEdited;
 
   const ChatMessage({
     required this.id,
@@ -87,7 +88,40 @@ class ChatMessage {
     this.attachmentUrl,
     this.attachmentName,
     this.audioDurationSeconds,
+    this.isEdited = false,
   });
+
+  ChatMessage copyWith({
+    String? id,
+    String? conversationId,
+    String? senderId,
+    String? senderName,
+    String? senderRole,
+    String? content,
+    DateTime? timestamp,
+    bool? isRead,
+    String? messageType,
+    String? attachmentUrl,
+    String? attachmentName,
+    int? audioDurationSeconds,
+    bool? isEdited,
+  }) {
+    return ChatMessage(
+      id: id ?? this.id,
+      conversationId: conversationId ?? this.conversationId,
+      senderId: senderId ?? this.senderId,
+      senderName: senderName ?? this.senderName,
+      senderRole: senderRole ?? this.senderRole,
+      content: content ?? this.content,
+      timestamp: timestamp ?? this.timestamp,
+      isRead: isRead ?? this.isRead,
+      messageType: messageType ?? this.messageType,
+      attachmentUrl: attachmentUrl ?? this.attachmentUrl,
+      attachmentName: attachmentName ?? this.attachmentName,
+      audioDurationSeconds: audioDurationSeconds ?? this.audioDurationSeconds,
+      isEdited: isEdited ?? this.isEdited,
+    );
+  }
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
@@ -107,6 +141,7 @@ class ChatMessage {
       attachmentUrl: json['attachment_url']?.toString(),
       attachmentName: json['attachment_name']?.toString(),
       audioDurationSeconds: (json['audio_duration'] as num?)?.toInt(),
+      isEdited: json['is_edited'] == true,
     );
   }
 
@@ -124,6 +159,7 @@ class ChatMessage {
       'attachment_url': attachmentUrl,
       'attachment_name': attachmentName,
       'audio_duration': audioDurationSeconds,
+      'is_edited': isEdited,
     };
   }
 }

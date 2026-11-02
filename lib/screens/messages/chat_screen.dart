@@ -4,6 +4,7 @@ import 'dart:math';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
@@ -601,6 +602,202 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
+  void _openFullScreenImageViewer(String imageUrl, String? caption) {
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => Scaffold(
+          backgroundColor: Colors.black,
+          appBar: AppBar(
+            backgroundColor: Colors.black.withOpacity(0.7),
+            elevation: 0,
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+              onPressed: () => Navigator.pop(context),
+            ),
+            actions: [
+              IconButton(
+                icon: const Icon(Icons.open_in_browser_rounded, color: Colors.white),
+                tooltip: 'Open in browser',
+                onPressed: () async {
+                  final uri = Uri.tryParse(imageUrl);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+              ),
+            ],
+          ),
+          body: Center(
+            child: InteractiveViewer(
+              panEnabled: true,
+              boundaryMargin: const EdgeInsets.all(20),
+              minScale: 0.5,
+              maxScale: 4.0,
+              child: Image.network(
+                imageUrl,
+                fit: BoxFit.contain,
+                loadingBuilder: (ctx, child, progress) {
+                  if (progress == null) return child;
+                  return const Center(
+                    child: CircularProgressIndicator(color: AppColors.accentEmerald),
+                  );
+                },
+                errorBuilder: (_, __, ___) => const Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.broken_image_rounded, size: 64, color: Colors.white54),
+                      SizedBox(height: 12),
+                      Text('Failed to load image preview', style: TextStyle(color: Colors.white70)),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          bottomNavigationBar: (caption != null && caption.isNotEmpty)
+              ? Container(
+                  color: Colors.black.withOpacity(0.85),
+                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  child: SafeArea(
+                    child: Text(
+                      caption,
+                      style: const TextStyle(color: Colors.white, fontSize: 14),
+                      textAlign: TextAlign.center,
+                    ),
+                  ),
+                )
+              : null,
+        ),
+      ),
+    );
+  }
+
+  void _showMessageOptions(ChatMessage msg, bool isMe) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: cardBg,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 12),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 36,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: Colors.grey.withOpacity(0.4),
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              const SizedBox(height: 12),
+              ListTile(
+                leading: const Icon(Icons.copy_rounded, color: AppColors.accentEmerald),
+                title: Text('Copy Message Text', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                onTap: () {
+                  Navigator.pop(ctx);
+                  Clipboard.setData(ClipboardData(text: msg.content));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Message copied to clipboard! 📋'),
+                      duration: Duration(seconds: 2),
+                      behavior: SnackBarBehavior.floating,
+                    ),
+                  );
+                },
+              ),
+              if (isMe && (msg.messageType == 'text' || msg.messageType.isEmpty))
+                ListTile(
+                  leading: const Icon(Icons.edit_rounded, color: Color(0xFF0284C7)),
+                  title: Text('Edit Message', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _showEditMessageDialog(msg);
+                  },
+                ),
+              if (isMe)
+                ListTile(
+                  leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
+                  title: const Text('Delete Message', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+                  onTap: () async {
+                    Navigator.pop(ctx);
+                    final confirm = await showDialog<bool>(
+                      context: context,
+                      builder: (c) => AlertDialog(
+                        title: const Text('Delete Message?'),
+                        content: const Text('This will remove the message for everyone in this chat.'),
+                        actions: [
+                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                          ElevatedButton(
+                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                            onPressed: () => Navigator.pop(c, true),
+                            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                          ),
+                        ],
+                      ),
+                    );
+                    if (confirm == true) {
+                      await MessagingService.instance.deleteMessage(
+                        conversationId: widget.conversationId,
+                        messageId: msg.id,
+                      );
+                    }
+                  },
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  void _showEditMessageDialog(ChatMessage msg) {
+    final editCtrl = TextEditingController(text: msg.content);
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Edit Message ✏️'),
+        content: TextField(
+          controller: editCtrl,
+          autofocus: true,
+          maxLines: 4,
+          minLines: 1,
+          decoration: const InputDecoration(
+            hintText: 'Enter updated message...',
+            border: OutlineInputBorder(),
+          ),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentEmerald),
+            onPressed: () async {
+              final newText = editCtrl.text.trim();
+              if (newText.isNotEmpty && newText != msg.content) {
+                Navigator.pop(ctx);
+                await MessagingService.instance.editMessage(
+                  conversationId: widget.conversationId,
+                  messageId: msg.id,
+                  newContent: newText,
+                );
+              }
+            },
+            child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
@@ -908,101 +1105,110 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: bubbleBg,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: const Radius.circular(16),
-            bottomLeft: Radius.circular(isMe ? 16 : 4),
-            bottomRight: Radius.circular(isMe ? 4 : 16),
-          ),
-          boxShadow: [
-            BoxShadow(
-              color: Colors.black.withOpacity(0.06),
-              blurRadius: 3,
-              offset: const Offset(0, 1),
+      child: GestureDetector(
+        onLongPress: () => _showMessageOptions(msg, isMe),
+        child: Container(
+          margin: const EdgeInsets.only(bottom: 8),
+          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: bubbleBg,
+            borderRadius: BorderRadius.only(
+              topLeft: const Radius.circular(16),
+              topRight: const Radius.circular(16),
+              bottomLeft: Radius.circular(isMe ? 16 : 4),
+              bottomRight: Radius.circular(isMe ? 4 : 16),
             ),
-          ],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Sender name tag for received group messages
-            if (!isMe) ...[
-              Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    msg.senderName,
-                    style: const TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.bold,
-                      color: AppColors.accentEmerald,
-                    ),
-                  ),
-                  const SizedBox(width: 5),
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                    decoration: BoxDecoration(
-                      color: Colors.black.withOpacity(0.12),
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                    child: Text(
-                      msg.senderRole.toUpperCase(),
-                      style: TextStyle(
-                        fontSize: 8,
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.06),
+                blurRadius: 3,
+                offset: const Offset(0, 1),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Sender name tag for received group messages
+              if (!isMe) ...[
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      msg.senderName,
+                      style: const TextStyle(
+                        fontSize: 11,
                         fontWeight: FontWeight.bold,
-                        color: subtextColor,
+                        color: AppColors.accentEmerald,
                       ),
                     ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 4),
-            ],
-
-            // Message Body (Voice, Image, Video, Document or Standard Text)
-            if (msg.messageType == 'voice' || msg.messageType == 'audio')
-              _buildVoiceBubbleContent(msg, isMe, bubbleTextColor, timeColor)
-            else if (msg.messageType == 'image')
-              _buildImageBubbleContent(msg, isMe, bubbleTextColor)
-            else if (msg.messageType == 'video')
-              _buildVideoBubbleContent(msg, isMe, bubbleTextColor)
-            else if (msg.messageType == 'document')
-              _buildDocumentBubbleContent(msg, isMe, bubbleTextColor)
-            else
-              Text(
-                msg.content,
-                style: TextStyle(fontSize: 13.5, color: bubbleTextColor, height: 1.3),
-              ),
-
-            const SizedBox(height: 3),
-
-            // Timestamp + Telegram double checkmarks
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              mainAxisAlignment: MainAxisAlignment.end,
-              children: [
-                const Spacer(),
-                Text(
-                  '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                  style: TextStyle(fontSize: 9.5, color: timeColor),
+                    const SizedBox(width: 5),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      decoration: BoxDecoration(
+                        color: Colors.black.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: Text(
+                        msg.senderRole.toUpperCase(),
+                        style: TextStyle(
+                          fontSize: 8,
+                          fontWeight: FontWeight.bold,
+                          color: subtextColor,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-                if (isMe) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    Icons.done_all_rounded,
-                    size: 13,
-                    color: isDark ? AppColors.accentEmerald : const Color(0xFF059669),
-                  ),
-                ],
+                const SizedBox(height: 4),
               ],
-            ),
-          ],
+
+              // Message Body (Voice, Image, Video, Document or Standard Text)
+              if (msg.messageType == 'voice' || msg.messageType == 'audio')
+                _buildVoiceBubbleContent(msg, isMe, bubbleTextColor, timeColor)
+              else if (msg.messageType == 'image')
+                _buildImageBubbleContent(msg, isMe, bubbleTextColor)
+              else if (msg.messageType == 'video')
+                _buildVideoBubbleContent(msg, isMe, bubbleTextColor)
+              else if (msg.messageType == 'document')
+                _buildDocumentBubbleContent(msg, isMe, bubbleTextColor)
+              else
+                Text(
+                  msg.content,
+                  style: TextStyle(fontSize: 13.5, color: bubbleTextColor, height: 1.3),
+                ),
+
+              const SizedBox(height: 3),
+
+              // Timestamp + edited indicator + Telegram double checkmarks
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                mainAxisAlignment: MainAxisAlignment.end,
+                children: [
+                  const Spacer(),
+                  if (msg.isEdited) ...[
+                    Text(
+                      'edited ',
+                      style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: timeColor.withOpacity(0.8)),
+                    ),
+                  ],
+                  Text(
+                    '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
+                    style: TextStyle(fontSize: 9.5, color: timeColor),
+                  ),
+                  if (isMe) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      Icons.done_all_rounded,
+                      size: 13,
+                      color: isDark ? AppColors.accentEmerald : const Color(0xFF059669),
+                    ),
+                  ],
+                ],
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -1077,36 +1283,77 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildImageBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(10),
-          child: Container(
-            height: 150,
-            width: double.infinity,
-            color: Colors.black26,
-            child: msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http')
-                ? Image.network(
-                    msg.attachmentUrl!,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const Center(
-                      child: Icon(Icons.broken_image_rounded, size: 36, color: Colors.grey),
-                    ),
-                  )
-                : const Center(
-                    child: Icon(Icons.image_rounded, size: 40, color: Colors.grey),
+    final hasValidUrl = msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http');
+    return GestureDetector(
+      onTap: () {
+        if (hasValidUrl) {
+          _openFullScreenImageViewer(msg.attachmentUrl!, msg.content.isNotEmpty ? msg.content : msg.attachmentName);
+        }
+      },
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(10),
+                child: Container(
+                  height: 180,
+                  width: double.infinity,
+                  color: Colors.black26,
+                  child: hasValidUrl
+                      ? Image.network(
+                          msg.attachmentUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (ctx, child, progress) {
+                            if (progress == null) return child;
+                            return const Center(
+                              child: SizedBox(
+                                width: 24,
+                                height: 24,
+                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentEmerald),
+                              ),
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => const Center(
+                            child: Icon(Icons.broken_image_rounded, size: 36, color: Colors.grey),
+                          ),
+                        )
+                      : const Center(
+                          child: Icon(Icons.image_rounded, size: 40, color: Colors.grey),
+                        ),
+                ),
+              ),
+              Positioned(
+                bottom: 8,
+                right: 8,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.55),
+                    borderRadius: BorderRadius.circular(6),
                   ),
+                  child: const Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.zoom_in_rounded, size: 12, color: Colors.white),
+                      SizedBox(width: 3),
+                      Text('View', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                ),
+              ),
+            ],
           ),
-        ),
-        if (msg.content.isNotEmpty) ...[
-          const SizedBox(height: 6),
-          Text(
-            msg.content,
-            style: TextStyle(fontSize: 13, color: textColor),
-          ),
+          if (msg.content.isNotEmpty) ...[
+            const SizedBox(height: 6),
+            Text(
+              msg.content,
+              style: TextStyle(fontSize: 13, color: textColor),
+            ),
+          ],
         ],
-      ],
+      ),
     );
   }
 

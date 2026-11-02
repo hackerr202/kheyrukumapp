@@ -362,6 +362,113 @@ class MessagingService {
     return msg;
   }
 
+  /// Edit a sent message
+  Future<bool> editMessage({
+    required String conversationId,
+    required String messageId,
+    required String newContent,
+  }) async {
+    final list = _messagesMap[conversationId];
+    if (list == null) return false;
+
+    final index = list.indexWhere((m) => m.id == messageId);
+    if (index == -1) return false;
+
+    final existing = list[index];
+    final updated = existing.copyWith(
+      content: newContent.trim(),
+      isEdited: true,
+    );
+
+    list[index] = updated;
+    _chatControllers[conversationId]?.add(List.from(list));
+    await _saveMessagesToCache(conversationId);
+
+    // Update conversation preview if this was the last message
+    if (index == list.length - 1) {
+      final convoIdx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (convoIdx != -1) {
+        final existingConvo = _conversations[convoIdx];
+        _conversations[convoIdx] = Conversation(
+          id: existingConvo.id,
+          title: existingConvo.title,
+          isGroup: existingConvo.isGroup,
+          participantIds: existingConvo.participantIds,
+          participantNames: existingConvo.participantNames,
+          lastMessage: newContent.trim(),
+          lastMessageTime: existingConvo.lastMessageTime,
+          halaqahId: existingConvo.halaqahId,
+          groupType: existingConvo.groupType,
+          unreadCount: existingConvo.unreadCount,
+          isPinned: existingConvo.isPinned,
+        );
+        _conversationsController.add(List.from(_conversations));
+      }
+    }
+
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(messageId)) {
+      try {
+        await client.from('messages').update({
+          'content': newContent.trim(),
+          'is_edited': true,
+        }).eq('id', messageId);
+      } catch (e) {
+        debugPrint('[MessagingService] Cloud edit fallback: $e');
+      }
+    }
+
+    return true;
+  }
+
+  /// Delete a message
+  Future<bool> deleteMessage({
+    required String conversationId,
+    required String messageId,
+  }) async {
+    final list = _messagesMap[conversationId];
+    if (list == null) return false;
+
+    final index = list.indexWhere((m) => m.id == messageId);
+    if (index == -1) return false;
+
+    list.removeAt(index);
+    _chatControllers[conversationId]?.add(List.from(list));
+    await _saveMessagesToCache(conversationId);
+
+    // Update conversation preview
+    final convoIdx = _conversations.indexWhere((c) => c.id == conversationId);
+    if (convoIdx != -1) {
+      final existingConvo = _conversations[convoIdx];
+      final newLastMsg = list.isNotEmpty ? list.last.content : '';
+      _conversations[convoIdx] = Conversation(
+        id: existingConvo.id,
+        title: existingConvo.title,
+        isGroup: existingConvo.isGroup,
+        participantIds: existingConvo.participantIds,
+        participantNames: existingConvo.participantNames,
+        lastMessage: newLastMsg,
+        lastMessageTime: list.isNotEmpty ? list.last.timestamp : existingConvo.lastMessageTime,
+        halaqahId: existingConvo.halaqahId,
+        groupType: existingConvo.groupType,
+        unreadCount: existingConvo.unreadCount,
+        isPinned: existingConvo.isPinned,
+      );
+      _conversationsController.add(List.from(_conversations));
+    }
+
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(messageId)) {
+      try {
+        await client.from('messages').delete().eq('id', messageId);
+      } catch (e) {
+        debugPrint('[MessagingService] Cloud delete fallback: $e');
+      }
+    }
+
+    return true;
+  }
+
   static String _generateUuidV4() {
     final random = Random.secure();
     final values = List<int>.generate(16, (i) => random.nextInt(256));

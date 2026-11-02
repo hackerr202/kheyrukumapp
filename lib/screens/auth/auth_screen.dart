@@ -78,11 +78,20 @@ class _AuthScreenState extends State<AuthScreen> {
     if (res['success'] == true) {
       final profile = await SupabaseService.instance.getUserProfile();
       if (profile != null) {
+        if (profile['is_suspended'] == true) {
+          await SupabaseService.instance.signOut();
+          AuthSessionService.instance.clearSession();
+          _showToast('Your account has been suspended by center administration. Please contact support.');
+          return;
+        }
         AuthSessionService.instance.setRole(
           profile['role'] ?? 'parent',
+          userId: profile['id'],
           name: profile['full_name'],
           email: profile['email'],
           phone: profile['phone'],
+          halaqahId: profile['halaqah_id'],
+          halaqahName: profile['halaqah_name'],
         );
       } else if (email.trim().toLowerCase() == 'admin@kheyrukum.com') {
         AuthSessionService.instance.setRole('admin');

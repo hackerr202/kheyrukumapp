@@ -187,11 +187,25 @@ class StudentService {
   }
 
   /// Get students belonging to a specific Halaqah (Class)
-  List<Student> getStudentsForHalaqah(String halaqahName) {
-    return _students.where((s) {
+  List<Student> getStudentsForHalaqah(String halaqahName, {String? halaqahId}) {
+    if (halaqahName.trim().isEmpty || halaqahName.toLowerCase() == 'assigned halaqah') {
+      if (halaqahId != null && halaqahId.isNotEmpty) {
+        final matches = _students.where((s) => s.halaqahId == halaqahId).toList();
+        if (matches.isNotEmpty) return matches;
+      }
+      return List.unmodifiable(_students);
+    }
+    final matches = _students.where((s) {
+      if (halaqahId != null && s.halaqahId == halaqahId) return true;
       return s.halaqahName.toLowerCase().contains(halaqahName.toLowerCase()) ||
           halaqahName.toLowerCase().contains(s.halaqahName.toLowerCase());
     }).toList();
+
+    // If no strict matches found and there are students in the center, return all as fallback for demo/teacher preview
+    if (matches.isEmpty && _students.isNotEmpty) {
+      return List.unmodifiable(_students);
+    }
+    return matches;
   }
 
   /// Get students for a specific parent (enables one parent -> multiple children)

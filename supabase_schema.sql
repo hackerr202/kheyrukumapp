@@ -44,6 +44,9 @@ CREATE TABLE IF NOT EXISTS public.profiles (
     email TEXT NOT NULL,
     phone TEXT,
     avatar_url TEXT,
+    is_suspended BOOLEAN DEFAULT FALSE,
+    halaqah_id UUID,
+    halaqah_name TEXT,
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW()
 );

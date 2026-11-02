@@ -68,7 +68,7 @@ class SupabaseService {
     try {
       final res = await client!
           .from('profiles')
-          .select('id, role, full_name, email, phone, avatar_url')
+          .select('id, role, full_name, email, phone, avatar_url, is_suspended, halaqah_id')
           .eq('id', currentUser!.id)
           .maybeSingle();
       return res;

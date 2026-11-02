@@ -68,6 +68,11 @@ class AuthSessionService {
     try {
       final profile = await SupabaseService.instance.getUserProfile();
       if (profile != null) {
+        if (profile['is_suspended'] == true) {
+          clearSession();
+          await SupabaseService.instance.signOut();
+          return;
+        }
         _userId = profile['id'] ?? _userId;
         _userName = profile['full_name'] ?? _userName;
         _userEmail = profile['email'] ?? _userEmail;
