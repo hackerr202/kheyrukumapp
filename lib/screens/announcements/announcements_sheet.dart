@@ -407,6 +407,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     const String badgeLabel = 'OFFICIAL NOTICE';
 
     final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
+    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
+    final borderColor = isDark ? const Color(0xFF23283E) : const Color(0xFFE2E8F0);
 
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
@@ -417,7 +420,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
         border: Border.all(
           color: item.isPinned
               ? const Color(0xFFFFA000).withOpacity(0.6)
-              : (isDark ? const Color(0xFF23283E) : const Color(0xFFE2E8F0)),
+              : borderColor,
           width: item.isPinned ? 1.4 : 1,
         ),
       ),

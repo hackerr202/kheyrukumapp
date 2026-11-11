@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
 /// Centralized session service managing user identity, role, and assigned class/halaqah.

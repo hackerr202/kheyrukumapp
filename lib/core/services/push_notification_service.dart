@@ -79,7 +79,6 @@ class PushNotificationService {
           playSound: true,
           enableVibration: true,
           enableLights: true,
-          ledColor: Color(0xFFC9F24A),
           showBadge: true,
         );
 
@@ -125,7 +124,6 @@ class PushNotificationService {
         playSound: true,
         enableVibration: true,
         enableLights: true,
-        ledColor: Color(0xFFC9F24A),
         channelShowBadge: true,
         icon: '@mipmap/ic_launcher',
         styleInformation: BigTextStyleInformation(''),
@@ -210,7 +208,6 @@ class PushNotificationService {
         playSound: true,
         enableVibration: true,
         enableLights: true,
-        ledColor: Color(0xFFC9F24A),
         channelShowBadge: true,
         icon: '@mipmap/ic_launcher',
         styleInformation: BigTextStyleInformation(''),
