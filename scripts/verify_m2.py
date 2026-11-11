@@ -57,9 +57,9 @@ def verify_home_tab():
     if take_count < 3:
         return False, f"Carousel takes {take_count} announcements, expected >= 3"
 
-    # 2. Carousel / PageView exists
-    if 'PageView' not in content or '_AnnouncementsCarousel' not in content:
-        return False, "PageView or _AnnouncementsCarousel not found in home_tab.dart"
+    # 2. Vertical list or Carousel exists
+    if '_VerticalAnnouncementsList' not in content and ('PageView' not in content or '_AnnouncementsCarousel' not in content):
+        return False, "_VerticalAnnouncementsList or PageView not found in home_tab.dart"
 
     # 3. _buildAdminCenterStatusCard re-integrated in build()
     # Check that it is invoked in build()

@@ -48,7 +48,7 @@ class _HomeTabState extends State<HomeTab> {
           padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
           children: [
             if (isAdmin) ...[
-              // Announcements Carousel at the top (displays >= 3 announcements)
+              // Announcements vertical list at the top (displays recent announcements)
               _buildAnnouncementsSection(
                 context: context,
                 isDark: isDark,
@@ -651,8 +651,8 @@ class _HomeTabState extends State<HomeTab> {
               );
             }
 
-            // Prominently display at least 3 announcements in an interactive swipeable carousel
-            return _AnnouncementsCarousel(
+            // Prominently display announcements in a vertical feed
+            return _VerticalAnnouncementsList(
               announcements: announcements,
               isDark: isDark,
               cardBg: cardBg,
@@ -861,7 +861,7 @@ class _HomeTabState extends State<HomeTab> {
   }
 }
 
-class _AnnouncementsCarousel extends StatefulWidget {
+class _VerticalAnnouncementsList extends StatelessWidget {
   final List<Announcement> announcements;
   final bool isDark;
   final Color cardBg;
@@ -869,7 +869,7 @@ class _AnnouncementsCarousel extends StatefulWidget {
   final Color subtextColor;
   final Color subtleBorder;
 
-  const _AnnouncementsCarousel({
+  const _VerticalAnnouncementsList({
     required this.announcements,
     required this.isDark,
     required this.cardBg,
@@ -877,26 +877,6 @@ class _AnnouncementsCarousel extends StatefulWidget {
     required this.subtextColor,
     required this.subtleBorder,
   });
-
-  @override
-  State<_AnnouncementsCarousel> createState() => _AnnouncementsCarouselState();
-}
-
-class _AnnouncementsCarouselState extends State<_AnnouncementsCarousel> {
-  late final PageController _pageController;
-  int _currentPage = 0;
-
-  @override
-  void initState() {
-    super.initState();
-    _pageController = PageController();
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    super.dispose();
-  }
 
   String _formatAnnouncementDate(DateTime dt) {
     final diff = DateTime.now().difference(dt);
@@ -909,183 +889,178 @@ class _AnnouncementsCarouselState extends State<_AnnouncementsCarousel> {
     }
   }
 
+  bool _isImage(String url, String? name) {
+    final lowerUrl = url.toLowerCase();
+    final lowerName = (name ?? '').toLowerCase();
+    return lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp') ||
+        lowerUrl.endsWith('.gif') ||
+        lowerUrl.contains('images%2f') ||
+        lowerUrl.contains('/images/') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.png') ||
+        lowerName.endsWith('.webp');
+  }
+
   @override
   Widget build(BuildContext context) {
-    // Prominently display at least 3 announcements (up to 5)
-    final items = widget.announcements.take(5).toList();
+    // Show announcements vertically stacked (up to 4 prominent items)
+    final items = announcements.take(4).toList();
 
     return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SizedBox(
-          height: 154,
-          child: PageView.builder(
-            controller: _pageController,
-            itemCount: items.length,
-            onPageChanged: (index) {
-              setState(() {
-                _currentPage = index;
-              });
-            },
-            itemBuilder: (context, index) {
-              final item = items[index];
-              final isPinned = item.isPinned;
+      children: items.map((item) {
+        final isPinned = item.isPinned;
+        final hasImage = item.attachmentUrl != null &&
+            item.attachmentUrl!.isNotEmpty &&
+            _isImage(item.attachmentUrl!, item.attachmentName);
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 2),
-                child: InkWell(
-                  onTap: () => AnnouncementsSheet.show(context),
-                  borderRadius: BorderRadius.circular(16),
-                  child: Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: widget.cardBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(
-                        color: isPinned ? AppColors.accentAmber.withOpacity(0.4) : widget.subtleBorder,
-                        width: isPinned ? 1.5 : 1,
-                      ),
-                      boxShadow: [
-                        if (isPinned)
-                          BoxShadow(
-                            color: AppColors.accentAmber.withOpacity(0.08),
-                            blurRadius: 10,
-                            offset: const Offset(0, 2),
-                          ),
-                      ],
+        return Padding(
+          padding: const EdgeInsets.only(bottom: 10),
+          child: InkWell(
+            onTap: () => AnnouncementsSheet.show(context),
+            borderRadius: BorderRadius.circular(16),
+            child: Container(
+              padding: const EdgeInsets.all(14),
+              decoration: BoxDecoration(
+                color: cardBg,
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(
+                  color: isPinned ? AppColors.accentAmber.withOpacity(0.4) : subtleBorder,
+                  width: isPinned ? 1.5 : 1,
+                ),
+                boxShadow: [
+                  if (isPinned)
+                    BoxShadow(
+                      color: AppColors.accentAmber.withOpacity(0.08),
+                      blurRadius: 10,
+                      offset: const Offset(0, 2),
                     ),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                          children: [
-                            Row(
-                              children: [
-                                Icon(
-                                  isPinned ? Icons.push_pin_rounded : Icons.campaign_rounded,
-                                  size: 16,
-                                  color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
-                                ),
-                                const SizedBox(width: 6),
-                                Text(
-                                  isPinned ? 'PINNED NOTICE' : 'CENTER NOTICE',
-                                  style: TextStyle(
-                                    color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 0.5,
-                                  ),
-                                ),
-                                if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
-                                  const SizedBox(width: 8),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                    decoration: BoxDecoration(
-                                      color: widget.isDark
-                                          ? const Color(0xFF334155)
-                                          : const Color(0xFFE2E8F0),
-                                      borderRadius: BorderRadius.circular(4),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(Icons.attach_file_rounded, size: 11, color: widget.subtextColor),
-                                        const SizedBox(width: 2),
-                                        Text(
-                                          'Attachment',
-                                          style: TextStyle(
-                                            fontSize: 9.5,
-                                            fontWeight: FontWeight.w600,
-                                            color: widget.subtextColor,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
-                                  ),
-                                ],
-                              ],
-                            ),
-                            Text(
-                              _formatAnnouncementDate(item.createdAt),
-                              style: TextStyle(fontSize: 11, color: widget.subtextColor),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          item.title,
-                          style: TextStyle(
-                            fontSize: 14.5,
-                            fontWeight: FontWeight.bold,
-                            color: widget.textColor,
+                ],
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Row(
+                        children: [
+                          Icon(
+                            isPinned ? Icons.push_pin_rounded : Icons.campaign_rounded,
+                            size: 16,
+                            color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                        const SizedBox(height: 4),
-                        Expanded(
-                          child: Text(
-                            item.content,
-                            maxLines: 2,
-                            overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: widget.subtextColor,
-                              height: 1.35,
-                            ),
-                          ),
-                        ),
-                        if (item.authorName.isNotEmpty) ...[
-                          const SizedBox(height: 2),
+                          const SizedBox(width: 6),
                           Text(
-                            'By ${item.authorName}',
+                            isPinned ? 'PINNED NOTICE' : 'CENTER NOTICE',
                             style: TextStyle(
+                              color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
                               fontSize: 10.5,
-                              fontStyle: FontStyle.italic,
-                              color: widget.subtextColor.withOpacity(0.8),
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.5,
                             ),
                           ),
                         ],
-                      ],
+                      ),
+                      Text(
+                        _formatAnnouncementDate(item.createdAt),
+                        style: TextStyle(fontSize: 11, color: subtextColor),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    item.title,
+                    style: TextStyle(
+                      fontSize: 14.5,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
                   ),
-                ),
-              );
-            },
-          ),
-        ),
-        if (items.length > 1) ...[
-          const SizedBox(height: 8),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              ...List.generate(items.length, (idx) {
-                final isSelected = idx == _currentPage;
-                return AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  margin: const EdgeInsets.symmetric(horizontal: 3),
-                  width: isSelected ? 16 : 6,
-                  height: 5,
-                  decoration: BoxDecoration(
-                    color: isSelected ? const Color(0xFFC9F24A) : widget.subtextColor.withOpacity(0.35),
-                    borderRadius: BorderRadius.circular(3),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.content,
+                    maxLines: hasImage ? 2 : 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: subtextColor,
+                      height: 1.35,
+                    ),
                   ),
-                );
-              }),
-              const SizedBox(width: 8),
-              Text(
-                '${_currentPage + 1} of ${items.length}',
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: widget.subtextColor,
-                  fontWeight: FontWeight.w500,
-                ),
+                  if (hasImage) ...[
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(10),
+                      child: Container(
+                        constraints: const BoxConstraints(maxHeight: 180),
+                        width: double.infinity,
+                        color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                        child: Image.network(
+                          item.attachmentUrl!,
+                          fit: BoxFit.cover,
+                          loadingBuilder: (context, child, progress) {
+                            if (progress == null) return child;
+                            return const SizedBox(
+                              height: 100,
+                              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                            );
+                          },
+                          errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                        ),
+                      ),
+                    ),
+                  ] else if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      decoration: BoxDecoration(
+                        color: isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0),
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(Icons.attach_file_rounded, size: 12, color: subtextColor),
+                          const SizedBox(width: 4),
+                          Text(
+                            item.attachmentName ?? 'Attachment',
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w600,
+                              color: subtextColor,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                  if (item.authorName.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Icon(Icons.person_outline_rounded, size: 12, color: subtextColor.withOpacity(0.7)),
+                        const SizedBox(width: 4),
+                        Text(
+                          item.authorName,
+                          style: TextStyle(
+                            fontSize: 10.5,
+                            fontStyle: FontStyle.italic,
+                            color: subtextColor.withOpacity(0.8),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
               ),
-            ],
+            ),
           ),
-        ],
-      ],
+        );
+      }).toList(),
     );
   }
 }

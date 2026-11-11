@@ -122,6 +122,21 @@ class AnnouncementBanner extends StatelessWidget {
                           height: 1.3,
                         ),
                       ),
+                      if (announcement.attachmentUrl != null &&
+                          announcement.attachmentUrl!.isNotEmpty &&
+                          _isImage(announcement.attachmentUrl!, announcement.attachmentName)) ...[
+                        const SizedBox(height: 8),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(8),
+                          child: Image.network(
+                            announcement.attachmentUrl!,
+                            height: 60,
+                            width: double.infinity,
+                            fit: BoxFit.cover,
+                            errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -141,5 +156,21 @@ class AnnouncementBanner extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  bool _isImage(String url, String? name) {
+    final lowerUrl = url.toLowerCase();
+    final lowerName = (name ?? '').toLowerCase();
+    return lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp') ||
+        lowerUrl.endsWith('.gif') ||
+        lowerUrl.contains('images%2f') ||
+        lowerUrl.contains('/images/') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.png') ||
+        lowerName.endsWith('.webp');
   }
 }

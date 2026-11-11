@@ -64,28 +64,36 @@ class PushNotificationService {
         },
       );
 
-      // Create high-importance Android Notification Channel
+      // Create high-importance Android Notification Channel with full heads-up visibility & vibration
       final androidImplementation =
           _notificationsPlugin.resolvePlatformSpecificImplementation<
               AndroidFlutterLocalNotificationsPlugin>();
 
       if (androidImplementation != null) {
-        await androidImplementation.createNotificationChannel(
-          const AndroidNotificationChannel(
-            channelId,
-            channelName,
-            description: channelDescription,
-            importance: Importance.max,
-            playSound: true,
-            enableVibration: true,
-          ),
+        // High-priority Heads-Up channel for announcements and alerts (works across Xiaomi MIUI, OnePlus, Oppo, Vivo, Pixel)
+        const AndroidNotificationChannel alertChannel = AndroidNotificationChannel(
+          channelId,
+          channelName,
+          description: channelDescription,
+          importance: Importance.max,
+          playSound: true,
+          enableVibration: true,
+          enableLights: true,
+          ledColor: Color(0xFFC9F24A),
+          showBadge: true,
         );
+
+        await androidImplementation.createNotificationChannel(alertChannel);
 
         // Request runtime permission for Android 13+ (API 33+)
         await androidImplementation.requestNotificationsPermission();
 
-        // Request exact alarms permission if available on Android 12+
-        await androidImplementation.requestExactAlarmsPermission();
+        // Request exact alarms permission if available on Android 12+ (safely ignore if denied)
+        try {
+          await androidImplementation.requestExactAlarmsPermission();
+        } catch (e) {
+          debugPrint('[PushNotificationService] Exact alarm request note: $e');
+        }
       }
 
       _isInitialized = true;
@@ -111,9 +119,14 @@ class PushNotificationService {
         channelName,
         channelDescription: channelDescription,
         importance: Importance.max,
-        priority: Priority.high,
+        priority: Priority.max,
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.reminder,
         playSound: true,
         enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFC9F24A),
+        channelShowBadge: true,
         icon: '@mipmap/ic_launcher',
         styleInformation: BigTextStyleInformation(''),
       );
@@ -191,9 +204,14 @@ class PushNotificationService {
         channelName,
         channelDescription: channelDescription,
         importance: Importance.max,
-        priority: Priority.high,
+        priority: Priority.max,
+        visibility: NotificationVisibility.public,
+        category: AndroidNotificationCategory.message,
         playSound: true,
         enableVibration: true,
+        enableLights: true,
+        ledColor: Color(0xFFC9F24A),
+        channelShowBadge: true,
         icon: '@mipmap/ic_launcher',
         styleInformation: BigTextStyleInformation(''),
       );

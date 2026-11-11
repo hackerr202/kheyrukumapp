@@ -1,6 +1,7 @@
 import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/storage_service.dart';
@@ -115,6 +116,62 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       setState(() {
         _isUploadingAttachment = false;
         _errorMessage = 'Failed to select file: ${SupabaseService.cleanErrorMessage(e)}';
+      });
+    }
+  }
+
+  /// Pick image directly using camera or photo gallery
+  Future<void> _pickImageAttachment() async {
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      final fileBytes = await picked.readAsBytes();
+      final fileName = picked.name;
+
+      setState(() {
+        _isUploadingAttachment = true;
+        _errorMessage = null;
+      });
+
+      final uploadedUrl = await StorageService.uploadAnnouncementAttachment(
+        fileName: fileName,
+        bytes: fileBytes,
+      );
+
+      if (!mounted) return;
+
+      if (uploadedUrl != null) {
+        setState(() {
+          _attachmentName = fileName;
+          _attachmentUrl = uploadedUrl;
+          _attachmentSize = fileBytes.length;
+          _isUploadingAttachment = false;
+        });
+
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Attached photo "$fileName" successfully! 🖼️'),
+            backgroundColor: const Color(0xFF10B981),
+            behavior: SnackBarBehavior.floating,
+            duration: const Duration(seconds: 2),
+          ),
+        );
+      } else {
+        setState(() {
+          _isUploadingAttachment = false;
+          _errorMessage = 'Cloud upload failed. Please check network connection and try again.';
+        });
+      }
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _isUploadingAttachment = false;
+        _errorMessage = 'Failed to pick image: ${SupabaseService.cleanErrorMessage(e)}';
       });
     }
   }
@@ -335,84 +392,146 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                     borderRadius: BorderRadius.circular(14),
                     border: Border.all(color: limeGreen.withOpacity(0.5)),
                   ),
-                  child: Row(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Container(
-                        padding: const EdgeInsets.all(8),
-                        decoration: BoxDecoration(
-                          color: limeGreen.withOpacity(0.15),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: const Icon(Icons.insert_drive_file_rounded, color: limeGreen, size: 20),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              _attachmentName ?? 'Attached File',
-                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                      Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: limeGreen.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(10),
                             ),
-                            const SizedBox(height: 2),
-                            Row(
+                            child: Icon(
+                              _isImage(_attachmentUrl!, _attachmentName)
+                                  ? Icons.image_rounded
+                                  : Icons.insert_drive_file_rounded,
+                              color: limeGreen,
+                              size: 20,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                if (_attachmentSize != null) ...[
-                                  Text(
-                                    _formatFileSize(_attachmentSize!),
-                                    style: TextStyle(fontSize: 11, color: subtextColor),
-                                  ),
-                                  const SizedBox(width: 8),
-                                ],
-                                Container(
-                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                  decoration: BoxDecoration(
-                                    color: const Color(0xFF10B981).withOpacity(0.15),
-                                    borderRadius: BorderRadius.circular(6),
-                                  ),
-                                  child: const Text(
-                                    'Ready to Broadcast',
-                                    style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
-                                  ),
+                                Text(
+                                  _attachmentName ?? 'Attached File',
+                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                                const SizedBox(height: 2),
+                                Row(
+                                  children: [
+                                    if (_attachmentSize != null) ...[
+                                      Text(
+                                        _formatFileSize(_attachmentSize!),
+                                        style: TextStyle(fontSize: 11, color: subtextColor),
+                                      ),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
+                                      decoration: BoxDecoration(
+                                        color: const Color(0xFF10B981).withOpacity(0.15),
+                                        borderRadius: BorderRadius.circular(6),
+                                      ),
+                                      child: const Text(
+                                        'Ready to Broadcast',
+                                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                      ),
+                                    ),
+                                  ],
                                 ),
                               ],
                             ),
-                          ],
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFEF4444)),
+                            onPressed: _removeAttachment,
+                            tooltip: 'Remove Attachment',
+                          ),
+                        ],
+                      ),
+                      if (_isImage(_attachmentUrl!, _attachmentName)) ...[
+                        const SizedBox(height: 10),
+                        ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: Container(
+                            height: 120,
+                            width: double.infinity,
+                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                            child: Image.network(
+                              _attachmentUrl!,
+                              fit: BoxFit.cover,
+                              errorBuilder: (_, __, ___) => const Center(
+                                child: Icon(Icons.image_not_supported_rounded, color: Colors.grey),
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      IconButton(
-                        icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFEF4444)),
-                        onPressed: _removeAttachment,
-                        tooltip: 'Remove Attachment',
-                      ),
+                      ],
                     ],
                   ),
                 )
               else
-                InkWell(
-                  onTap: _pickAndUploadAttachment,
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                    decoration: BoxDecoration(
-                      color: fieldBg,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: subtleBorder),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.upload_file_rounded, size: 20, color: limeGreen),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Upload Document / Media from Device',
-                          style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickImageAttachment,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: fieldBg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: subtleBorder),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.add_photo_alternate_rounded, size: 20, color: limeGreen),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Attach Photo',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                              ),
+                            ],
+                          ),
                         ),
-                      ],
+                      ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: InkWell(
+                        onTap: _pickAndUploadAttachment,
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+                          decoration: BoxDecoration(
+                            color: fieldBg,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: subtleBorder),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              const Icon(Icons.attach_file_rounded, size: 20, color: limeGreen),
+                              const SizedBox(width: 6),
+                              Text(
+                                'Attach File',
+                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
 
               const SizedBox(height: 16),
@@ -548,5 +667,21 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
         ),
       ),
     );
+  }
+
+  bool _isImage(String url, String? name) {
+    final lowerUrl = url.toLowerCase();
+    final lowerName = (name ?? '').toLowerCase();
+    return lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp') ||
+        lowerUrl.endsWith('.gif') ||
+        lowerUrl.contains('images%2f') ||
+        lowerUrl.contains('/images/') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.png') ||
+        lowerName.endsWith('.webp');
   }
 }

@@ -114,6 +114,11 @@ class AuthSessionService {
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
 
     roleNotifier.value = cleanRole;
+
+    // Ensure the device token is registered and linked to this authenticated user in user_device_tokens
+    try {
+      PushNotificationService.instance.registerDeviceToken();
+    } catch (_) {}
   }
 
   /// Clear session completely upon user sign out

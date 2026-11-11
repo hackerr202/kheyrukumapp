@@ -495,6 +495,68 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
               height: 1.4,
             ),
           ),
+          if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
+            const SizedBox(height: 10),
+            if (_isImageAttachment(item.attachmentUrl!, item.attachmentName))
+              GestureDetector(
+                onTap: () => _showFullScreenImage(item.attachmentUrl!),
+                child: ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                    constraints: const BoxConstraints(maxHeight: 220),
+                    width: double.infinity,
+                    child: Image.network(
+                      item.attachmentUrl!,
+                      fit: BoxFit.cover,
+                      loadingBuilder: (context, child, progress) {
+                        if (progress == null) return child;
+                        return const SizedBox(
+                          height: 160,
+                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        );
+                      },
+                      errorBuilder: (_, __, ___) => Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Row(
+                          children: [
+                            const Icon(Icons.broken_image_rounded, size: 20, color: Color(0xFF94A3B8)),
+                            const SizedBox(width: 8),
+                            Text('Image unavailable', style: TextStyle(color: subtextColor, fontSize: 12)),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              )
+            else
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+                decoration: BoxDecoration(
+                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: borderColor),
+                ),
+                child: Row(
+                  children: [
+                    const Icon(Icons.attach_file_rounded, size: 16, color: Color(0xFFFFA000)),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        item.attachmentName ?? 'Attached document',
+                        style: TextStyle(
+                          color: textColor,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
           const SizedBox(height: 12),
           Row(
             children: [
@@ -521,5 +583,59 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     } else {
       return '${dt.day}/${dt.month}/${dt.year}';
     }
+  }
+
+  bool _isImageAttachment(String url, String? name) {
+    final lowerUrl = url.toLowerCase();
+    final lowerName = (name ?? '').toLowerCase();
+    return lowerUrl.endsWith('.jpg') ||
+        lowerUrl.endsWith('.jpeg') ||
+        lowerUrl.endsWith('.png') ||
+        lowerUrl.endsWith('.webp') ||
+        lowerUrl.endsWith('.gif') ||
+        lowerUrl.contains('images%2f') ||
+        lowerUrl.contains('/images/') ||
+        lowerName.endsWith('.jpg') ||
+        lowerName.endsWith('.jpeg') ||
+        lowerName.endsWith('.png') ||
+        lowerName.endsWith('.webp');
+  }
+
+  void _showFullScreenImage(String imageUrl) {
+    showDialog(
+      context: context,
+      barrierColor: Colors.black.withOpacity(0.9),
+      builder: (ctx) => Scaffold(
+        backgroundColor: Colors.transparent,
+        body: Stack(
+          children: [
+            Center(
+              child: InteractiveViewer(
+                minScale: 0.8,
+                maxScale: 4.0,
+                child: Image.network(
+                  imageUrl,
+                  fit: BoxFit.contain,
+                  loadingBuilder: (c, child, progress) {
+                    if (progress == null) return child;
+                    return const Center(child: CircularProgressIndicator());
+                  },
+                ),
+              ),
+            ),
+            SafeArea(
+              child: Positioned(
+                top: 16,
+                right: 16,
+                child: IconButton(
+                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                  onPressed: () => Navigator.of(ctx).pop(),
+                ),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 }

@@ -2,18 +2,23 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/announcement.dart';
+import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
 /// Service to handle real-time announcement broadcasting, streaming,
 /// and instant notification delivery for Kheyrukum.
 class AnnouncementService {
-  AnnouncementService._();
+  AnnouncementService._() {
+    _initRealtimeSubscription();
+  }
   static final AnnouncementService instance = AnnouncementService._();
 
   final Set<String> _readIds = {};
   final StreamController<Announcement> _incomingAlertController =
       StreamController<Announcement>.broadcast();
+  RealtimeChannel? _realtimeSubscription;
+  final Set<String> _handledAnnouncementIds = {};
 
   /// Stream of newly arrived announcements for triggering immediate popup notifications
   Stream<Announcement> get onNewAnnouncementAlert =>
@@ -26,6 +31,60 @@ class AnnouncementService {
   }
 
   bool isRead(String id) => _readIds.contains(id);
+
+  /// Listen for real-time announcements broadcast by other devices/admins
+  void _initRealtimeSubscription() {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+
+    try {
+      _realtimeSubscription?.unsubscribe();
+      _realtimeSubscription = client
+          .channel('public:announcements')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'announcements',
+            callback: (payload) {
+              final newRecord = payload.newRecord;
+              if (newRecord.isNotEmpty) {
+                _handleIncomingAnnouncement(newRecord);
+              }
+            },
+          )
+          .subscribe();
+      debugPrint('[AnnouncementService] Supabase Realtime announcements channel subscribed.');
+    } catch (e) {
+      debugPrint('[AnnouncementService] Realtime subscription note: $e');
+    }
+  }
+
+  void _handleIncomingAnnouncement(Map<String, dynamic> json) {
+    try {
+      final announcement = Announcement.fromJson(json);
+      if (_handledAnnouncementIds.contains(announcement.id)) return;
+      _handledAnnouncementIds.add(announcement.id);
+
+      // Trigger in-app toast banner
+      _incomingAlertController.add(announcement);
+
+      // Show real system notification in phone status bar & lock screen
+      PushNotificationService.instance.showNotification(
+        title: announcement.title.isNotEmpty ? announcement.title : 'New Announcement 📢',
+        body: announcement.content,
+        payload: announcement.id,
+      );
+
+      // Record in notification center
+      NotificationCenterService.instance.addNotification(
+        title: announcement.title.isNotEmpty ? announcement.title : 'New Announcement 📢',
+        body: announcement.content,
+        type: 'broadcast',
+      );
+    } catch (e) {
+      debugPrint('[AnnouncementService] Error handling incoming announcement: $e');
+    }
+  }
 
   /// 1. Real-time stream of all announcements from Supabase
   Stream<List<Announcement>> streamAnnouncements() {
@@ -103,6 +162,7 @@ class AnnouncementService {
     try {
       final res = await client.from('announcements').insert(newRecord).select().single();
       final announcement = Announcement.fromJson(res);
+      _handledAnnouncementIds.add(announcement.id);
       _incomingAlertController.add(announcement);
 
       // Trigger off-app background push notifications to all users' devices
