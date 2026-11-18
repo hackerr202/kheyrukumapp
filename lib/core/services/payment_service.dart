@@ -135,7 +135,7 @@ class PaymentService {
   }
 
   void _notify(String title, String body, String type) {
-    PushNotificationService.instance.showNotification(title: title, body: body, type: type);
+    PushNotificationService.instance.showNotification(title: title, body: body, payload: type);
   }
 
   /// Admin issues a monthly tuition fee invoice for a student

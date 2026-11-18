@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
 import '../../core/models/payment.dart';
 import '../../core/models/student.dart';
 import '../../core/services/payment_service.dart';
@@ -1064,9 +1065,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   void _showUploadReceiptDialog(BuildContext context, MonthlyPayment payment) {
     String selectedMethod = 'Commercial Bank of Ethiopia (CBE)';
     final noteCtrl = TextEditingController(text: 'Payment completed via mobile banking.');
+    XFile? selectedReceipt;
+    bool isUploading = false;
 
     showDialog(
       context: context,
+      barrierDismissible: false,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
           title: const Text('Upload Payment Receipt', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
@@ -1088,55 +1092,130 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     DropdownMenuItem(value: 'Telebirr', child: Text('Telebirr Mobile')),
                     DropdownMenuItem(value: 'Cash Deposit', child: Text('Cash Slip')),
                   ],
-                  onChanged: (val) => setDialogState(() => selectedMethod = val!),
+                  onChanged: isUploading ? null : (val) => setDialogState(() => selectedMethod = val!),
                   decoration: const InputDecoration(labelText: 'Payment Gateway / Channel'),
                 ),
                 const SizedBox(height: 12),
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: const Color(0xFF10B981).withOpacity(0.08),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: const Color(0xFF10B981).withOpacity(0.4), style: BorderStyle.solid),
-                  ),
-                  child: const Column(
-                    children: [
-                      Icon(Icons.check_circle_outline_rounded, size: 32, color: Color(0xFF10B981)),
-                      SizedBox(height: 6),
-                      Text('Screenshot Attached: receipt_screenshot.jpg', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Color(0xFF10B981))),
-                      SizedBox(height: 2),
-                      Text('Receipt attached successfully', style: TextStyle(fontSize: 10, color: Colors.grey)),
-                    ],
+                InkWell(
+                  onTap: isUploading
+                      ? null
+                      : () async {
+                          final picked = await ImagePicker().pickImage(
+                            source: ImageSource.gallery,
+                            imageQuality: 85,
+                          );
+                          if (picked != null) {
+                            setDialogState(() => selectedReceipt = picked);
+                          }
+                        },
+                  borderRadius: BorderRadius.circular(12),
+                  child: Container(
+                    width: double.infinity,
+                    padding: const EdgeInsets.all(16),
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF10B981).withOpacity(0.08),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(
+                        color: const Color(0xFF10B981).withOpacity(0.4),
+                        style: BorderStyle.solid,
+                      ),
+                    ),
+                    child: Column(
+                      children: [
+                        Icon(
+                          selectedReceipt != null
+                              ? Icons.check_circle_outline_rounded
+                              : Icons.add_photo_alternate_rounded,
+                          size: 32,
+                          color: const Color(0xFF10B981),
+                        ),
+                        const SizedBox(height: 6),
+                        Text(
+                          selectedReceipt != null
+                              ? 'Selected: ${selectedReceipt!.name}'
+                              : 'Tap to Pick Receipt Screenshot',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.bold,
+                            color: Color(0xFF10B981),
+                          ),
+                          textAlign: TextAlign.center,
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          selectedReceipt != null
+                              ? 'Tap to change image'
+                              : 'Choose payment slip or screenshot from gallery',
+                          style: const TextStyle(fontSize: 10, color: Colors.grey),
+                          textAlign: TextAlign.center,
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 12),
                 TextField(
                   controller: noteCtrl,
+                  enabled: !isUploading,
                   decoration: const InputDecoration(labelText: 'Transaction Reference / Notes'),
                 ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: isUploading ? null : () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
-              onPressed: () async {
-                await PaymentService.instance.submitPaymentReceipt(
-                  paymentId: payment.id,
-                  receiptMockId: 'receipt_${DateTime.now().millisecondsSinceEpoch}',
-                  customNote: noteCtrl.text.trim(),
-                );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Receipt submitted successfully! Admin will verify.')),
-                );
-              },
+              onPressed: (isUploading || selectedReceipt == null)
+                  ? null
+                  : () async {
+                      setDialogState(() => isUploading = true);
+                      try {
+                        final bytes = await selectedReceipt!.readAsBytes();
+                        final uploadedUrl = await PaymentService.instance.uploadReceipt(
+                          paymentId: payment.id,
+                          fileName: selectedReceipt!.name,
+                          bytes: bytes,
+                        );
+                        if (uploadedUrl == null || uploadedUrl.isEmpty) {
+                          throw Exception('Failed to upload receipt image to cloud storage.');
+                        }
+                        await PaymentService.instance.submitPaymentReceipt(
+                          paymentId: payment.id,
+                          receiptUrl: uploadedUrl,
+                          customNote: '$selectedMethod — ${noteCtrl.text.trim()}',
+                        );
+                        if (ctx.mounted) Navigator.pop(ctx);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Receipt submitted successfully! Admin will verify.')),
+                          );
+                        }
+                      } catch (e) {
+                        setDialogState(() => isUploading = false);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(SupabaseService.cleanErrorMessage(e)),
+                              backgroundColor: Colors.redAccent,
+                            ),
+                          );
+                        }
+                      }
+                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: const Color(0xFF10B981),
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Submit for Verification'),
+              child: isUploading
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                    )
+                  : const Text('Submit for Verification'),
             ),
           ],
         ),
