@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import '../../core/services/halaqah_service.dart';
 import '../../core/services/supabase_service.dart';
+import '../../core/theme/app_colors.dart';
 import '../../widgets/invite_code_dialog.dart';
 
 /// Redesigned Modern User Management Screen with Telegram-grade clean aesthetics,
@@ -56,9 +58,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
 
     try {
+      await HalaqahService.instance.fetchHalaqahs();
       final teachersRes = await client
           .from('profiles')
-          .select('id, full_name, email, phone, role, is_suspended, created_at')
+          .select('id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, created_at')
           .eq('role', 'teacher')
           .order('created_at', ascending: false);
 
@@ -228,14 +231,96 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
   }
 
+  Future<void> _showAssignHalaqahDialog(Map<String, dynamic> teacher) async {
+    final halaqahs = HalaqahService.instance.halaqahs;
+    if (halaqahs.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Please create a Study Circle (Halaqah) first.'),
+            behavior: SnackBarBehavior.floating,
+          ),
+        );
+      }
+      return;
+    }
+
+    String selectedId = halaqahs.first.id;
+    String selectedName = halaqahs.first.name;
+    final currentId = teacher['halaqah_id']?.toString();
+    if (currentId != null) {
+      final match = halaqahs.where((h) => h.id == currentId);
+      if (match.isNotEmpty) {
+        selectedId = match.first.id;
+        selectedName = match.first.name;
+      }
+    }
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Text('Assign ${teacher['full_name']}'),
+          content: DropdownButtonFormField<String>(
+            value: selectedId,
+            isExpanded: true,
+            items: halaqahs
+                .map((h) => DropdownMenuItem(value: h.id, child: Text(h.name)))
+                .toList(),
+            onChanged: (val) {
+              if (val != null) {
+                final h = halaqahs.firstWhere((e) => e.id == val);
+                setDialogState(() {
+                  selectedId = h.id;
+                  selectedName = h.name;
+                });
+              }
+            },
+            decoration: const InputDecoration(labelText: 'Study Circle (Halaqah)'),
+          ),
+          actions: [
+            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            ElevatedButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              style: ElevatedButton.styleFrom(backgroundColor: _limeGreen, foregroundColor: Colors.black),
+              child: const Text('Assign'),
+            ),
+          ],
+        ),
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await HalaqahService.instance.assignTeacher(
+      halaqahId: selectedId,
+      teacherId: teacher['id'].toString(),
+      teacherName: teacher['full_name']?.toString() ?? 'Teacher',
+    );
+    if (mounted) {
+      setState(() {
+        teacher['halaqah_id'] = selectedId;
+        teacher['halaqah_name'] = selectedName;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('${teacher['full_name']} assigned to $selectedName.'),
+          backgroundColor: _limeGreen,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC);
-    final surfaceBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final subtleBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
+    final cardBg = isDark ? AppColors.background : const Color(0xFFF8FAFC);
+    final surfaceBg = isDark ? AppColors.surfaceCard : Colors.white;
+    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
+    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
+    final subtleBorder = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
     return Scaffold(
       backgroundColor: cardBg,
@@ -433,26 +518,69 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      user['phone'] ?? user['email'] ?? 'No contact info',
+                      (user['phone'] != null && user['phone'].toString().isNotEmpty)
+                          ? user['phone'].toString()
+                          : (user['email']?.toString() ?? 'No contact info'),
                       style: TextStyle(fontSize: 11.5, color: subtextColor),
                     ),
+                    if (listType == 'teacher') ...[
+                      const SizedBox(height: 4),
+                      Builder(
+                        builder: (_) {
+                          final matches = HalaqahService.instance.halaqahs
+                              .where((h) => h.teacherId == user['id']);
+                          final profileHalaqah = user['halaqah_name']?.toString();
+                          final assignedName = (profileHalaqah != null && profileHalaqah.isNotEmpty)
+                              ? profileHalaqah
+                              : (matches.isNotEmpty ? matches.first.name : 'Unassigned Circle');
+                          return Text(
+                            assignedName,
+                            style: const TextStyle(
+                              fontSize: 11,
+                              color: AppColors.accentTealLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          );
+                        },
+                      ),
+                    ],
                   ],
                 ),
               ),
 
-              // Popup Actions Menu: Suspend / Reactivate & Remove
+              // Popup Actions Menu: Assign Halaqah, Suspend / Reactivate & Remove
               PopupMenuButton<String>(
                 icon: Icon(Icons.more_vert_rounded, color: subtextColor),
                 shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 color: surfaceBg,
                 onSelected: (val) {
-                  if (val == 'suspend') {
+                  if (val == 'assign_halaqah') {
+                    _showAssignHalaqahDialog(user);
+                  } else if (val == 'suspend') {
                     _toggleSuspendUser(user);
                   } else if (val == 'remove') {
                     _removeUser(user, listType);
                   }
                 },
                 itemBuilder: (context) => [
+                  if (listType == 'teacher')
+                    const PopupMenuItem(
+                      value: 'assign_halaqah',
+                      child: Row(
+                        children: [
+                          Icon(Icons.school_outlined, size: 18, color: AppColors.accentTealLight),
+                          SizedBox(width: 10),
+                          Text(
+                            'Assign Halaqah',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: AppColors.accentTealLight,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   PopupMenuItem(
                     value: 'suspend',
                     child: Row(

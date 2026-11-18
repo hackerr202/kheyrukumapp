@@ -252,6 +252,7 @@ class _StudentsTabState extends State<StudentsTab> {
                       onPressed: () async {
                         await StudentService.instance.markHalaqahAllPresent(
                           halaqahName: assignedHalaqah,
+                          halaqahId: assignedHalaqahId,
                           markedBy: AuthSessionService.instance.userName,
                           date: _teacherSelectedDate,
                         );
@@ -305,7 +306,10 @@ class _StudentsTabState extends State<StudentsTab> {
             stream: AbsenceService.instance.requestsStream,
             initialData: AbsenceService.instance.allRequests,
             builder: (context, reqSnapshot) {
-              final pendingRequests = AbsenceService.instance.getPendingRequestsForHalaqah(assignedHalaqah);
+              final pendingRequests = AbsenceService.instance.getPendingRequestsForHalaqah(
+                assignedHalaqah,
+                halaqahId: assignedHalaqahId,
+              );
               if (pendingRequests.isEmpty) return const SizedBox.shrink();
 
               return Container(
@@ -686,10 +690,21 @@ class _StudentsTabState extends State<StudentsTab> {
               // CHAT WITH PARENT (CORE REQUIREMENT)
               ElevatedButton.icon(
                 onPressed: () async {
+                  if (student.parentId == null || student.parentId!.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${student.fullName} does not have a linked parent account yet.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   final convo = await MessagingService.instance.startTeacherChatWithParent(
                     teacherId: AuthSessionService.instance.userId,
                     teacherName: AuthSessionService.instance.userName,
-                    parentId: student.parentId ?? 'par-001',
+                    parentId: student.parentId!,
                     parentName: student.parentName,
                     studentName: student.fullName,
                     halaqahId: student.halaqahId,
@@ -979,6 +994,7 @@ class _StudentsTabState extends State<StudentsTab> {
                         parentName: AuthSessionService.instance.userName,
                         targetRole: 'teacher',
                         targetName: teacherName,
+                        targetId: hMatch.isNotEmpty ? hMatch.first.teacherId : null,
                         halaqahName: currentChild.halaqahName,
                       );
 
@@ -1395,8 +1411,19 @@ class _StudentsTabState extends State<StudentsTab> {
                 avatar: const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: Color(0xFFFFA000)),
                 label: const Text('Message Parent', style: TextStyle(fontSize: 11)),
                 onPressed: () async {
+                  if (student.parentId == null || student.parentId!.isEmpty) {
+                    if (context.mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('${student.fullName} does not have a linked parent account yet.'),
+                          behavior: SnackBarBehavior.floating,
+                        ),
+                      );
+                    }
+                    return;
+                  }
                   final convo = await MessagingService.instance.startDirectChatWithParent(
-                    parentId: student.parentId ?? 'par-001',
+                    parentId: student.parentId!,
                     parentName: student.parentName,
                   );
                   if (context.mounted) {

@@ -30,10 +30,26 @@ class MessagingService {
 
   final Map<String, StreamController<List<ChatMessage>>> _chatControllers = {};
   RealtimeChannel? _realtimeMessagesSubscription;
+  RealtimeChannel? _realtimeConvosSubscription;
 
   Stream<List<Conversation>> get conversationsStream => _conversationsController.stream;
 
   List<Conversation> get allConversations => List.unmodifiable(_conversations);
+
+  Future<void> refreshAndSubscribe() async {
+    await _initCloudSync();
+  }
+
+  Future<void> clearOnLogout() async {
+    _realtimeMessagesSubscription?.unsubscribe();
+    _realtimeMessagesSubscription = null;
+    _realtimeConvosSubscription?.unsubscribe();
+    _realtimeConvosSubscription = null;
+    _conversations.clear();
+    _messagesMap.clear();
+    _conversationsController.add([]);
+    await LocalStorageService.instance.remove('cached_conversations');
+  }
 
   /// Load cached conversations and messages from local persistent storage
   Future<void> _loadFromCache() async {
@@ -52,13 +68,24 @@ class MessagingService {
     }
   }
 
-  /// Initialize cloud sync and subscribe to real-time chat messages
+  /// Initialize cloud sync and subscribe to real-time chat messages & conversations
   Future<void> _initCloudSync() async {
     final client = SupabaseService.instance.client;
-    if (client == null) return;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
 
     try {
       await fetchConversationsFromCloud();
+
+      _realtimeConvosSubscription?.unsubscribe();
+      _realtimeConvosSubscription = client
+          .channel('public:conversations')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'conversations',
+            callback: (_) => fetchConversationsFromCloud(),
+          )
+          .subscribe();
 
       _realtimeMessagesSubscription?.unsubscribe();
       _realtimeMessagesSubscription = client
@@ -71,6 +98,28 @@ class MessagingService {
               final newRecord = payload.newRecord;
               if (newRecord.isNotEmpty) {
                 _handleIncomingCloudMessage(newRecord);
+              }
+            },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.update,
+            schema: 'public',
+            table: 'messages',
+            callback: (payload) {
+              final updatedRecord = payload.newRecord;
+              if (updatedRecord.isNotEmpty) {
+                _handleUpdatedCloudMessage(updatedRecord);
+              }
+            },
+          )
+          .onPostgresChanges(
+            event: PostgresChangeEvent.delete,
+            schema: 'public',
+            table: 'messages',
+            callback: (payload) {
+              final deletedRecord = payload.oldRecord;
+              if (deletedRecord.isNotEmpty) {
+                _handleDeletedCloudMessage(deletedRecord);
               }
             },
           )
@@ -173,19 +222,44 @@ class MessagingService {
       }
 
       PushNotificationService.instance.showNotification(
-        title: '${msg.senderName} 💬',
+        title: '${msg.senderName}',
         body: notifBody,
         payload: msg.conversationId,
-      );
-
-      NotificationCenterService.instance.addNotification(
-        title: '${msg.senderName} 💬',
-        body: notifBody,
         type: 'message',
-        data: {'conversation_id': msg.conversationId},
       );
     } catch (e) {
       debugPrint('[MessagingService] Error handling incoming message: $e');
+    }
+  }
+
+  void _handleUpdatedCloudMessage(Map<String, dynamic> json) {
+    try {
+      final msg = ChatMessage.fromJson(json);
+      final list = _messagesMap[msg.conversationId];
+      if (list == null) return;
+      final idx = list.indexWhere((m) => m.id == msg.id);
+      if (idx != -1) {
+        list[idx] = msg;
+        _chatControllers[msg.conversationId]?.add(List.from(list));
+        _saveMessagesToCache(msg.conversationId);
+      }
+    } catch (e) {
+      debugPrint('[MessagingService] Error handling updated message: $e');
+    }
+  }
+
+  void _handleDeletedCloudMessage(Map<String, dynamic> json) {
+    try {
+      final deletedId = json['id']?.toString();
+      final convoId = json['conversation_id']?.toString();
+      if (deletedId == null || convoId == null) return;
+      final list = _messagesMap[convoId];
+      if (list == null) return;
+      list.removeWhere((m) => m.id == deletedId);
+      _chatControllers[convoId]?.add(List.from(list));
+      _saveMessagesToCache(convoId);
+    } catch (e) {
+      debugPrint('[MessagingService] Error handling deleted message: $e');
     }
   }
 
@@ -278,7 +352,7 @@ class MessagingService {
     int? audioDurationSeconds,
   }) async {
     final msg = ChatMessage(
-      id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+      id: _generateUuidV4(),
       conversationId: conversationId,
       senderId: senderId,
       senderName: senderName,
@@ -337,6 +411,7 @@ class MessagingService {
     if (client != null && effectiveSenderId != null && _isValidUuid(conversationId)) {
       try {
         await client.from('messages').insert({
+          'id': msg.id,
           'conversation_id': conversationId,
           'sender_id': effectiveSenderId,
           'sender_name': senderName,
@@ -585,6 +660,52 @@ class MessagingService {
     return convo;
   }
 
+  Future<String?> _resolveAdminUserId() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return null;
+    try {
+      final res = await client
+          .from('profiles')
+          .select('id')
+          .eq('role', 'admin')
+          .limit(1)
+          .maybeSingle();
+      return res?['id']?.toString();
+    } catch (e) {
+      debugPrint('[MessagingService] Failed to resolve admin ID: $e');
+      return null;
+    }
+  }
+
+  Future<String?> _resolveTeacherUserId({String? halaqahName}) async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return null;
+    try {
+      if (halaqahName != null && halaqahName.isNotEmpty) {
+        final res = await client
+            .from('halaqahs')
+            .select('teacher_id')
+            .ilike('name', '%$halaqahName%')
+            .not('teacher_id', 'is', null)
+            .limit(1)
+            .maybeSingle();
+        if (res?['teacher_id'] != null) {
+          return res!['teacher_id'].toString();
+        }
+      }
+      final fallback = await client
+          .from('profiles')
+          .select('id')
+          .eq('role', 'teacher')
+          .limit(1)
+          .maybeSingle();
+      return fallback?['id']?.toString();
+    } catch (e) {
+      debugPrint('[MessagingService] Failed to resolve teacher ID: $e');
+      return null;
+    }
+  }
+
   /// Admin creates a new group conversation with parents
   Future<Conversation> createGroup({
     required String title,
@@ -593,13 +714,13 @@ class MessagingService {
     String? halaqahId,
   }) async {
     final currentUserId = SupabaseService.instance.currentUser?.id ?? AuthSessionService.instance.userId;
-    final adminId = currentUserId.isNotEmpty ? currentUserId : '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
+    final adminId = currentUserId.isNotEmpty ? currentUserId : (await _resolveAdminUserId() ?? '');
 
     final convo = Conversation(
       id: _generateUuidV4(),
       title: title,
       isGroup: true,
-      participantIds: [adminId, ...parentIds],
+      participantIds: [if (adminId.isNotEmpty) adminId, ...parentIds],
       participantNames: ['Admin Director', ...parentNames],
       lastMessage: 'Group created by Admin.',
       lastMessageTime: DateTime.now(),
@@ -633,7 +754,7 @@ class MessagingService {
     String? initialMessage,
   }) async {
     final currentUserId = SupabaseService.instance.currentUser?.id ?? AuthSessionService.instance.userId;
-    final adminId = currentUserId.isNotEmpty ? currentUserId : '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
+    final adminId = currentUserId.isNotEmpty ? currentUserId : (await _resolveAdminUserId() ?? '');
 
     final existingIndex = _conversations.indexWhere(
       (c) => !c.isGroup && c.participantIds.contains(adminId) && c.participantIds.contains(parentId),
@@ -656,7 +777,7 @@ class MessagingService {
       id: _generateUuidV4(),
       title: parentName,
       isGroup: false,
-      participantIds: [adminId, parentId],
+      participantIds: [if (adminId.isNotEmpty) adminId, parentId],
       participantNames: ['Admin Director', parentName],
       lastMessage: initialMessage ?? 'Conversation started with $parentName.',
       lastMessageTime: DateTime.now(),
@@ -690,6 +811,7 @@ class MessagingService {
     required String parentName,
     required String targetRole,
     required String targetName,
+    String? targetId,
     String? halaqahName,
     String? initialMessage,
   }) async {
@@ -697,12 +819,22 @@ class MessagingService {
         ? 'Center Director'
         : '$targetName (${halaqahName ?? 'Teacher'})';
 
-    final adminId = '7c8f3fb0-8268-456a-8bec-fc8ccae94a0c';
-    final targetId = targetRole == 'admin' ? adminId : 'teach-001';
+    String resolvedTargetId = targetId ?? '';
+    if (!_isValidUuid(resolvedTargetId)) {
+      resolvedTargetId = (targetRole == 'admin'
+              ? await _resolveAdminUserId()
+              : await _resolveTeacherUserId(halaqahName: halaqahName)) ??
+          '';
+    }
 
-    final existingIndex = _conversations.indexWhere(
-      (c) => !c.isGroup && c.participantIds.contains(parentId) && c.participantIds.contains(targetId),
-    );
+    final existingIndex = resolvedTargetId.isNotEmpty
+        ? _conversations.indexWhere(
+            (c) =>
+                !c.isGroup &&
+                c.participantIds.contains(parentId) &&
+                c.participantIds.contains(resolvedTargetId),
+          )
+        : -1;
 
     if (existingIndex != -1) {
       return _conversations[existingIndex];
@@ -712,7 +844,7 @@ class MessagingService {
       id: _generateUuidV4(),
       title: title,
       isGroup: false,
-      participantIds: [parentId, targetId],
+      participantIds: [parentId, if (resolvedTargetId.isNotEmpty) resolvedTargetId],
       participantNames: [parentName, targetName],
       lastMessage: initialMessage ?? 'Conversation initiated.',
       lastMessageTime: DateTime.now(),

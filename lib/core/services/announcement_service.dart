@@ -32,6 +32,10 @@ class AnnouncementService {
 
   bool isRead(String id) => _readIds.contains(id);
 
+  void refreshAndSubscribe() {
+    _initRealtimeSubscription();
+  }
+
   /// Listen for real-time announcements broadcast by other devices/admins
   void _initRealtimeSubscription() {
     final client = SupabaseService.instance.client;

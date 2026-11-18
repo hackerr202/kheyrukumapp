@@ -806,12 +806,22 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
     final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
+    final subtitleLabel = widget.targetRole == 'teacher'
+        ? 'Ustaz Direct Channel'
+        : (widget.targetRole == 'parent'
+            ? 'Parent Direct Channel'
+            : (widget.targetRole == 'admin' ? 'Center Administration' : 'Center Channel'));
+
     return Scaffold(
-      backgroundColor: isDark ? const Color(0xFF0B132B) : const Color(0xFFF1F5F9),
+      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF1F5F9),
       appBar: AppBar(
         titleSpacing: 0,
         backgroundColor: cardBg,
-        elevation: 0.5,
+        elevation: 0,
+        bottom: PreferredSize(
+          preferredSize: const Size.fromHeight(1),
+          child: Divider(height: 1, color: borderColor),
+        ),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
           onPressed: () => Navigator.pop(context),
@@ -819,8 +829,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         title: Row(
           children: [
             CircleAvatar(
-              radius: 18,
-              backgroundColor: AppColors.accentEmerald.withOpacity(0.2),
+              radius: 19,
+              backgroundColor: AppColors.accentEmerald.withOpacity(0.16),
               child: Icon(
                 widget.targetRole == 'teacher'
                     ? Icons.menu_book_rounded
@@ -829,30 +839,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 size: 20,
               ),
             ),
-            const SizedBox(width: 10),
+            const SizedBox(width: 11),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     widget.conversationTitle,
-                    style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textColor),
+                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textColor),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 1),
-                  Row(
-                    children: [
-                      Container(
-                        width: 7,
-                        height: 7,
-                        decoration: const BoxDecoration(
-                          color: AppColors.accentEmerald,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      const SizedBox(width: 5),
-                      Text('online', style: TextStyle(fontSize: 11, color: AppColors.accentEmerald)),
-                    ],
+                  Text(
+                    subtitleLabel,
+                    style: TextStyle(fontSize: 11, color: AppColors.accentEmerald, fontWeight: FontWeight.w500),
                   ),
                 ],
               ),
@@ -973,8 +973,9 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: isDark ? const Color(0xFF1E293B) : const Color(0xFFF1F5F9),
-              borderRadius: BorderRadius.circular(22),
+              color: isDark ? AppColors.background : const Color(0xFFF1F5F9),
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: borderColor, width: 0.8),
             ),
             child: TextField(
               controller: _msgCtrl,
@@ -985,11 +986,14 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               onSubmitted: (_) => _sendMessage(),
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
+                filled: false,
                 hintText: 'Message...',
                 hintStyle: TextStyle(color: subtextColor, fontSize: 13),
                 border: InputBorder.none,
+                enabledBorder: InputBorder.none,
+                focusedBorder: InputBorder.none,
                 isDense: true,
-                contentPadding: const EdgeInsets.symmetric(vertical: 9),
+                contentPadding: const EdgeInsets.symmetric(vertical: 10),
               ),
             ),
           ),
@@ -1092,8 +1096,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     required Color subtextColor,
   }) {
     final bubbleBg = isMe
-        ? (isDark ? const Color(0xFF2E7D32).withOpacity(0.85) : const Color(0xFFD1FAE5))
-        : (isDark ? const Color(0xFF1E293B) : Colors.white);
+        ? (isDark ? const Color(0xFF065F46) : const Color(0xFFD1FAE5))
+        : (isDark ? AppColors.surfaceCard : Colors.white);
 
     final bubbleTextColor = isMe
         ? (isDark ? Colors.white : const Color(0xFF064E3B))
@@ -1110,9 +1114,15 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         child: Container(
           margin: const EdgeInsets.only(bottom: 8),
           constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
-          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: bubbleBg,
+            border: isMe
+                ? null
+                : Border.all(
+                    color: isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight,
+                    width: 0.8,
+                  ),
             borderRadius: BorderRadius.only(
               topLeft: const Radius.circular(16),
               topRight: const Radius.circular(16),

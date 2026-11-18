@@ -63,6 +63,9 @@ class AuthSessionService {
     if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
       roleNotifier.value = 'admin';
       _userName = 'Center Administrator';
+      try {
+        await PushNotificationService.instance.registerDeviceToken();
+      } catch (_) {}
       return;
     }
 
@@ -83,20 +86,28 @@ class AuthSessionService {
           roleNotifier.value = role;
         }
         if (profile['halaqah_id'] != null) {
-          _assignedHalaqahId = profile['halaqah_id'] as String;
+          _assignedHalaqahId = profile['halaqah_id'].toString();
         }
         if (profile['halaqah_name'] != null) {
-          _assignedHalaqahName = profile['halaqah_name'] as String;
+          _assignedHalaqahName = profile['halaqah_name'].toString();
         }
 
-        // If teacher's halaqah isn't on profile, look it up from halaqahs.teacher_id
-        if (roleNotifier.value == 'teacher' && _assignedHalaqahId.isEmpty) {
+        // If teacher's halaqah isn't on profile (or name is missing), resolve from halaqahs
+        if (roleNotifier.value == 'teacher' &&
+            (_assignedHalaqahId.isEmpty || _assignedHalaqahName.isEmpty)) {
           try {
-            final halaqah = await SupabaseService.instance.client
-                ?.from('halaqahs')
-                .select('id, name')
-                .eq('teacher_id', _userId)
-                .maybeSingle();
+            final client = SupabaseService.instance.client;
+            final halaqah = _assignedHalaqahId.isNotEmpty
+                ? await client
+                    ?.from('halaqahs')
+                    .select('id, name')
+                    .eq('id', _assignedHalaqahId)
+                    .maybeSingle()
+                : await client
+                    ?.from('halaqahs')
+                    .select('id, name')
+                    .eq('teacher_id', _userId)
+                    .maybeSingle();
             if (halaqah != null) {
               _assignedHalaqahId = halaqah['id']?.toString() ?? '';
               _assignedHalaqahName = halaqah['name']?.toString() ?? '';
@@ -105,7 +116,11 @@ class AuthSessionService {
             debugPrint('[AuthSessionService] Error looking up teacher halaqah: $e');
           }
         }
+        roleNotifier.notifyListeners();
       }
+      try {
+        await PushNotificationService.instance.registerDeviceToken();
+      } catch (_) {}
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');
     }

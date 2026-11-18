@@ -1,6 +1,11 @@
 import 'package:flutter/material.dart';
 import '../../../core/routes/app_routes.dart';
+import '../../../core/services/absence_service.dart';
 import '../../../core/services/auth_session_service.dart';
+import '../../../core/services/halaqah_service.dart';
+import '../../../core/services/homework_service.dart';
+import '../../../core/services/messaging_service.dart';
+import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
@@ -8,7 +13,7 @@ import '../../../widgets/invite_code_dialog.dart';
 
 /// Settings & Profile Tab:
 /// 1. Functional Light/Dark theme toggle
-/// 2. Role Switcher Preview Hub (switch between Admin, Teacher, and Parent)
+/// 2. Role status overview
 /// 3. Admin-only Invite Codes Generator (hidden for Teacher & Parent)
 /// 4. User profile and sign out
 class SettingsTab extends StatefulWidget {
@@ -21,6 +26,13 @@ class SettingsTab extends StatefulWidget {
 class _SettingsTabState extends State<SettingsTab> {
   Future<void> _handleSignOut() async {
     AuthSessionService.instance.clearSession();
+    await Future.wait([
+      StudentService.instance.clearOnLogout(),
+      HalaqahService.instance.clearOnLogout(),
+      HomeworkService.instance.clearOnLogout(),
+      AbsenceService.instance.clearOnLogout(),
+      MessagingService.instance.clearOnLogout(),
+    ]);
     await SupabaseService.instance.signOut();
     if (mounted) {
       Navigator.of(context).pushReplacementNamed(AppRoutes.auth);

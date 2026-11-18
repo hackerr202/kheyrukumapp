@@ -47,7 +47,9 @@ class WeeklyReport {
       sabaq: json['sabaq']?.toString() ?? 'Surah Al-Mulk (1-15)',
       sabqi: json['sabqi']?.toString() ?? 'Surah Al-Qalam (1-20)',
       manzil: json['manzil']?.toString() ?? 'Juz 29 Retention',
-      daysPresent: (json['days_present'] as num?)?.toInt() ?? 5,
+      daysPresent: (json['attendance_days'] as num?)?.toInt() ??
+          (json['days_present'] as num?)?.toInt() ??
+          5,
       totalDays: (json['total_days'] as num?)?.toInt() ?? 5,
       tajweedRating: json['tajweed_rating']?.toString() ?? 'Excellent',
       mistakesCount: (json['mistakes_count'] as num?)?.toInt() ?? 1,

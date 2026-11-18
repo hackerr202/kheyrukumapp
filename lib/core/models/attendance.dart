@@ -22,16 +22,17 @@ class AttendanceRecord {
   });
 
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
+    final rawDate = json['session_date'] ?? json['date'];
     return AttendanceRecord(
       id: json['id']?.toString() ?? '',
       studentId: json['student_id']?.toString() ?? '',
       studentName: json['student_name']?.toString() ?? 'Student',
       halaqahId: json['halaqah_id']?.toString(),
-      date: json['date'] != null
-          ? DateTime.tryParse(json['date'].toString()) ?? DateTime.now()
+      date: rawDate != null
+          ? DateTime.tryParse(rawDate.toString()) ?? DateTime.now()
           : DateTime.now(),
       status: json['status']?.toString() ?? 'present',
-      teacherRemarks: json['teacher_remarks']?.toString(),
+      teacherRemarks: (json['remarks'] ?? json['teacher_remarks'])?.toString(),
       markedBy: json['marked_by']?.toString(),
       createdAt: json['created_at'] != null
           ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()

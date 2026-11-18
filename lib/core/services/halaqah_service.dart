@@ -209,17 +209,31 @@ class HalaqahService {
       _halaqahs[index] = updated;
       halaqahsNotifier.value = List.from(_halaqahs);
 
+      final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+      await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+
       final client = SupabaseService.instance.client;
-      if (client != null) {
+      if (client != null && _isValidUuid(halaqahId) && _isValidUuid(teacherId)) {
         try {
           await client.from('halaqahs').update({
             'teacher_id': teacherId,
           }).eq('id', halaqahId);
+          await client.from('profiles').update({
+            'halaqah_id': halaqahId,
+            'halaqah_name': existing.name,
+          }).eq('id', teacherId);
         } catch (e) {
           debugPrint('[HalaqahService] Assign teacher error: $e');
         }
       }
     }
+  }
+
+  /// Clear cached halaqahs on sign-out
+  Future<void> clearOnLogout() async {
+    _halaqahs.clear();
+    halaqahsNotifier.value = [];
+    await LocalStorageService.instance.remove('cached_halaqahs');
   }
 
   /// Get halaqah name by id

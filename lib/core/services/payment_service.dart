@@ -41,9 +41,10 @@ class PaymentService {
 
   void _init() {
     final client = SupabaseService.instance.client;
-    if (client == null) return;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
     refresh();
     try {
+      _channel?.unsubscribe();
       _channel = client
           .channel('public:monthly_payments')
           .onPostgresChanges(
@@ -56,6 +57,10 @@ class PaymentService {
     } catch (e) {
       debugPrint('[PaymentService] Realtime subscription error: $e');
     }
+  }
+
+  Future<void> refreshAndSubscribe() async {
+    _init();
   }
 
   /// Reload all payments visible to the current user (RLS restricts parents to their own rows).
@@ -135,7 +140,7 @@ class PaymentService {
   }
 
   void _notify(String title, String body, String type) {
-    PushNotificationService.instance.showNotification(title: title, body: body, payload: type);
+    PushNotificationService.instance.showNotification(title: title, body: body, payload: type, type: type);
   }
 
   /// Admin issues a monthly tuition fee invoice for a student

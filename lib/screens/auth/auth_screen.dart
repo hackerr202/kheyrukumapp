@@ -96,6 +96,7 @@ class _AuthScreenState extends State<AuthScreen> {
       } else if (email.trim().toLowerCase() == 'admin@kheyrukum.com') {
         AuthSessionService.instance.setRole('admin');
       }
+      await AuthSessionService.instance.syncFromSupabaseProfile();
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
@@ -166,11 +167,25 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
-      AuthSessionService.instance.setRole(
-        res['role'] ?? 'parent',
-        name: name,
-        email: email,
-      );
+      if (res['requiresEmailVerification'] == true) {
+        if (mounted) {
+          setState(() {
+            _isSignUpMode = false;
+            _isInviteVerified = false;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(res['message'] ?? 'Account created! Please verify your email before logging in.'),
+              backgroundColor: const Color(0xFF10B981),
+              behavior: SnackBarBehavior.floating,
+              duration: const Duration(seconds: 6),
+            ),
+          );
+        }
+        return;
+      }
+
+      await AuthSessionService.instance.syncFromSupabaseProfile();
       if (mounted) {
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }

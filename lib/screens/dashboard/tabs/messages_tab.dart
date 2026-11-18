@@ -129,20 +129,22 @@ class _MessagesTabState extends State<MessagesTab> {
 
                   // Telegram-style Search Bar
                   Container(
-                    height: 40,
+                    height: 44,
                     decoration: BoxDecoration(
-                      color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                      borderRadius: BorderRadius.circular(20),
+                      color: isDark ? AppColors.surfaceCard : const Color(0xFFE2E8F0),
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: borderColor, width: 0.8),
                     ),
                     child: TextField(
                       controller: _searchCtrl,
                       onChanged: (val) => setState(() => _searchQuery = val.trim()),
-                      style: TextStyle(color: textColor, fontSize: 13),
+                      style: TextStyle(color: textColor, fontSize: 13.5),
                       decoration: InputDecoration(
+                        filled: false,
                         isDense: true,
                         hintText: 'Search chats, parents or circles...',
                         hintStyle: TextStyle(color: subtextColor, fontSize: 12.5),
-                        prefixIcon: Icon(Icons.search_rounded, size: 18, color: subtextColor),
+                        prefixIcon: Icon(Icons.search_rounded, size: 19, color: subtextColor),
                         suffixIcon: _searchQuery.isNotEmpty
                             ? IconButton(
                                 icon: const Icon(Icons.close_rounded, size: 16),
@@ -153,7 +155,9 @@ class _MessagesTabState extends State<MessagesTab> {
                               )
                             : null,
                         border: InputBorder.none,
-                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                        enabledBorder: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 11),
                       ),
                     ),
                   ),
@@ -680,10 +684,21 @@ class _MessagesTabState extends State<MessagesTab> {
                     trailing: const Icon(Icons.chat_bubble_outline_rounded, size: 18, color: AppColors.accentTeal),
                     onTap: () async {
                       Navigator.pop(ctx);
+                      if (student.parentId == null || student.parentId!.isEmpty) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text('${student.fullName} does not have a linked parent account yet.'),
+                              behavior: SnackBarBehavior.floating,
+                            ),
+                          );
+                        }
+                        return;
+                      }
                       final convo = await MessagingService.instance.startTeacherChatWithParent(
                         teacherId: AuthSessionService.instance.userId,
                         teacherName: AuthSessionService.instance.userName,
-                        parentId: student.parentId ?? 'par-001',
+                        parentId: student.parentId!,
                         parentName: student.parentName,
                         studentName: student.fullName,
                         halaqahId: student.halaqahId,
@@ -713,19 +728,24 @@ class _MessagesTabState extends State<MessagesTab> {
 
   // Parent starts direct chat with Ustaz or Director
   void _startParentDirectChat(BuildContext context, {required String role}) async {
-    final children = StudentService.instance.getStudentsForParent(AuthSessionService.instance.userId);
+    final children = StudentService.instance.getStudentsForParent(
+      AuthSessionService.instance.userId,
+      parentEmail: AuthSessionService.instance.userEmail,
+    );
     final childHalaqah = children.isNotEmpty ? children.first.halaqahName : 'Study Circle';
     final halaqahs = HalaqahService.instance.halaqahs;
     final hMatch = halaqahs.where((h) => h.name.toLowerCase() == childHalaqah.toLowerCase());
     final teacherName = (hMatch.isNotEmpty && hMatch.first.teacherName != 'Unassigned')
         ? hMatch.first.teacherName
         : 'Assigned Ustaz';
+    final teacherId = hMatch.isNotEmpty ? hMatch.first.teacherId : null;
 
     final convo = await MessagingService.instance.startParentChat(
       parentId: AuthSessionService.instance.userId,
       parentName: AuthSessionService.instance.userName,
       targetRole: role,
       targetName: role == 'teacher' ? teacherName : 'Center Director',
+      targetId: role == 'teacher' ? teacherId : null,
       halaqahName: childHalaqah,
     );
 

@@ -4,6 +4,7 @@ import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import 'local_storage_service.dart';
 import 'notification_center_service.dart';
 import 'supabase_service.dart';
 
@@ -192,6 +193,7 @@ class PushNotificationService {
     required String title,
     required String body,
     String? payload,
+    String type = 'broadcast',
   }) async {
     try {
       final notifId = id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
@@ -236,7 +238,7 @@ class PushNotificationService {
       NotificationCenterService.instance.addNotification(
         title: title,
         body: body,
-        type: 'broadcast',
+        type: type,
       );
 
       debugPrint('[PushNotificationService] System notification posted: "$title"');
@@ -245,20 +247,27 @@ class PushNotificationService {
     }
   }
 
-  /// Register or update the user's phone device token in Supabase
+  /// Register or update the user's persistent device token in Supabase
   Future<void> registerDeviceToken([String? token]) async {
     final client = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
-    if (client == null) return;
+    if (client == null || user == null) return;
 
-    final tokenToSave = token ?? _cachedDeviceToken ?? 'dev_token_${DateTime.now().millisecondsSinceEpoch}';
+    var tokenToSave = token ?? _cachedDeviceToken;
+    if (tokenToSave == null || tokenToSave.isEmpty) {
+      tokenToSave = await LocalStorageService.instance.getString('persistent_device_token');
+      if (tokenToSave == null || tokenToSave.isEmpty) {
+        tokenToSave = 'dev_${user.id.substring(0, 8)}_${DateTime.now().millisecondsSinceEpoch}';
+        await LocalStorageService.instance.saveString('persistent_device_token', tokenToSave);
+      }
+    }
     _cachedDeviceToken = tokenToSave;
 
     try {
       final platform = Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'web');
 
       await client.from('user_device_tokens').upsert({
-        'user_id': user?.id,
+        'user_id': user.id,
         'device_token': tokenToSave,
         'device_type': platform,
         'updated_at': DateTime.now().toUtc().toIso8601String(),

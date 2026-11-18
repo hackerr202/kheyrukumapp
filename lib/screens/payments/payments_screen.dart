@@ -1039,20 +1039,33 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             ElevatedButton(
               onPressed: () async {
                 final amt = double.tryParse(amountCtrl.text) ?? 50.0;
-                await PaymentService.instance.createPaymentInvoice(
-                  studentId: selectedStudent.id,
-                  studentName: selectedStudent.fullName,
-                  parentId: selectedStudent.parentId ?? 'par-${selectedStudent.id}',
-                  parentName: selectedStudent.parentName,
-                  parentEmail: selectedStudent.parentPhone,
-                  month: monthCtrl.text.trim(),
-                  amount: amt,
-                  dueDate: DateTime.now().add(const Duration(days: 10)),
-                );
-                Navigator.pop(ctx);
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('Tuition issued for ${selectedStudent.fullName}!')),
-                );
+                try {
+                  await PaymentService.instance.createPaymentInvoice(
+                    studentId: selectedStudent.id,
+                    studentName: selectedStudent.fullName,
+                    parentId: selectedStudent.parentId ?? '',
+                    parentName: selectedStudent.parentName,
+                    parentEmail: selectedStudent.parentPhone,
+                    month: monthCtrl.text.trim(),
+                    amount: amt,
+                    dueDate: DateTime.now().add(const Duration(days: 10)),
+                  );
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('Tuition issued for ${selectedStudent.fullName}!')),
+                    );
+                  }
+                } catch (e) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(SupabaseService.cleanErrorMessage(e)),
+                        backgroundColor: Colors.redAccent,
+                      ),
+                    );
+                  }
+                }
               },
               child: const Text('Issue Tuition'),
             ),

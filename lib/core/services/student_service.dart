@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/attendance.dart';
 import '../models/student.dart';
 import '../models/weekly_report.dart';
@@ -13,11 +14,11 @@ import 'supabase_service.dart';
 /// - Student profiles & parent-student associations (one parent -> multiple children)
 /// - Teacher's assigned class student roster and daily attendance logging
 /// - Weekly memorization & Tajweed reports with automated parent alerts
-/// - Cloud sync with Supabase tables: public.students, public.parent_students, public.student_attendance
+/// - Cloud sync with Supabase tables: public.students, public.parent_students, public.student_attendance, public.weekly_reports
 class StudentService {
   StudentService._() {
     _loadFromCache();
-    fetchStudentsFromCloud();
+    refreshAll();
   }
 
   Future<void> _loadFromCache() async {
@@ -41,6 +42,8 @@ class StudentService {
   final List<Student> _students = [];
   final Map<String, List<AttendanceRecord>> _attendanceMap = {};
   final Map<String, List<WeeklyReport>> _weeklyReportsMap = {};
+  RealtimeChannel? _attendanceRealtimeChannel;
+  RealtimeChannel? _reportsRealtimeChannel;
 
   final StreamController<List<Student>> _studentsController =
       StreamController<List<Student>>.broadcast();
@@ -52,6 +55,160 @@ class StudentService {
   Stream<Map<String, List<AttendanceRecord>>> get attendanceStream => _attendanceController.stream;
 
   List<Student> get allStudents => List.unmodifiable(_students);
+
+  /// Refresh students, attendance, and weekly reports from Supabase and subscribe to realtime updates
+  Future<void> refreshAll() async {
+    await fetchStudentsFromCloud();
+    await fetchAttendanceFromCloud();
+    await fetchWeeklyReportsFromCloud();
+    _subscribeRealtime();
+  }
+
+  /// Purge in-memory and cached state on sign-out so switching accounts is clean
+  Future<void> clearOnLogout() async {
+    _attendanceRealtimeChannel?.unsubscribe();
+    _attendanceRealtimeChannel = null;
+    _reportsRealtimeChannel?.unsubscribe();
+    _reportsRealtimeChannel = null;
+    _students.clear();
+    _attendanceMap.clear();
+    _weeklyReportsMap.clear();
+    _cachedRegisteredParents.clear();
+    _studentsController.add([]);
+    _attendanceController.add({});
+    await LocalStorageService.instance.remove('cached_students');
+  }
+
+  void _subscribeRealtime() {
+    final client = SupabaseService.instance.client;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
+
+    try {
+      _attendanceRealtimeChannel?.unsubscribe();
+      _attendanceRealtimeChannel = client
+          .channel('public:student_attendance')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'student_attendance',
+            callback: (payload) async {
+              await fetchAttendanceFromCloud();
+              final newRow = payload.newRecord;
+              if (newRow.isEmpty) return;
+              final studentId = newRow['student_id']?.toString() ?? '';
+              final status = newRow['status']?.toString() ?? '';
+              final remarks = newRow['remarks']?.toString() ?? '';
+              final myChildren = getStudentsForParent(
+                AuthSessionService.instance.userId,
+                parentEmail: AuthSessionService.instance.userEmail,
+              );
+              final childMatches = myChildren.where((c) => c.id == studentId);
+              if (AuthSessionService.instance.isParent && childMatches.isNotEmpty) {
+                final child = childMatches.first;
+                PushNotificationService.instance.showNotification(
+                  title: 'Daily Attendance: ${status.toUpperCase()}',
+                  body: '${child.fullName} was marked ${status.toUpperCase()} in ${child.halaqahName}. ${remarks.isNotEmpty ? "Note: $remarks" : ""}',
+                  payload: 'attendance',
+                  type: 'attendance',
+                );
+              }
+            },
+          )
+          .subscribe();
+
+      _reportsRealtimeChannel?.unsubscribe();
+      _reportsRealtimeChannel = client
+          .channel('public:weekly_reports')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.insert,
+            schema: 'public',
+            table: 'weekly_reports',
+            callback: (payload) async {
+              await fetchWeeklyReportsFromCloud();
+              final newRow = payload.newRecord;
+              if (newRow.isEmpty) return;
+              final studentId = newRow['student_id']?.toString() ?? '';
+              final sabaq = newRow['sabaq']?.toString() ?? '';
+              final rating = newRow['tajweed_rating']?.toString() ?? '';
+              final myChildren = getStudentsForParent(
+                AuthSessionService.instance.userId,
+                parentEmail: AuthSessionService.instance.userEmail,
+              );
+              final childMatches = myChildren.where((c) => c.id == studentId);
+              if (AuthSessionService.instance.isParent && childMatches.isNotEmpty) {
+                final child = childMatches.first;
+                PushNotificationService.instance.showNotification(
+                  title: 'Weekly Quran Progress Report',
+                  body: 'Report for ${child.fullName}: $sabaq ($rating)',
+                  payload: 'weekly_report',
+                  type: 'weekly_report',
+                );
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('[StudentService] Realtime subscription note: $e');
+    }
+  }
+
+  /// Fetch daily attendance records from Supabase
+  Future<void> fetchAttendanceFromCloud() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      final res = await client
+          .from('student_attendance')
+          .select('*, students(full_name, halaqah_id)')
+          .order('session_date', ascending: false)
+          .limit(300);
+      if (res is List) {
+        _attendanceMap.clear();
+        for (final item in res) {
+          final map = Map<String, dynamic>.from(item as Map);
+          if (map['students'] is Map) {
+            map['student_name'] = map['students']['full_name'];
+            map['halaqah_id'] = map['students']['halaqah_id'];
+          }
+          final rec = AttendanceRecord.fromJson(map);
+          _attendanceMap.putIfAbsent(rec.studentId, () => []).add(rec);
+        }
+        _attendanceController.add(Map.from(_attendanceMap));
+      }
+    } catch (e) {
+      debugPrint('[StudentService] fetchAttendanceFromCloud notice: $e');
+    }
+  }
+
+  /// Fetch weekly Quran progress reports from Supabase
+  Future<void> fetchWeeklyReportsFromCloud() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      final res = await client
+          .from('weekly_reports')
+          .select('*, students(full_name), profiles:teacher_id(full_name)')
+          .order('created_at', ascending: false)
+          .limit(200);
+      if (res is List) {
+        _weeklyReportsMap.clear();
+        for (final item in res) {
+          final map = Map<String, dynamic>.from(item as Map);
+          if (map['students'] is Map) {
+            map['student_name'] = map['students']['full_name'];
+          }
+          if (map['profiles'] is Map) {
+            map['teacher_name'] = map['profiles']['full_name'];
+          }
+          final report = WeeklyReport.fromJson(map);
+          _weeklyReportsMap.putIfAbsent(report.studentId, () => []).add(report);
+        }
+        _studentsController.add(List.from(_students));
+      }
+    } catch (e) {
+      debugPrint('[StudentService] fetchWeeklyReportsFromCloud notice: $e');
+    }
+  }
 
   static bool _isValidUuid(String? str) {
     if (str == null) return false;
@@ -392,29 +549,25 @@ class StudentService {
 
     _attendanceController.add(Map.from(_attendanceMap));
 
-    // DAILY ATTENDANCE NOTIFICATION FOR PARENT
-    String statusEmoji = '✅';
-    if (status == 'absent') statusEmoji = '❌';
-    if (status == 'late') statusEmoji = '⏰';
-    if (status == 'excused') statusEmoji = '📝';
-
-    PushNotificationService.instance.showNotification(
-      title: 'Daily Attendance: ${status.toUpperCase()} $statusEmoji',
-      body: '${student.fullName} was marked ${status.toUpperCase()} today in ${student.halaqahName}. Remarks: $defaultRemark',
-    );
-
-    // Supabase cloud sync
+    // Supabase cloud sync (with teacher_id so RLS passes for teachers & admins)
     final client = SupabaseService.instance.client;
-    if (client != null) {
+    if (client != null && _isValidUuid(student.id)) {
       try {
-        await client.from('student_attendance').upsert({
+        final teacherId = AuthSessionService.instance.userId;
+        final payload = <String, dynamic>{
           'student_id': student.id,
           'session_date': dateStr,
           'status': status,
           'remarks': defaultRemark,
-        });
+        };
+        if (_isValidUuid(teacherId)) {
+          payload['teacher_id'] = teacherId;
+        }
+        await client
+            .from('student_attendance')
+            .upsert(payload, onConflict: 'student_id,session_date');
       } catch (e) {
-        debugPrint('[StudentService] Cloud attendance sync: $e');
+        debugPrint('[StudentService] Cloud attendance sync notice: $e');
       }
     }
 
@@ -424,10 +577,11 @@ class StudentService {
   /// Teacher Action: Mark all students in teacher's assigned class as 'present' for the day
   Future<void> markHalaqahAllPresent({
     required String halaqahName,
+    String? halaqahId,
     String? markedBy,
     DateTime? date,
   }) async {
-    final classStudents = getStudentsForHalaqah(halaqahName);
+    final classStudents = getStudentsForHalaqah(halaqahName, halaqahId: halaqahId);
     for (final s in classStudents) {
       await recordDailyAttendance(
         studentId: s.id,
@@ -459,11 +613,41 @@ class StudentService {
             createdAt: DateTime.now(),
           );
 
+    final weekStart = DateTime.now().subtract(const Duration(days: 7));
+    String reportId = 'wr-${DateTime.now().millisecondsSinceEpoch}';
+
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(student.id)) {
+      try {
+        final teacherId = AuthSessionService.instance.userId;
+        final payload = <String, dynamic>{
+          'student_id': student.id,
+          'week_start_date': weekStart.toIso8601String().substring(0, 10),
+          'sabaq': sabaq,
+          'sabqi': sabqi,
+          'manzil': manzil,
+          'tajweed_rating': tajweedRating,
+          'teacher_remarks': remarks,
+          'attendance_days': 5,
+          'mistakes_count': mistakesCount,
+        };
+        if (_isValidUuid(teacherId)) {
+          payload['teacher_id'] = teacherId;
+        }
+        final inserted = await client.from('weekly_reports').insert(payload).select('id').single();
+        if (inserted['id'] != null) {
+          reportId = inserted['id'].toString();
+        }
+      } catch (e) {
+        debugPrint('[StudentService] Cloud weekly report sync notice: $e');
+      }
+    }
+
     final report = WeeklyReport(
-      id: 'wr-${DateTime.now().millisecondsSinceEpoch}',
+      id: reportId,
       studentId: student.id,
       studentName: student.fullName,
-      weekStartDate: DateTime.now().subtract(const Duration(days: 7)),
+      weekStartDate: weekStart,
       weekEndDate: DateTime.now(),
       sabaq: sabaq,
       sabqi: sabqi,
@@ -481,11 +665,6 @@ class StudentService {
     );
 
     _weeklyReportsMap.putIfAbsent(student.id, () => []).insert(0, report);
-
-    // WEEKLY REPORT NOTIFICATION FOR PARENT
-    PushNotificationService.instance.showNotification(
-      title: 'Weekly Quran Progress Report 📜',
-      body: 'Weekly evaluation for ${student.fullName}: Sabaq ($sabaq), Tajweed: $tajweedRating. Remarks: $remarks',
-    );
+    _studentsController.add(List.from(_students));
   }
 }

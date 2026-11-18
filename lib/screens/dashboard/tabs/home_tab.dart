@@ -12,10 +12,10 @@ import '../../admin/halaqah_management_sheet.dart';
 import '../../admin/invite_codes_bottom_sheet.dart';
 import '../../announcements/announcements_sheet.dart';
 import '../../announcements/post_announcement_dialog.dart';
+import '../../payments/payments_screen.dart';
 
-/// Redesigned Home Tab: Calm, spacious, and easy to scan.
-/// Features clean onboarding checklist for new centers, streamlined 1-announcement card,
-/// collapsed Invite Codes row, and an uncluttered 4-icon quick action row.
+/// Home Tab: Modern editorial Islamic center dashboard with role-tailored hero card,
+/// quick actions grid, and vertical announcement feed with photo attachments.
 class HomeTab extends StatefulWidget {
   final ValueChanged<int>? onNavigateToTab;
 
@@ -33,9 +33,9 @@ class _HomeTabState extends State<HomeTab> {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final subtleBorder = isDark ? const Color(0xFF334155).withOpacity(0.5) : const Color(0xFFE2E8F0);
+    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
+    final cardBg = isDark ? AppColors.surfaceCard : Colors.white;
+    final subtleBorder = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
@@ -43,12 +43,35 @@ class _HomeTabState extends State<HomeTab> {
         final isAdmin = currentRole == 'admin';
         final isTeacher = currentRole == 'teacher';
 
-        // 16px side padding, 120px bottom padding to avoid overlapping floating bottom nav
+        // 20px side padding, 120px bottom padding to avoid overlapping floating bottom nav
         return ListView(
-          padding: const EdgeInsets.fromLTRB(16, 8, 16, 120),
+          padding: const EdgeInsets.fromLTRB(20, 8, 20, 120),
           children: [
             if (isAdmin) ...[
-              // Announcements vertical list at the top (displays recent announcements)
+              // Hero Center Status / Onboarding Card
+              _buildAdminCenterStatusCard(
+                context: context,
+                isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtextColor: subtextColor,
+                subtleBorder: subtleBorder,
+              ),
+
+              const SizedBox(height: 22),
+
+              // Quick Actions Grid
+              _buildQuickActionsRow(
+                context: context,
+                isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtleBorder: subtleBorder,
+              ),
+
+              const SizedBox(height: 22),
+
+              // Announcements Vertical Feed
               _buildAnnouncementsSection(
                 context: context,
                 isDark: isDark,
@@ -59,32 +82,9 @@ class _HomeTabState extends State<HomeTab> {
                 subtleBorder: subtleBorder,
               ),
 
-              const SizedBox(height: 20),
+              const SizedBox(height: 18),
 
-              // Center Status Card (Setup checklist or live center stats: Students, Halaqahs, Teachers)
-              _buildAdminCenterStatusCard(
-                context: context,
-                isDark: isDark,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                subtleBorder: subtleBorder,
-              ),
-
-              const SizedBox(height: 20),
-
-              // Quick Actions Row (4 icons: Post notice, Invite codes, Add student, Create halaqah)
-              _buildQuickActionsRow(
-                context: context,
-                isDark: isDark,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtleBorder: subtleBorder,
-              ),
-
-              const SizedBox(height: 20),
-
-              // Invite Codes collapsed single row
+              // Invite Codes quick row
               _buildInviteCodesCollapsedRow(
                 context: context,
                 isDark: isDark,
@@ -94,17 +94,6 @@ class _HomeTabState extends State<HomeTab> {
                 subtleBorder: subtleBorder,
               ),
             ] else if (isTeacher) ...[
-              // Teacher Experience
-              _buildAnnouncementsSection(
-                context: context,
-                isDark: isDark,
-                isAdmin: false,
-                cardBg: cardBg,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                subtleBorder: subtleBorder,
-              ),
-              const SizedBox(height: 24),
               _buildTeacherOverviewCard(
                 isDark: isDark,
                 cardBg: cardBg,
@@ -112,8 +101,7 @@ class _HomeTabState extends State<HomeTab> {
                 subtextColor: subtextColor,
                 subtleBorder: subtleBorder,
               ),
-            ] else ...[
-              // Parent Experience
+              const SizedBox(height: 22),
               _buildAnnouncementsSection(
                 context: context,
                 isDark: isDark,
@@ -123,9 +111,19 @@ class _HomeTabState extends State<HomeTab> {
                 subtextColor: subtextColor,
                 subtleBorder: subtleBorder,
               ),
-              const SizedBox(height: 24),
+            ] else ...[
               _buildParentOverviewCard(
                 isDark: isDark,
+                cardBg: cardBg,
+                textColor: textColor,
+                subtextColor: subtextColor,
+                subtleBorder: subtleBorder,
+              ),
+              const SizedBox(height: 22),
+              _buildAnnouncementsSection(
+                context: context,
+                isDark: isDark,
+                isAdmin: false,
                 cardBg: cardBg,
                 textColor: textColor,
                 subtextColor: subtextColor,
@@ -173,41 +171,97 @@ class _HomeTabState extends State<HomeTab> {
                 if (hasTeacherCode) completedSteps++;
                 if (hasStudent) completedSteps++;
 
-            // If setup is complete (or students exist), show calm, compact stats row
+            // If setup is complete (or students exist), show elevated Center Overview Hero Card
             if (hasStudent && completedSteps >= 3) {
               final teachersCount = halaqahs.map((h) => h.teacherId).where((id) => id != null && id.isNotEmpty).toSet().length;
 
               return Container(
-                padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 18),
+                padding: const EdgeInsets.all(20),
                 decoration: BoxDecoration(
-                  color: cardBg,
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: subtleBorder, width: 1),
+                  gradient: isDark
+                      ? const LinearGradient(
+                          colors: [Color(0xFF11262D), Color(0xFF131C31)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        )
+                      : const LinearGradient(
+                          colors: [Color(0xFFECFDF5), Color(0xFFFFFFFF)],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                  borderRadius: BorderRadius.circular(22),
+                  border: Border.all(
+                    color: AppColors.accentEmerald.withOpacity(isDark ? 0.28 : 0.35),
+                    width: 1,
+                  ),
                 ),
-                child: Row(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    _buildStatItem(
-                      label: 'Students',
-                      value: '${students.length}',
-                      textColor: textColor,
-                      subtextColor: subtextColor,
-                      onTap: () => widget.onNavigateToTab?.call(1),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          'Center Overview',
+                          style: TextStyle(
+                            fontSize: 13,
+                            fontWeight: FontWeight.w600,
+                            color: subtextColor,
+                            letterSpacing: 0.2,
+                          ),
+                        ),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                          decoration: BoxDecoration(
+                            color: AppColors.accentEmerald.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: const Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(Icons.circle, size: 6, color: AppColors.accentEmerald),
+                              SizedBox(width: 5),
+                              Text(
+                                'LIVE',
+                                style: TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: AppColors.accentEmerald,
+                                  letterSpacing: 0.5,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
-                    _buildStatDivider(subtleBorder),
-                    _buildStatItem(
-                      label: 'Halaqahs',
-                      value: '${halaqahs.length}',
-                      textColor: textColor,
-                      subtextColor: subtextColor,
-                      onTap: () => HalaqahManagementSheet.show(context),
-                    ),
-                    _buildStatDivider(subtleBorder),
-                    _buildStatItem(
-                      label: 'Teachers',
-                      value: '$teachersCount',
-                      textColor: textColor,
-                      subtextColor: subtextColor,
-                      onTap: () => InviteCodesBottomSheet.show(context),
+                    const SizedBox(height: 16),
+                    Row(
+                      children: [
+                        _buildStatItem(
+                          label: 'Students',
+                          value: '${students.length}',
+                          textColor: textColor,
+                          subtextColor: subtextColor,
+                          onTap: () => widget.onNavigateToTab?.call(1),
+                        ),
+                        _buildStatDivider(subtleBorder),
+                        _buildStatItem(
+                          label: 'Halaqahs',
+                          value: '${halaqahs.length}',
+                          textColor: textColor,
+                          subtextColor: subtextColor,
+                          onTap: () => HalaqahManagementSheet.show(context),
+                        ),
+                        _buildStatDivider(subtleBorder),
+                        _buildStatItem(
+                          label: 'Teachers',
+                          value: '$teachersCount',
+                          textColor: textColor,
+                          subtextColor: subtextColor,
+                          onTap: () => InviteCodesBottomSheet.show(context),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -527,26 +581,34 @@ class _HomeTabState extends State<HomeTab> {
     return Expanded(
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(14),
+        borderRadius: BorderRadius.circular(16),
         child: Container(
-          constraints: const BoxConstraints(minHeight: 76),
-          padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 12),
+          constraints: const BoxConstraints(minHeight: 84),
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 12),
           decoration: BoxDecoration(
             color: cardBg,
-            borderRadius: BorderRadius.circular(14),
+            borderRadius: BorderRadius.circular(16),
             border: Border.all(color: subtleBorder, width: 1),
           ),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 22, color: textColor),
-              const SizedBox(height: 6),
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: AppColors.accentEmerald.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, size: 19, color: AppColors.accentEmerald),
+              ),
+              const SizedBox(height: 8),
               Text(
                 label,
                 textAlign: TextAlign.center,
                 style: TextStyle(
                   fontSize: 11,
-                  fontWeight: FontWeight.w500,
+                  fontWeight: FontWeight.w600,
                   color: textColor,
                 ),
                 maxLines: 1,
@@ -729,7 +791,7 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
-  // Teacher Overview Card
+  // Teacher Overview Hero Card
   Widget _buildTeacherOverviewCard({
     required bool isDark,
     required Color cardBg,
@@ -738,57 +800,138 @@ class _HomeTabState extends State<HomeTab> {
     required Color subtleBorder,
   }) {
     final className = AuthSessionService.instance.assignedHalaqahName;
-    final classStudents = StudentService.instance.getStudentsForHalaqah(className);
+    final classId = AuthSessionService.instance.assignedHalaqahId;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: subtleBorder, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                className.isNotEmpty ? className : 'Assigned Circle',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _limeAccent.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${classStudents.length} Students',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: _limeAccent,
+    return StreamBuilder<List<Student>>(
+      stream: StudentService.instance.studentsStream,
+      initialData: StudentService.instance.allStudents,
+      builder: (context, _) {
+        final classStudents = StudentService.instance.getStudentsForHalaqah(
+          className,
+          halaqahId: classId,
+        );
+        int markedToday = 0;
+        for (final s in classStudents) {
+          if (StudentService.instance.getTodayAttendanceForStudent(s.id) != null) {
+            markedToday++;
+          }
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? const LinearGradient(
+                    colors: [Color(0xFF0E292E), Color(0xFF131C31)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : const LinearGradient(
+                    colors: [Color(0xFFF0FDFA), Color(0xFFFFFFFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: AppColors.accentTeal.withOpacity(isDark ? 0.35 : 0.3),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'ASSIGNED STUDY CIRCLE',
+                          style: TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            letterSpacing: 0.8,
+                            color: AppColors.accentTealLight,
+                          ),
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          className.isNotEmpty ? className : 'Assigned Circle',
+                          style: TextStyle(
+                            fontSize: 17,
+                            fontWeight: FontWeight.w700,
+                            color: textColor,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentEmerald.withOpacity(0.14),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${classStudents.length} Students',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accentEmerald,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                'Today\'s attendance: $markedToday of ${classStudents.length} marked.',
+                style: TextStyle(fontSize: 12.5, color: subtextColor),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => widget.onNavigateToTab?.call(1),
+                      icon: const Icon(Icons.fact_check_rounded, size: 16),
+                      label: const Text('Take Attendance', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentEmerald,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () => widget.onNavigateToTab?.call(3),
+                      icon: const Icon(Icons.menu_book_rounded, size: 16),
+                      label: const Text('Homework', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textColor,
+                        side: BorderSide(color: subtleBorder),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'Mark daily attendance and log Quran memorization progress.',
-            style: TextStyle(fontSize: 12, color: subtextColor, height: 1.3),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
-  // Parent Overview Card
+  // Parent Overview Hero Card
   Widget _buildParentOverviewCard({
     required bool isDark,
     required Color cardBg,
@@ -796,56 +939,114 @@ class _HomeTabState extends State<HomeTab> {
     required Color subtextColor,
     required Color subtleBorder,
   }) {
-    final children = StudentService.instance.getStudentsForParent(
-      AuthSessionService.instance.userId,
-      parentEmail: AuthSessionService.instance.userEmail,
-    );
+    return StreamBuilder<List<Student>>(
+      stream: StudentService.instance.studentsStream,
+      initialData: StudentService.instance.allStudents,
+      builder: (context, _) {
+        final children = StudentService.instance.getStudentsForParent(
+          AuthSessionService.instance.userId,
+          parentEmail: AuthSessionService.instance.userEmail,
+        );
+        final activeChild = children.isNotEmpty ? children.first : null;
 
-    return Container(
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: subtleBorder, width: 1),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Enrolled Children',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.bold,
-                  color: textColor,
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: _limeAccent.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  '${children.length} Active',
-                  style: const TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.bold,
-                    color: _limeAccent,
+        return Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            gradient: isDark
+                ? const LinearGradient(
+                    colors: [Color(0xFF231F16), Color(0xFF131C31)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  )
+                : const LinearGradient(
+                    colors: [Color(0xFFFFFBEB), Color(0xFFFFFFFF)],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
                   ),
-                ),
+            borderRadius: BorderRadius.circular(22),
+            border: Border.all(
+              color: AppColors.accentAmber.withOpacity(isDark ? 0.35 : 0.4),
+              width: 1,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Family Learning Hub',
+                    style: TextStyle(
+                      fontSize: 16.5,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
+                  ),
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                    decoration: BoxDecoration(
+                      color: AppColors.accentAmber.withOpacity(0.16),
+                      borderRadius: BorderRadius.circular(20),
+                    ),
+                    child: Text(
+                      '${children.length} Enrolled',
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.accentAmber,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                activeChild != null
+                    ? '${activeChild.fullName} — Juz ${activeChild.currentJuz}, Surah #${activeChild.currentSurah}, Ayah ${activeChild.currentAyah}'
+                    : 'No children linked to your account yet. Contact center administration.',
+                style: TextStyle(fontSize: 12.5, color: subtextColor, height: 1.4),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: ElevatedButton.icon(
+                      onPressed: () => widget.onNavigateToTab?.call(1),
+                      icon: const Icon(Icons.auto_stories_rounded, size: 16),
+                      label: const Text('Progress', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.accentAmber,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlinedButton.icon(
+                      onPressed: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (_) => const PaymentsScreen()),
+                        );
+                      },
+                      icon: const Icon(Icons.receipt_long_rounded, size: 16),
+                      label: const Text('Tuition', style: TextStyle(fontSize: 12, fontWeight: FontWeight.w700)),
+                      style: OutlinedButton.styleFrom(
+                        foregroundColor: textColor,
+                        side: BorderSide(color: subtleBorder),
+                        padding: const EdgeInsets.symmetric(vertical: 11),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                      ),
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
-          const SizedBox(height: 6),
-          Text(
-            'View daily attendance, recitation milestones, and monthly tuition.',
-            style: TextStyle(fontSize: 12, color: subtextColor, height: 1.3),
-          ),
-        ],
-      ),
+        );
+      },
     );
   }
 
@@ -951,13 +1152,13 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                           Icon(
                             isPinned ? Icons.push_pin_rounded : Icons.campaign_rounded,
                             size: 16,
-                            color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
+                            color: isPinned ? AppColors.accentAmber : AppColors.accentEmerald,
                           ),
                           const SizedBox(width: 6),
                           Text(
                             isPinned ? 'PINNED NOTICE' : 'CENTER NOTICE',
                             style: TextStyle(
-                              color: isPinned ? AppColors.accentAmber : const Color(0xFFC9F24A),
+                              color: isPinned ? AppColors.accentAmber : AppColors.accentEmerald,
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 0.5,

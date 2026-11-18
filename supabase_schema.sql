@@ -29,9 +29,15 @@ EXCEPTION
 END $$;
 
 DO $$ BEGIN
-    CREATE TYPE submission_status AS ENUM ('pending', 'reviewed', 'needs_rerecording');
+    CREATE TYPE submission_status AS ENUM ('pending', 'reviewed', 'needs_rerecording', 'completed_at_home');
 EXCEPTION
     WHEN duplicate_object THEN NULL;
+END $$;
+
+DO $$ BEGIN
+    ALTER TYPE public.submission_status ADD VALUE IF NOT EXISTS 'completed_at_home';
+EXCEPTION
+    WHEN others THEN NULL;
 END $$;
 
 -- ------------------------------------------------------------------------------
@@ -186,8 +192,11 @@ CREATE TABLE IF NOT EXISTS public.messages (
     attachment_name TEXT,
     audio_duration INT,
     is_read BOOLEAN DEFAULT FALSE,
+    is_edited BOOLEAN DEFAULT FALSE,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE public.messages ADD COLUMN IF NOT EXISTS is_edited BOOLEAN DEFAULT FALSE;
 
 -- ------------------------------------------------------------------------------
 -- 8. INVITATION CODE CONSUMPTION STORED PROCEDURE
@@ -438,6 +447,19 @@ DO $$ BEGIN
             SELECT conversation_id FROM public.conversation_participants WHERE user_id = auth.uid()
         )
     );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Senders update own messages"
+    ON public.messages FOR UPDATE TO authenticated
+    USING (sender_id = auth.uid())
+    WITH CHECK (sender_id = auth.uid());
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Senders delete own messages"
+    ON public.messages FOR DELETE TO authenticated
+    USING (sender_id = auth.uid());
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- ------------------------------------------------------------------------------
@@ -924,6 +946,98 @@ DO $$ BEGIN
     );
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
+-- ------------------------------------------------------------------------------
+-- 18. HOMEWORK ENHANCEMENTS & ABSENCE REQUESTS
+-- ------------------------------------------------------------------------------
+ALTER TABLE public.homework_assignments ADD COLUMN IF NOT EXISTS halaqah_name TEXT;
+ALTER TABLE public.homework_assignments ADD COLUMN IF NOT EXISTS teacher_name TEXT;
+ALTER TABLE public.homework_assignments ADD COLUMN IF NOT EXISTS surah_name TEXT;
+ALTER TABLE public.homework_assignments ADD COLUMN IF NOT EXISTS tajweed_focus TEXT;
+
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS student_name TEXT;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS parent_id UUID REFERENCES public.profiles(id) ON DELETE SET NULL;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS repetition_count INT DEFAULT 1;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS parent_note TEXT;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS practiced_at TIMESTAMPTZ;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS teacher_rating TEXT;
+ALTER TABLE public.homework_submissions ADD COLUMN IF NOT EXISTS teacher_feedback TEXT;
+ALTER TABLE public.homework_submissions ALTER COLUMN audio_url DROP NOT NULL;
+ALTER TABLE public.homework_submissions ALTER COLUMN duration_seconds DROP NOT NULL;
+
+DO $$ BEGIN
+    CREATE POLICY "Teachers and admins manage homework assignments"
+    ON public.homework_assignments FOR ALL TO authenticated
+    USING (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+        OR halaqah_id IN (SELECT id FROM public.halaqahs WHERE teacher_id = auth.uid())
+    )
+    WITH CHECK (
+        teacher_id = auth.uid()
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents view children homework assignments"
+    ON public.homework_assignments FOR SELECT TO authenticated
+    USING (
+        halaqah_id IN (
+            SELECT s.halaqah_id FROM public.students s
+            JOIN public.parent_students ps ON ps.student_id = s.id
+            WHERE ps.parent_id = auth.uid()
+        )
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents update children homework submissions"
+    ON public.homework_submissions FOR UPDATE TO authenticated
+    USING (
+        student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+    )
+    WITH CHECK (
+        student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
+CREATE TABLE IF NOT EXISTS public.absence_requests (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    student_id UUID NOT NULL REFERENCES public.students(id) ON DELETE CASCADE,
+    student_name TEXT NOT NULL,
+    halaqah_id UUID REFERENCES public.halaqahs(id) ON DELETE SET NULL,
+    halaqah_name TEXT NOT NULL,
+    parent_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
+    parent_name TEXT NOT NULL,
+    parent_phone TEXT DEFAULT '',
+    date DATE NOT NULL,
+    reason TEXT NOT NULL DEFAULT 'illness',
+    notes TEXT DEFAULT '',
+    status TEXT NOT NULL DEFAULT 'pending' CHECK (status IN ('pending', 'approved', 'declined')),
+    reviewed_by TEXT,
+    reviewed_at TIMESTAMPTZ,
+    created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+ALTER TABLE public.absence_requests ENABLE ROW LEVEL SECURITY;
+
+DO $$ BEGIN
+    CREATE POLICY "Parents manage own absence requests"
+    ON public.absence_requests FOR ALL TO authenticated
+    USING (
+        parent_id = auth.uid()
+        OR student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+        OR halaqah_id IN (SELECT id FROM public.halaqahs WHERE teacher_id = auth.uid())
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    )
+    WITH CHECK (
+        parent_id = auth.uid()
+        OR student_id IN (SELECT student_id FROM public.parent_students WHERE parent_id = auth.uid())
+        OR halaqah_id IN (SELECT id FROM public.halaqahs WHERE teacher_id = auth.uid())
+        OR EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin')
+    );
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- Realtime Publications
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.student_attendance; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.weekly_reports; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
@@ -932,6 +1046,9 @@ DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.halaqahs; EXCEP
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.students; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.conversations; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.messages; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.homework_assignments; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.homework_submissions; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+DO $$ BEGIN ALTER PUBLICATION supabase_realtime ADD TABLE public.absence_requests; EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Reload PostgREST schema cache
 NOTIFY pgrst, 'reload schema';

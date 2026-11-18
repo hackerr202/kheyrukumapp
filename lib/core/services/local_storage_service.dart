@@ -74,4 +74,13 @@ class LocalStorageService {
       return null;
     }
   }
+
+  Future<void> remove(String key) async {
+    try {
+      final prefs = await _getPrefs();
+      await prefs.remove(key);
+    } catch (e) {
+      debugPrint('[LocalStorageService] Error removing $key: $e');
+    }
+  }
 }

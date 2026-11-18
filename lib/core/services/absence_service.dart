@@ -1,8 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/absence_request.dart';
 import 'auth_session_service.dart';
-import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
@@ -10,23 +10,122 @@ import 'supabase_service.dart';
 /// Reactive Absence Service managing:
 /// - Parents submitting excused absence requests in advance
 /// - Teachers reviewing pending requests with 1-tap "Approve & Excuse" or "Decline"
-/// - Automatic synchronization with StudentService daily attendance
+/// - Automatic synchronization with StudentService daily attendance & Supabase Realtime
 class AbsenceService {
-  AbsenceService._();
+  AbsenceService._() {
+    refreshAll();
+  }
 
   static final AbsenceService instance = AbsenceService._();
 
   final List<AbsenceRequest> _requests = [];
+  RealtimeChannel? _realtimeChannel;
   final StreamController<List<AbsenceRequest>> _requestsController =
       StreamController<List<AbsenceRequest>>.broadcast();
 
   Stream<List<AbsenceRequest>> get requestsStream => _requestsController.stream;
   List<AbsenceRequest> get allRequests => List.unmodifiable(_requests);
 
+  static bool _isValidUuid(String? str) {
+    if (str == null) return false;
+    final uuidRegex = RegExp(
+        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+    return uuidRegex.hasMatch(str.trim());
+  }
+
+  Future<void> refreshAll() async {
+    await fetchFromCloud();
+    _subscribeRealtime();
+  }
+
+  Future<void> clearOnLogout() async {
+    _realtimeChannel?.unsubscribe();
+    _realtimeChannel = null;
+    _requests.clear();
+    _requestsController.add([]);
+  }
+
+  Future<void> fetchFromCloud() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      final res = await client
+          .from('absence_requests')
+          .select()
+          .order('created_at', ascending: false);
+      if (res is List) {
+        _requests.clear();
+        for (final item in res) {
+          _requests.add(AbsenceRequest.fromJson(Map<String, dynamic>.from(item as Map)));
+        }
+        _requestsController.add(List.from(_requests));
+      }
+    } catch (e) {
+      debugPrint('[AbsenceService] fetchFromCloud notice: $e');
+    }
+  }
+
+  void _subscribeRealtime() {
+    final client = SupabaseService.instance.client;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
+
+    try {
+      _realtimeChannel?.unsubscribe();
+      _realtimeChannel = client
+          .channel('public:absence_requests')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'absence_requests',
+            callback: (payload) async {
+              await fetchFromCloud();
+              final newRow = payload.newRecord;
+              if (newRow.isEmpty) return;
+
+              final status = newRow['status']?.toString() ?? '';
+              final studentName = newRow['student_name']?.toString() ?? 'Student';
+              final parentId = newRow['parent_id']?.toString() ?? '';
+              final halaqahName = newRow['halaqah_name']?.toString() ?? '';
+              final halaqahId = newRow['halaqah_id']?.toString() ?? '';
+
+              if (payload.eventType == PostgresChangeEvent.insert &&
+                  AuthSessionService.instance.isTeacher) {
+                final isMyClass = halaqahId == AuthSessionService.instance.assignedHalaqahId ||
+                    halaqahName.toLowerCase() ==
+                        AuthSessionService.instance.assignedHalaqahName.toLowerCase();
+                if (isMyClass) {
+                  PushNotificationService.instance.showNotification(
+                    title: 'Absence Excuse Request',
+                    body: 'Parent submitted an excuse for $studentName.',
+                    payload: 'absence_request',
+                    type: 'absence_request',
+                  );
+                }
+              } else if (payload.eventType == PostgresChangeEvent.update &&
+                  AuthSessionService.instance.isParent &&
+                  parentId == AuthSessionService.instance.userId) {
+                PushNotificationService.instance.showNotification(
+                  title: status == 'approved'
+                      ? 'Absence Excuse Approved'
+                      : 'Absence Request Update',
+                  body: 'Absence request for $studentName was $status.',
+                  payload: 'absence_$status',
+                  type: 'absence_$status',
+                );
+              }
+            },
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('[AbsenceService] Realtime subscription note: $e');
+    }
+  }
+
   /// Get pending requests for teacher's halaqah
-  List<AbsenceRequest> getPendingRequestsForHalaqah(String halaqahName) {
+  List<AbsenceRequest> getPendingRequestsForHalaqah(String halaqahName, {String? halaqahId}) {
     return _requests.where((r) {
       if (!r.isPending) return false;
+      if (halaqahId != null && halaqahId.isNotEmpty && r.halaqahId == halaqahId) return true;
       return r.halaqahName.toLowerCase().contains(halaqahName.toLowerCase()) ||
           halaqahName.toLowerCase().contains(r.halaqahName.toLowerCase());
     }).toList();
@@ -49,16 +148,43 @@ class AbsenceService {
   }) async {
     final studentMatches = StudentService.instance.allStudents.where((s) => s.id == studentId);
     final student = studentMatches.isNotEmpty ? studentMatches.first : null;
+    final parentId = student?.parentId ?? AuthSessionService.instance.userId;
+
+    String requestId = 'abs-${DateTime.now().millisecondsSinceEpoch}';
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(studentId)) {
+      try {
+        final payload = <String, dynamic>{
+          'student_id': studentId,
+          'student_name': student?.fullName ?? 'Student',
+          if (_isValidUuid(student?.halaqahId)) 'halaqah_id': student!.halaqahId,
+          'halaqah_name': student?.halaqahName ?? 'Halaqah Circle',
+          if (_isValidUuid(parentId)) 'parent_id': parentId,
+          'parent_name': student?.parentName ?? AuthSessionService.instance.userName,
+          'parent_phone': student?.parentPhone ?? AuthSessionService.instance.userPhone,
+          'date': date.toIso8601String().substring(0, 10),
+          'reason': reason,
+          'notes': notes.trim(),
+          'status': 'pending',
+        };
+        final inserted = await client.from('absence_requests').insert(payload).select('id').single();
+        if (inserted['id'] != null) {
+          requestId = inserted['id'].toString();
+        }
+      } catch (e) {
+        debugPrint('[AbsenceService] Cloud insert notice: $e');
+      }
+    }
 
     final request = AbsenceRequest(
-      id: 'abs-${DateTime.now().millisecondsSinceEpoch}',
+      id: requestId,
       studentId: studentId,
       studentName: student?.fullName ?? 'Student',
-      halaqahId: student?.halaqahId ?? 'halaqah-001',
+      halaqahId: student?.halaqahId ?? '',
       halaqahName: student?.halaqahName ?? 'Halaqah Circle',
-      parentId: student?.parentId ?? '',
-      parentName: student?.parentName ?? 'Parent',
-      parentPhone: student?.parentPhone ?? '',
+      parentId: parentId,
+      parentName: student?.parentName ?? AuthSessionService.instance.userName,
+      parentPhone: student?.parentPhone ?? AuthSessionService.instance.userPhone,
       date: date,
       reason: reason,
       notes: notes.trim(),
@@ -68,23 +194,6 @@ class AbsenceService {
 
     _requests.insert(0, request);
     _requestsController.add(List.from(_requests));
-
-    // In-App Notification Center
-    NotificationCenterService.instance.addNotification(
-      title: 'Absence Excuse Request Received 📝',
-      body: '${request.parentName} submitted an absence excuse for ${request.studentName} on ${date.toIso8601String().substring(0, 10)} (${request.reasonLabel}). Review required.',
-      type: 'absence_request',
-    );
-
-    // Cloud sync to Supabase if connected
-    final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('absence_requests').insert(request.toJson());
-      } catch (e) {
-        debugPrint('[AbsenceService] Cloud insert fallback: $e');
-      }
-    }
 
     return request;
   }
@@ -104,14 +213,28 @@ class AbsenceService {
             : 'Assigned Ustaz');
 
     final existing = _requests[index];
+    final reviewedAt = DateTime.now();
     final updated = existing.copyWith(
       status: 'approved',
       reviewedBy: reviewer,
-      reviewedAt: DateTime.now(),
+      reviewedAt: reviewedAt,
     );
 
     _requests[index] = updated;
     _requestsController.add(List.from(_requests));
+
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(requestId)) {
+      try {
+        await client.from('absence_requests').update({
+          'status': 'approved',
+          'reviewed_by': reviewer,
+          'reviewed_at': reviewedAt.toUtc().toIso8601String(),
+        }).eq('id', requestId);
+      } catch (e) {
+        debugPrint('[AbsenceService] Cloud approve notice: $e');
+      }
+    }
 
     // ATOMICALLY MARK DAILY ATTENDANCE AS 'EXCUSED' IN STUDENT SERVICE!
     await StudentService.instance.recordDailyAttendance(
@@ -120,13 +243,6 @@ class AbsenceService {
       remarks: 'Parent excuse approved: ${updated.reasonLabel} - ${updated.notes}',
       sessionDate: updated.date,
       markedBy: reviewer,
-    );
-
-    // In-App Notification Center
-    NotificationCenterService.instance.addNotification(
-      title: 'Absence Excuse Approved ✅',
-      body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} has been approved by $reviewer.',
-      type: 'absence_approved',
     );
   }
 
@@ -145,20 +261,27 @@ class AbsenceService {
             : 'Assigned Ustaz');
 
     final existing = _requests[index];
+    final reviewedAt = DateTime.now();
     final updated = existing.copyWith(
       status: 'declined',
       reviewedBy: reviewer,
-      reviewedAt: DateTime.now(),
+      reviewedAt: reviewedAt,
     );
 
     _requests[index] = updated;
     _requestsController.add(List.from(_requests));
 
-    // In-App Notification Center
-    NotificationCenterService.instance.addNotification(
-      title: 'Absence Request Update ❌',
-      body: 'Absence request for ${updated.studentName} on ${updated.date.toIso8601String().substring(0, 10)} was declined. Reason: ${declineReason ?? "Please contact the teacher."}',
-      type: 'absence_declined',
-    );
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(requestId)) {
+      try {
+        await client.from('absence_requests').update({
+          'status': 'declined',
+          'reviewed_by': reviewer,
+          'reviewed_at': reviewedAt.toUtc().toIso8601String(),
+        }).eq('id', requestId);
+      } catch (e) {
+        debugPrint('[AbsenceService] Cloud decline notice: $e');
+      }
+    }
   }
 }

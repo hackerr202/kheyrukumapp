@@ -54,24 +54,33 @@ class HomeworkAssignment {
   }
 
   factory HomeworkAssignment.fromJson(Map<String, dynamic> json) {
+    final halaqahObj = json['halaqahs'];
+    final profileObj = json['profiles'];
+    final resolvedHalaqahName = json['halaqah_name']?.toString() ??
+        (halaqahObj is Map ? halaqahObj['name']?.toString() : null) ??
+        'Halaqah Circle';
+    final resolvedTeacherName = json['teacher_name']?.toString() ??
+        (profileObj is Map ? profileObj['full_name']?.toString() : null) ??
+        'Ustaz';
+
     return HomeworkAssignment(
-      id: json['id'] as String,
-      halaqahId: json['halaqah_id'] as String? ?? 'halaqah-001',
-      halaqahName: json['halaqah_name'] as String? ?? 'Halaqah Circle',
-      teacherId: json['teacher_id'] as String? ?? '',
-      teacherName: json['teacher_name'] as String? ?? 'Ustaz',
-      title: json['title'] as String? ?? 'Quran Homework',
-      surahName: json['surah_name'] as String? ?? 'Al-Fatihah',
+      id: json['id']?.toString() ?? '',
+      halaqahId: json['halaqah_id']?.toString() ?? '',
+      halaqahName: resolvedHalaqahName,
+      teacherId: json['teacher_id']?.toString() ?? '',
+      teacherName: resolvedTeacherName,
+      title: json['title']?.toString() ?? 'Quran Homework',
+      surahName: json['surah_name']?.toString() ?? 'Surah #${json['surah_number'] ?? 1}',
       surahNumber: (json['surah_number'] as num?)?.toInt() ?? 1,
-      fromAyah: (json['from_ayah'] as num?)?.toInt() ?? 1,
-      toAyah: (json['to_ayah'] as num?)?.toInt() ?? 7,
-      tajweedFocus: json['tajweed_focus'] as String? ?? 'General Recitation',
-      instructions: json['instructions'] as String? ?? '',
+      fromAyah: ((json['from_ayah'] ?? json['ayah_start']) as num?)?.toInt() ?? 1,
+      toAyah: ((json['to_ayah'] ?? json['ayah_end']) as num?)?.toInt() ?? 7,
+      tajweedFocus: json['tajweed_focus']?.toString() ?? 'General Recitation',
+      instructions: json['instructions']?.toString() ?? '',
       dueDate: json['due_date'] != null
-          ? DateTime.parse(json['due_date'] as String)
+          ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now().add(const Duration(days: 3))
           : DateTime.now().add(const Duration(days: 3)),
       createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
+          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
           : DateTime.now(),
     );
   }
@@ -153,22 +162,27 @@ class HomeworkSubmission {
   }
 
   factory HomeworkSubmission.fromJson(Map<String, dynamic> json) {
+    final studentObj = json['students'];
+    final resolvedStudentName = json['student_name']?.toString() ??
+        (studentObj is Map ? studentObj['full_name']?.toString() : null) ??
+        'Student';
+
     return HomeworkSubmission(
-      id: json['id'] as String,
-      assignmentId: json['assignment_id'] as String,
-      studentId: json['student_id'] as String,
-      studentName: json['student_name'] as String? ?? 'Student',
-      parentId: json['parent_id'] as String? ?? '',
-      status: json['status'] as String? ?? 'pending',
+      id: json['id']?.toString() ?? '',
+      assignmentId: json['assignment_id']?.toString() ?? '',
+      studentId: json['student_id']?.toString() ?? '',
+      studentName: resolvedStudentName,
+      parentId: json['parent_id']?.toString() ?? '',
+      status: json['status']?.toString() ?? 'pending',
       repetitionCount: (json['repetition_count'] as num?)?.toInt() ?? 1,
-      parentNote: json['parent_note'] as String?,
+      parentNote: json['parent_note']?.toString(),
       practicedAt: json['practiced_at'] != null
-          ? DateTime.parse(json['practiced_at'] as String)
+          ? DateTime.tryParse(json['practiced_at'].toString())
           : null,
-      teacherRating: json['teacher_rating'] as String?,
-      teacherFeedback: json['teacher_feedback'] as String?,
+      teacherRating: json['teacher_rating']?.toString(),
+      teacherFeedback: json['teacher_feedback']?.toString(),
       reviewedAt: json['reviewed_at'] != null
-          ? DateTime.parse(json['reviewed_at'] as String)
+          ? DateTime.tryParse(json['reviewed_at'].toString())
           : null,
     );
   }
