@@ -4,19 +4,19 @@ import 'package:flutter/material.dart';
 class AppColors {
   AppColors._();
 
-  // Primary Theme Surfaces
-  static const Color background = Color(0xFF0F172A); // Deep Navy Blue
-  static const Color backgroundDark = Color(0xFF0A192F); // Deeper Midnight Blue
-  static const Color surfaceNav = Color(0xFF1E293B); // Nav Bar Pill & Cards
-  static const Color surfaceCard = Color(0xFF1E293B);
-  static const Color surfaceLight = Color(0xFF334155);
-  static const Color borderSubtle = Color(0xFF334155);
+  // Primary Theme Surfaces (Refined Obsidian & Midnight Slate)
+  static const Color background = Color(0xFF0B1120); // Deep Obsidian Navy
+  static const Color backgroundDark = Color(0xFF070B14); // Deeper Midnight
+  static const Color surfaceNav = Color(0xFF131C31); // Elevated Nav Bar & Cards
+  static const Color surfaceCard = Color(0xFF131C31);
+  static const Color surfaceLight = Color(0xFF1E293B);
+  static const Color borderSubtle = Color(0xFF23304C);
 
-  // Accents & Glows
-  static const Color accentAmber = Color(0xFFFFC107); // Warm Amber
-  static const Color accentAmberLight = Color(0xFFFFD54F);
-  static const Color accentTeal = Color(0xFF00BCD4); // Soft Teal
-  static const Color accentTealLight = Color(0xFF4DD0E1);
+  // Accents & Glows (Cohesive Kheyrukum Emerald & Warm Gold)
+  static const Color accentAmber = Color(0xFFD4AF37); // Warm Islamic Gold
+  static const Color accentAmberLight = Color(0xFFE8C968);
+  static const Color accentTeal = Color(0xFF0D9488); // Deep Emerald Teal
+  static const Color accentTealLight = Color(0xFF2DD4BF);
   static const Color accentEmerald = Color(0xFF10B981);
   static const Color accentCoral = Color(0xFFF43F5E);
 

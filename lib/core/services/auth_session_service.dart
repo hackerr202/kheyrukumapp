@@ -88,6 +88,23 @@ class AuthSessionService {
         if (profile['halaqah_name'] != null) {
           _assignedHalaqahName = profile['halaqah_name'] as String;
         }
+
+        // If teacher's halaqah isn't on profile, look it up from halaqahs.teacher_id
+        if (roleNotifier.value == 'teacher' && _assignedHalaqahId.isEmpty) {
+          try {
+            final halaqah = await SupabaseService.instance.client
+                ?.from('halaqahs')
+                .select('id, name')
+                .eq('teacher_id', _userId)
+                .maybeSingle();
+            if (halaqah != null) {
+              _assignedHalaqahId = halaqah['id']?.toString() ?? '';
+              _assignedHalaqahName = halaqah['name']?.toString() ?? '';
+            }
+          } catch (e) {
+            debugPrint('[AuthSessionService] Error looking up teacher halaqah: $e');
+          }
+        }
       }
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');

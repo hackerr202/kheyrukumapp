@@ -1,34 +1,145 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/payment.dart';
 import 'auth_session_service.dart';
 import 'notification_center_service.dart';
 import 'push_notification_service.dart';
+import 'storage_service.dart';
+import 'supabase_service.dart';
 
-/// Payment & Tuition Service managing:
-/// - Monthly payment generation (salary/tuition)
-/// - Parent receipt screenshot submission
-/// - Admin receipt inspection, approval, and rejection with custom reason
-/// - Admin overdue notifications
-/// - Account suspension & removal for unpaid accounts
+/// Payment & Tuition Service backed by the Supabase `monthly_payments` table.
+///
+/// - Admin issues invoices (rows in `monthly_payments`)
+/// - Parent uploads a real receipt image to Supabase Storage and submits it
+/// - Admin approves / rejects with reason
+/// - Changes are streamed to every device through Supabase Realtime, and the
+///   affected parent / admin gets a system notification while the app is running.
 class PaymentService {
-  PaymentService._();
+  PaymentService._() {
+    _init();
+  }
 
   static final PaymentService instance = PaymentService._();
+
+  /// Storage bucket used for receipt screenshots (public bucket, already
+  /// covered by authenticated upload/read policies in supabase_schema.sql).
+  static const String receiptsBucket = StorageService.chatAttachmentsBucket;
+
+  static const String _selectColumns =
+      '*, student:students!student_id(full_name), parent:profiles!parent_id(full_name, email)';
 
   final List<MonthlyPayment> _payments = [];
   final StreamController<List<MonthlyPayment>> _paymentsController =
       StreamController<List<MonthlyPayment>>.broadcast();
+  RealtimeChannel? _channel;
 
   Stream<List<MonthlyPayment>> get paymentsStream => _paymentsController.stream;
   List<MonthlyPayment> get allPayments => List.unmodifiable(_payments);
 
-  // User account status tracking: 'active', 'suspended', 'removed'
-  final Map<String, String> _userAccountStatus = {};
-  final Map<String, String> _suspensionReasons = {};
+  void _emit() => _paymentsController.add(List.from(_payments));
+
+  void _init() {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    refresh();
+    try {
+      _channel = client
+          .channel('public:monthly_payments')
+          .onPostgresChanges(
+            event: PostgresChangeEvent.all,
+            schema: 'public',
+            table: 'monthly_payments',
+            callback: (payload) => _handleRealtimeChange(payload),
+          )
+          .subscribe();
+    } catch (e) {
+      debugPrint('[PaymentService] Realtime subscription error: $e');
+    }
+  }
+
+  /// Reload all payments visible to the current user (RLS restricts parents to their own rows).
+  Future<void> refresh() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      final res = await client
+          .from('monthly_payments')
+          .select(_selectColumns)
+          .order('created_at', ascending: false);
+      _payments
+        ..clear()
+        ..addAll((res as List)
+            .map((e) => _fromRow(Map<String, dynamic>.from(e as Map))));
+      _emit();
+    } catch (e) {
+      debugPrint('[PaymentService] Failed to load payments: $e');
+    }
+  }
+
+  MonthlyPayment _fromRow(Map<String, dynamic> row) {
+    final student = row['student'];
+    final parent = row['parent'];
+    final json = Map<String, dynamic>.from(row);
+    json['month'] = row['month_year'] ?? row['month'];
+    if (student is Map && student['full_name'] != null) {
+      json['student_name'] = student['full_name'];
+    }
+    if (parent is Map) {
+      if (parent['full_name'] != null) json['parent_name'] = parent['full_name'];
+      if (parent['email'] != null) json['parent_email'] = parent['email'];
+    }
+    if (json['amount'] is String) {
+      json['amount'] = double.tryParse(json['amount'] as String);
+    }
+    return MonthlyPayment.fromJson(json);
+  }
+
+  Future<void> _handleRealtimeChange(PostgresChangePayload payload) async {
+    final userId = AuthSessionService.instance.userId;
+    final isAdmin = AuthSessionService.instance.isAdmin;
+    final newRow = payload.newRecord;
+    final oldRow = payload.oldRecord;
+
+    if (payload.eventType == PostgresChangeEvent.delete) {
+      final id = oldRow['id']?.toString();
+      _payments.removeWhere((p) => p.id == id);
+      _emit();
+      return;
+    }
+
+    final oldStatus = oldRow['status']?.toString();
+    final newStatus = newRow['status']?.toString();
+    final parentId = newRow['parent_id']?.toString();
+
+    await refresh();
+
+    if (oldStatus == newStatus && payload.eventType == PostgresChangeEvent.update) {
+      return;
+    }
+    final month = newRow['month_year']?.toString() ?? '';
+    final amount = newRow['amount']?.toString() ?? '';
+
+    if (!isAdmin && parentId == userId) {
+      if (payload.eventType == PostgresChangeEvent.insert) {
+        _notify('Monthly Tuition Due 💳', 'A tuition invoice for $month ($amount) has been issued.', 'payment_reminder');
+      } else if (newStatus == 'approved') {
+        _notify('Payment Approved ✅', 'Your payment for $month has been verified and approved.', 'payment_approval');
+      } else if (newStatus == 'rejected') {
+        final reason = newRow['rejection_reason']?.toString() ?? '';
+        _notify('Payment Rejected ❌', 'Payment for $month could not be verified. Reason: "$reason".', 'payment_overdue');
+      }
+    } else if (isAdmin && newStatus == 'submitted') {
+      _notify('Payment Receipt Received 📥', 'A parent submitted a receipt for $month. Review required.', 'payment_approval');
+    }
+  }
+
+  void _notify(String title, String body, String type) {
+    PushNotificationService.instance.showNotification(title: title, body: body, type: type);
+  }
 
   /// Admin issues a monthly tuition fee invoice for a student
-  Future<MonthlyPayment> createPaymentInvoice({
+  Future<MonthlyPayment?> createPaymentInvoice({
     required String studentId,
     required String studentName,
     required String parentId,
@@ -38,30 +149,27 @@ class PaymentService {
     required double amount,
     required DateTime dueDate,
   }) async {
-    final payment = MonthlyPayment(
-      id: 'pay-${DateTime.now().millisecondsSinceEpoch}',
-      parentId: parentId,
-      parentName: parentName,
-      parentEmail: parentEmail,
-      studentId: studentId,
-      studentName: studentName,
-      month: month,
-      amount: amount,
-      dueDate: dueDate,
-      status: 'pending',
-    );
-
+    final client = SupabaseService.instance.client;
+    if (client == null) throw Exception('Not connected to the server.');
+    if (parentId.isEmpty) {
+      throw Exception('$studentName has no linked parent account yet.');
+    }
+    final res = await client
+        .from('monthly_payments')
+        .insert({
+          'parent_id': parentId,
+          'student_id': studentId,
+          'month_year': month,
+          'amount': amount,
+          'due_date': dueDate.toIso8601String().substring(0, 10),
+          'status': 'pending',
+        })
+        .select(_selectColumns)
+        .single();
+    final payment = _fromRow(Map<String, dynamic>.from(res));
+    _payments.removeWhere((p) => p.id == payment.id);
     _payments.insert(0, payment);
-    _paymentsController.add(List.from(_payments));
-
-    // Notify parent
-    NotificationCenterService.instance.addNotification(
-      title: 'Monthly Tuition Due 💳',
-      body: 'Tuition for $studentName ($month - \$${amount.toStringAsFixed(0)}) is due on ${dueDate.toIso8601String().substring(0, 10)}.',
-      type: 'payment_reminder',
-      data: {'payment_id': payment.id, 'student_id': studentId},
-    );
-
+    _emit();
     return payment;
   }
 
@@ -69,69 +177,61 @@ class PaymentService {
   List<MonthlyPayment> getPaymentsForParent(String parentId, {String? parentEmail}) {
     return _payments.where((p) {
       if (p.parentId == parentId) return true;
-      if (parentEmail != null && p.parentEmail.toLowerCase() == parentEmail.toLowerCase()) return true;
+      if (parentEmail != null &&
+          parentEmail.isNotEmpty &&
+          p.parentEmail.toLowerCase() == parentEmail.toLowerCase()) {
+        return true;
+      }
       return false;
     }).toList();
   }
 
-  /// Parent uploads a receipt screenshot for verification
-  Future<void> submitPaymentReceipt({
+  /// Upload a receipt image and return its public URL (null on failure).
+  Future<String?> uploadReceipt({
     required String paymentId,
-    required String receiptMockId, // e.g. 'telebirr_proof' or local file reference
-    String? customNote,
+    required String fileName,
+    required List<int> bytes,
   }) async {
-    final index = _payments.indexWhere((p) => p.id == paymentId);
-    if (index == -1) return;
-
-    final existing = _payments[index];
-    final updated = existing.copyWith(
-      status: 'submitted',
-      receiptLocalMock: receiptMockId,
-      submittedAt: DateTime.now(),
-      notes: customNote ?? 'Receipt uploaded by parent. Awaiting admin review.',
-      rejectionReason: null, // Clear any previous rejection
-    );
-
-    _payments[index] = updated;
-    _paymentsController.add(List.from(_payments));
-
-    // ADMIN NOTIFICATION: Payment submitted
-    NotificationCenterService.instance.addNotification(
-      title: 'Payment Verification Received 📥',
-      body: '${updated.parentName} submitted a receipt screenshot for ${updated.studentName} (${updated.month} - \$${updated.amount.toStringAsFixed(0)}). Review required.',
-      type: 'payment_approval',
-      data: {'payment_id': updated.id, 'parent_id': updated.parentId},
+    final cleanName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    return StorageService.uploadFile(
+      bucket: receiptsBucket,
+      path: 'receipts/$paymentId/${DateTime.now().millisecondsSinceEpoch}_$cleanName',
+      bytes: bytes,
     );
   }
 
-  /// Admin approves the payment
-  Future<void> approvePayment({
+  /// Parent submits an uploaded receipt for verification
+  Future<void> submitPaymentReceipt({
     required String paymentId,
-    String? adminName,
+    required String receiptUrl,
+    String? customNote,
   }) async {
-    final index = _payments.indexWhere((p) => p.id == paymentId);
-    if (index == -1) return;
+    final client = SupabaseService.instance.client;
+    if (client == null) throw Exception('Not connected to the server.');
+    await client.from('monthly_payments').update({
+      'status': 'submitted',
+      'receipt_url': receiptUrl,
+      'submitted_at': DateTime.now().toUtc().toIso8601String(),
+      'notes': (customNote == null || customNote.isEmpty)
+          ? 'Receipt uploaded by parent. Awaiting admin review.'
+          : customNote,
+      'rejection_reason': null,
+    }).eq('id', paymentId);
+    await refresh();
+  }
 
-    final existing = _payments[index];
-    final reviewer = adminName ??
-        (AuthSessionService.instance.userName.isNotEmpty
-            ? AuthSessionService.instance.userName
-            : 'Administration');
-    final updated = existing.copyWith(
-      status: 'approved',
-      reviewedAt: DateTime.now(),
-      reviewedBy: reviewer,
-      rejectionReason: null,
-    );
-
-    _payments[index] = updated;
-    _paymentsController.add(List.from(_payments));
-
-    // PARENT NOTIFICATION: Payment approved!
-    PushNotificationService.instance.showNotification(
-      title: 'Payment Approved ✅',
-      body: 'Your payment of \$${updated.amount.toStringAsFixed(0)} for ${updated.studentName} (${updated.month}) has been verified and approved.',
-    );
+  /// Admin approves the payment
+  Future<void> approvePayment({required String paymentId, String? adminName}) async {
+    final client = SupabaseService.instance.client;
+    if (client == null) throw Exception('Not connected to the server.');
+    final reviewerId = AuthSessionService.instance.userId;
+    await client.from('monthly_payments').update({
+      'status': 'approved',
+      'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+      'reviewed_by': reviewerId.isEmpty ? null : reviewerId,
+      'rejection_reason': null,
+    }).eq('id', paymentId);
+    await refresh();
   }
 
   /// Admin rejects the payment with a mandatory reason (displayed on parent side)
@@ -140,104 +240,55 @@ class PaymentService {
     required String reason,
     String? adminName,
   }) async {
-    final index = _payments.indexWhere((p) => p.id == paymentId);
-    if (index == -1) return;
-
-    final existing = _payments[index];
-    final reviewer = adminName ??
-        (AuthSessionService.instance.userName.isNotEmpty
-            ? AuthSessionService.instance.userName
-            : 'Administration');
-    final updated = existing.copyWith(
-      status: 'rejected',
-      rejectionReason: reason,
-      reviewedAt: DateTime.now(),
-      reviewedBy: reviewer,
-    );
-
-    _payments[index] = updated;
-    _paymentsController.add(List.from(_payments));
-
-    // PARENT NOTIFICATION: Payment rejected with specific reason
-    PushNotificationService.instance.showNotification(
-      title: 'Payment Verification Rejected ❌',
-      body: 'Payment for ${updated.studentName} (${updated.month}) could not be verified. Reason: "$reason". Please upload a clear receipt.',
-    );
+    final client = SupabaseService.instance.client;
+    if (client == null) throw Exception('Not connected to the server.');
+    final reviewerId = AuthSessionService.instance.userId;
+    await client.from('monthly_payments').update({
+      'status': 'rejected',
+      'rejection_reason': reason,
+      'reviewed_at': DateTime.now().toUtc().toIso8601String(),
+      'reviewed_by': reviewerId.isEmpty ? null : reviewerId,
+    }).eq('id', paymentId);
+    await refresh();
   }
 
-  /// Trigger monthly payment reminder to parents
-  void sendMonthlyTuitionReminder(String month) {
-    // Dispatch system status bar notification
-    PushNotificationService.instance.showNotification(
-      id: PushNotificationService.idMonthlyFee,
-      title: 'Monthly Tuition Fee Reminder 💳',
-      body: 'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload receipt proof.',
-    );
-
-    NotificationCenterService.instance.addNotification(
-      title: 'Monthly Halaqah Tuition Reminder 💳',
-      body: 'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload receipt proof.',
-      type: 'payment_reminder',
-      data: {'month': month},
-    );
+  /// Admin sends a tuition reminder to all parents (as an announcement so it
+  /// reaches every parent's device through Realtime).
+  Future<void> sendMonthlyTuitionReminder(String month) async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    try {
+      await client.from('announcements').insert({
+        'title': 'Monthly Tuition Fee Reminder 💳',
+        'content':
+            'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload the receipt in the Payments section.',
+        'target_audience': 'parents',
+        'author_name': AuthSessionService.instance.userName,
+        'is_pinned': false,
+      });
+    } catch (e) {
+      debugPrint('[PaymentService] Reminder broadcast failed: $e');
+      rethrow;
+    }
   }
 
-  /// Trigger overdue tuition alert to Admin
-  void sendOverdueAlertToAdmin(MonthlyPayment payment) {
+  /// Mark an overdue payment and record it locally for the admin
+  Future<void> sendOverdueAlertToAdmin(MonthlyPayment payment) async {
+    final client = SupabaseService.instance.client;
+    if (client != null && payment.isPending) {
+      try {
+        await client.from('monthly_payments').update({'status': 'overdue'}).eq('id', payment.id);
+        await refresh();
+      } catch (e) {
+        debugPrint('[PaymentService] Mark overdue failed: $e');
+      }
+    }
     NotificationCenterService.instance.addNotification(
       title: 'Overdue Tuition Alert ⚠️',
-      body: 'Payment for student ${payment.studentName} (Parent: ${payment.parentName}) is past due date for ${payment.month}.',
+      body:
+          'Payment for student ${payment.studentName} (Parent: ${payment.parentName}) is past due date for ${payment.month}.',
       type: 'payment_overdue',
       data: {'payment_id': payment.id, 'parent_id': payment.parentId},
     );
-  }
-
-  // ---------------------------------------------------------------------------
-  // USER SUSPENSION & REMOVAL CONTROLS (ADMIN)
-  // ---------------------------------------------------------------------------
-
-  String getUserStatus(String userId) {
-    return _userAccountStatus[userId] ?? 'active';
-  }
-
-  String? getSuspensionReason(String userId) {
-    return _suspensionReasons[userId];
-  }
-
-  bool isUserSuspended(String userId) {
-    return getUserStatus(userId) == 'suspended';
-  }
-
-  bool isUserRemoved(String userId) {
-    return getUserStatus(userId) == 'removed';
-  }
-
-  /// Admin suspends user due to unpaid fees or disciplinary issues
-  Future<void> suspendUser({
-    required String userId,
-    required String userName,
-    required String reason,
-  }) async {
-    _userAccountStatus[userId] = 'suspended';
-    _suspensionReasons[userId] = reason;
-
-    NotificationCenterService.instance.addNotification(
-      title: 'Account Temporarily Suspended 🚫',
-      body: 'Account for $userName has been suspended. Reason: $reason',
-      type: 'payment_overdue',
-      data: {'user_id': userId, 'status': 'suspended'},
-    );
-  }
-
-  /// Admin restores suspended user
-  Future<void> restoreUser(String userId) async {
-    _userAccountStatus[userId] = 'active';
-    _suspensionReasons.remove(userId);
-  }
-
-  /// Admin removes user permanently
-  Future<void> removeUser(String userId) async {
-    _userAccountStatus[userId] = 'removed';
-    _suspensionReasons[userId] = 'Account has been removed from the portal by administrator.';
   }
 }

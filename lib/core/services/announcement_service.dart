@@ -68,18 +68,11 @@ class AnnouncementService {
       // Trigger in-app toast banner
       _incomingAlertController.add(announcement);
 
-      // Show real system notification in phone status bar & lock screen
+      // Show real system notification in phone status bar & lock screen (also syncs to NotificationCenterService)
       PushNotificationService.instance.showNotification(
         title: announcement.title.isNotEmpty ? announcement.title : 'New Announcement 📢',
         body: announcement.content,
         payload: announcement.id,
-      );
-
-      // Record in notification center
-      NotificationCenterService.instance.addNotification(
-        title: announcement.title.isNotEmpty ? announcement.title : 'New Announcement 📢',
-        body: announcement.content,
-        type: 'broadcast',
       );
     } catch (e) {
       debugPrint('[AnnouncementService] Error handling incoming announcement: $e');
@@ -91,19 +84,7 @@ class AnnouncementService {
     final client = SupabaseService.instance.client;
 
     if (client == null) {
-      // Fallback mock stream for preview / demo
-      return Stream.value([
-        Announcement(
-          id: 'mock-1',
-          title: 'Welcome to Kheyrukum Quranic Portal (ኸይሩኩም)',
-          content:
-              'Assalamu Alaikum. Welcome to the official parent-teacher communication system. Daily recitation submissions and Halaqah attendance tracking are now active.',
-          targetAudience: 'all',
-          authorName: 'Center Administration',
-          isPinned: true,
-          createdAt: DateTime.now().subtract(const Duration(hours: 2)),
-        ),
-      ]);
+      return Stream.value(<Announcement>[]);
     }
 
     // Subscribe to PostgreSQL Realtime changes on 'announcements' table
@@ -143,20 +124,10 @@ class AnnouncementService {
     };
 
     if (client == null) {
-      debugPrint('[AnnouncementService] Supabase not initialized, mock broadcast.');
-      final mock = Announcement(
-        id: 'local-${DateTime.now().millisecondsSinceEpoch}',
-        title: title,
-        content: content,
-        targetAudience: targetAudience,
-        authorName: authorName,
-        isPinned: isPinned,
-        attachmentUrl: attachmentUrl,
-        attachmentName: attachmentName,
-        createdAt: DateTime.now(),
-      );
-      _incomingAlertController.add(mock);
-      return {'success': true, 'data': mock};
+      return {
+        'success': false,
+        'message': 'Unable to connect to cloud service. Please check your internet connection.',
+      };
     }
 
     try {

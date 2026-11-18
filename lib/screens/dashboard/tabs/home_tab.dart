@@ -26,7 +26,7 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
-  static const Color _limeAccent = Color(0xFFC9F24A);
+  static const Color _limeAccent = AppColors.accentEmerald;
   static const Color _alertRed = Color(0xFFEF4444);
 
   @override

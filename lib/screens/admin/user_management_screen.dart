@@ -22,7 +22,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   bool _isLoading = true;
   String _searchQuery = '';
 
-  static const Color _limeGreen = Color(0xFFC9F24A);
+  static const Color _limeGreen = Color(0xFF10B981);
   static const Color _alertRed = Color(0xFFEF4444);
 
   @override
@@ -44,18 +44,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     final client = SupabaseService.instance.client;
 
     if (client == null) {
-      // Mock data for preview
-      setState(() {
-        _teachers = [
-          {'id': 't-1', 'full_name': 'Ustaz Muhammad Yakubu', 'email': 'muhammad@kheyrukum.com', 'phone': '+251 91 123 4567', 'role': 'teacher', 'is_suspended': false},
-          {'id': 't-2', 'full_name': 'Ustaz Bilal Al-Habashi', 'email': 'bilal@kheyrukum.com', 'phone': '+251 92 234 5678', 'role': 'teacher', 'is_suspended': false},
-        ];
-        _parents = [
-          {'id': 'p-1', 'full_name': 'Aisha Rahman', 'email': 'aisha@parent.com', 'phone': '+251 94 456 7890', 'role': 'parent', 'is_suspended': false},
-          {'id': 'p-2', 'full_name': 'Omar Farooq', 'email': 'omar@parent.com', 'phone': '+251 93 345 6789', 'role': 'parent', 'is_suspended': false},
-        ];
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _teachers = [];
+          _parents = [];
+          _inviteCodes = [];
+          _isLoading = false;
+        });
+      }
       return;
     }
 
@@ -132,6 +128,19 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         await client.from('profiles').update({'is_suspended': newStatus}).eq('id', user['id']);
       } catch (e) {
         debugPrint('[UserManagement] Suspend error: $e');
+        if (mounted) {
+          setState(() {
+            user['is_suspended'] = currentStatus;
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}'),
+              backgroundColor: _alertRed,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       }
     }
 
@@ -188,6 +197,23 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         await client.from('profiles').delete().eq('id', user['id']);
       } catch (e) {
         debugPrint('[UserManagement] Delete error: $e');
+        if (mounted) {
+          setState(() {
+            if (listType == 'teacher') {
+              _teachers.add(user);
+            } else {
+              _parents.add(user);
+            }
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to remove user: ${SupabaseService.cleanErrorMessage(e)}'),
+              backgroundColor: _alertRed,
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+        }
+        return;
       }
     }
 

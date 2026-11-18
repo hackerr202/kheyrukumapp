@@ -278,6 +278,13 @@ ON public.profiles FOR SELECT TO authenticated USING (true);
 CREATE POLICY "Users can update own profile"
 ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
+DO $$ BEGIN
+    CREATE POLICY "Admins can manage all profiles"
+    ON public.profiles FOR ALL TO authenticated
+    USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
+    WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+EXCEPTION WHEN duplicate_object THEN NULL; END $$;
+
 -- Halaqahs:
 DO $$ BEGIN
     CREATE POLICY "Authenticated users view halaqahs"

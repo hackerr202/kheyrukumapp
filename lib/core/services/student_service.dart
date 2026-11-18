@@ -188,24 +188,20 @@ class StudentService {
 
   /// Get students belonging to a specific Halaqah (Class)
   List<Student> getStudentsForHalaqah(String halaqahName, {String? halaqahId}) {
-    if (halaqahName.trim().isEmpty || halaqahName.toLowerCase() == 'assigned halaqah') {
-      if (halaqahId != null && halaqahId.isNotEmpty) {
-        final matches = _students.where((s) => s.halaqahId == halaqahId).toList();
-        if (matches.isNotEmpty) return matches;
+    if ((halaqahName.trim().isEmpty || halaqahName.toLowerCase() == 'assigned halaqah') &&
+        (halaqahId == null || halaqahId.isEmpty)) {
+      return [];
+    }
+    return _students.where((s) {
+      if (halaqahId != null && halaqahId.isNotEmpty && s.halaqahId == halaqahId) {
+        return true;
       }
-      return List.unmodifiable(_students);
-    }
-    final matches = _students.where((s) {
-      if (halaqahId != null && s.halaqahId == halaqahId) return true;
-      return s.halaqahName.toLowerCase().contains(halaqahName.toLowerCase()) ||
-          halaqahName.toLowerCase().contains(s.halaqahName.toLowerCase());
+      if (halaqahName.trim().isNotEmpty && halaqahName.toLowerCase() != 'assigned halaqah') {
+        return s.halaqahName.toLowerCase().contains(halaqahName.toLowerCase()) ||
+            halaqahName.toLowerCase().contains(s.halaqahName.toLowerCase());
+      }
+      return false;
     }).toList();
-
-    // If no strict matches found and there are students in the center, return all as fallback for demo/teacher preview
-    if (matches.isEmpty && _students.isNotEmpty) {
-      return List.unmodifiable(_students);
-    }
-    return matches;
   }
 
   /// Get students for a specific parent (enables one parent -> multiple children)

@@ -98,8 +98,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  // Consistent lime green as the single accent color across the app
-  static const Color _limeAccent = Color(0xFFC9F24A);
+  // Cohesive Kheyrukum Emerald accent across the app
+  static const Color _limeAccent = AppColors.accentEmerald;
 
   final List<MeniscusNavItem> _navItems = const [
     MeniscusNavItem(
