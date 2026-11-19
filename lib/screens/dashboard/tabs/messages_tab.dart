@@ -74,46 +74,18 @@ class _MessagesTabState extends State<MessagesTab> {
                   ),
                   padding: const EdgeInsets.fromLTRB(20, 8, 20, 140),
                   children: [
-                    // Editorial Header
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Messages',
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.w800,
-                                  color: p.ink,
-                                  letterSpacing: -0.4,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                isTeacher
-                                    ? 'Class parents & study circle threads'
-                                    : (isParent
-                                        ? 'Direct channels with Ustaz & Director'
-                                        : 'School-wide communication hub'),
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: p.inkSecondary,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        ProStatusPill(
-                          label: 'LIVE',
-                          color: p.success,
-                          showDot: true,
-                        ),
-                      ],
+                    Text(
+                      isTeacher
+                          ? 'Class parents & study circle threads'
+                          : (isParent
+                              ? 'Direct channels with Ustaz & Director'
+                              : 'Direct conversations with Ustazs & parents'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: p.inkSecondary,
+                      ),
                     ),
-                    const SizedBox(height: 14),
+                    const SizedBox(height: 12),
 
                     // Sculpted Search Field
                     ProSearchField(

@@ -19,8 +19,8 @@ class KheyrukumNavItem {
 }
 
 /// Floating frosted-glass bottom navigation dock.
-/// Active tab expands smoothly into a tonal Deep Pine pill displaying icon + label;
-/// inactive tabs remain clean icons with optional live unread badges.
+/// Displays a balanced 5-column layout with unified icons and compact labels
+/// across every destination, highlighted with a subtle tonal capsule.
 class KheyrukumNavBar extends StatelessWidget {
   final int selectedIndex;
   final ValueChanged<int> onTabChanged;
@@ -37,32 +37,32 @@ class KheyrukumNavBar extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
     final dockBg = p.isDark
-        ? AppColors.surfaceNav.withOpacity(0.88)
-        : Colors.white.withOpacity(0.92);
+        ? AppColors.surfaceNav.withOpacity(0.90)
+        : Colors.white.withOpacity(0.94);
 
     return Container(
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(26),
         boxShadow: [
           BoxShadow(
             color: p.isDark
-                ? Colors.black.withOpacity(0.48)
-                : const Color(0xFF0A2422).withOpacity(0.10),
-            blurRadius: 24,
-            offset: const Offset(0, 8),
+                ? Colors.black.withOpacity(0.45)
+                : const Color(0xFF0A2422).withOpacity(0.08),
+            blurRadius: 20,
+            offset: const Offset(0, 6),
           ),
         ],
       ),
       child: ClipRRect(
-        borderRadius: BorderRadius.circular(28),
+        borderRadius: BorderRadius.circular(26),
         child: BackdropFilter(
           filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
           child: Container(
             height: 66,
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 7),
+            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
             decoration: BoxDecoration(
               color: dockBg,
-              borderRadius: BorderRadius.circular(28),
+              borderRadius: BorderRadius.circular(26),
               border: Border.all(
                 color: p.isDark
                     ? Colors.white.withOpacity(0.08)
@@ -71,13 +71,11 @@ class KheyrukumNavBar extends StatelessWidget {
               ),
             ),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: List.generate(items.length, (index) {
                 final item = items[index];
                 final isSelected = index == selectedIndex;
 
-                return Flexible(
-                  flex: isSelected ? 2 : 1,
+                return Expanded(
                   child: GestureDetector(
                     behavior: HitTestBehavior.opaque,
                     onTap: () {
@@ -87,42 +85,35 @@ class KheyrukumNavBar extends StatelessWidget {
                       onTabChanged(index);
                     },
                     child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 240),
+                      duration: const Duration(milliseconds: 220),
                       curve: Curves.easeOutCubic,
-                      height: 50,
-                      padding: EdgeInsets.symmetric(
-                        horizontal: isSelected ? 12 : 6,
+                      margin: const EdgeInsets.symmetric(horizontal: 2),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 4,
+                        vertical: 5,
                       ),
                       decoration: BoxDecoration(
                         color: isSelected
-                            ? (p.isDark
-                                ? p.primary.withOpacity(0.20)
-                                : p.primary.withOpacity(0.11))
+                            ? p.primary.withOpacity(p.isDark ? 0.22 : 0.11)
                             : Colors.transparent,
-                        borderRadius: BorderRadius.circular(22),
-                        border: isSelected
-                            ? Border.all(
-                                color: p.primary.withOpacity(p.isDark ? 0.35 : 0.20),
-                                width: 1,
-                              )
-                            : null,
+                        borderRadius: BorderRadius.circular(20),
                       ),
-                      child: Row(
+                      child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
-                        mainAxisSize: MainAxisSize.max,
+                        mainAxisSize: MainAxisSize.min,
                         children: [
                           Stack(
                             clipBehavior: Clip.none,
                             children: [
                               Icon(
                                 isSelected ? item.activeIcon : item.icon,
-                                size: 22,
+                                size: 21,
                                 color: isSelected ? p.primary : p.inkMuted,
                               ),
                               if (item.badgeCount > 0)
                                 Positioned(
                                   top: -4,
-                                  right: -6,
+                                  right: -7,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 4,
@@ -157,22 +148,22 @@ class KheyrukumNavBar extends StatelessWidget {
                                 ),
                             ],
                           ),
-                          if (isSelected) ...[
-                            const SizedBox(width: 6),
-                            Flexible(
-                              child: Text(
-                                item.label,
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: p.primary,
-                                  letterSpacing: -0.1,
-                                ),
-                              ),
+                          const SizedBox(height: 3),
+                          Text(
+                            item.label,
+                            maxLines: 1,
+                            softWrap: false,
+                            overflow: TextOverflow.fade,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected ? p.primary : p.inkMuted,
+                              letterSpacing: -0.1,
+                              height: 1.1,
                             ),
-                          ],
+                          ),
                         ],
                       ),
                     ),

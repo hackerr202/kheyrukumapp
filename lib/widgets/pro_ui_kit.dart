@@ -29,7 +29,8 @@ class ProCard extends StatelessWidget {
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
     final bg = backgroundColor ?? p.surface;
-    final bColor = borderColor ?? p.border;
+    final bColor = borderColor ??
+        (p.isDark ? p.border : p.border.withOpacity(0.85));
 
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
@@ -57,9 +58,9 @@ class ProCard extends StatelessWidget {
           BoxShadow(
             color: p.isDark
                 ? Colors.black.withOpacity(0.24)
-                : const Color(0xFF102322).withOpacity(0.045),
-            blurRadius: p.isDark ? 12 : 16,
-            offset: const Offset(0, 4),
+                : const Color(0xFF102322).withOpacity(0.035),
+            blurRadius: 12,
+            offset: p.isDark ? const Offset(0, 4) : const Offset(0, 3),
           ),
         ],
       ),
@@ -298,7 +299,7 @@ class ProAvatar extends StatelessWidget {
   }
 }
 
-/// Sculpted double-ring empty state card.
+/// Sculpted double-ring empty state rendered directly on canvas by default.
 class ProEmptyState extends StatelessWidget {
   final IconData icon;
   final String title;
@@ -306,6 +307,7 @@ class ProEmptyState extends StatelessWidget {
   final String? actionLabel;
   final VoidCallback? onAction;
   final Color? accentColor;
+  final bool framed;
 
   const ProEmptyState({
     super.key,
@@ -315,6 +317,7 @@ class ProEmptyState extends StatelessWidget {
     this.actionLabel,
     this.onAction,
     this.accentColor,
+    this.framed = false,
   });
 
   @override
@@ -322,8 +325,8 @@ class ProEmptyState extends StatelessWidget {
     final p = AppColors.of(context);
     final accent = accentColor ?? p.primary;
 
-    return ProCard(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 34),
+    final body = Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 28),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -381,10 +384,15 @@ class ProEmptyState extends StatelessWidget {
         ),
       ),
     );
+
+    if (framed) {
+      return ProCard(padding: EdgeInsets.zero, child: body);
+    }
+    return body;
   }
 }
 
-/// Unified bottom sheet wrapper with drag handle, icon header, close action, and divider.
+/// Unified bottom sheet wrapper with elevated surface header over a warm canvas body.
 class ProBottomSheetShell extends StatelessWidget {
   final String title;
   final String? subtitle;
@@ -413,7 +421,7 @@ class ProBottomSheetShell extends StatelessWidget {
     return Container(
       height: MediaQuery.of(context).size.height * heightFactor,
       decoration: BoxDecoration(
-        color: p.surface,
+        color: p.canvas,
         borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
         border: Border(
           top: BorderSide(color: p.border, width: 1),
@@ -426,76 +434,94 @@ class ProBottomSheetShell extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        children: [
-          const SizedBox(height: 12),
-          Container(
-            width: 42,
-            height: 4,
-            decoration: BoxDecoration(
-              color: p.inkMuted.withOpacity(0.35),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.fromLTRB(20, 14, 14, 12),
-            child: Row(
-              children: [
-                Container(
-                  width: 40,
-                  height: 40,
-                  decoration: BoxDecoration(
-                    color: tone.withOpacity(0.12),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: tone.withOpacity(0.24)),
+      child: ClipRRect(
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+        child: Column(
+          children: [
+            Container(
+              color: p.surface,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 12),
+                  Container(
+                    width: 42,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: p.inkMuted.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
                   ),
-                  child: Icon(icon, color: tone, size: 20),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        title,
-                        style: TextStyle(
-                          fontSize: 16.5,
-                          fontWeight: FontWeight.w700,
-                          color: p.ink,
-                          letterSpacing: -0.2,
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 14, 12),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 40,
+                          height: 40,
+                          decoration: BoxDecoration(
+                            color: tone.withOpacity(0.12),
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(color: tone.withOpacity(0.24)),
+                          ),
+                          child: Icon(icon, color: tone, size: 20),
                         ),
-                      ),
-                      if (subtitle != null && subtitle!.isNotEmpty) ...[
-                        const SizedBox(height: 1),
-                        Text(
-                          subtitle!,
-                          style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                title,
+                                style: TextStyle(
+                                  fontSize: 16.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: p.ink,
+                                  letterSpacing: -0.2,
+                                ),
+                              ),
+                              if (subtitle != null && subtitle!.isNotEmpty) ...[
+                                const SizedBox(height: 1),
+                                Text(
+                                  subtitle!,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: p.inkSecondary,
+                                  ),
+                                  maxLines: 2,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                        if (trailingAction != null) ...[
+                          trailingAction!,
+                          const SizedBox(width: 4),
+                        ],
+                        IconButton(
+                          onPressed: () => Navigator.of(context).pop(),
+                          style: IconButton.styleFrom(
+                            backgroundColor: p.surfaceSubtle,
+                            minimumSize: const Size(34, 34),
+                            padding: EdgeInsets.zero,
+                          ),
+                          icon: Icon(
+                            Icons.close_rounded,
+                            size: 18,
+                            color: p.inkSecondary,
+                          ),
                         ),
                       ],
-                    ],
+                    ),
                   ),
-                ),
-                if (trailingAction != null) ...[
-                  trailingAction!,
-                  const SizedBox(width: 4),
+                  Divider(height: 1, color: p.border),
                 ],
-                IconButton(
-                  onPressed: () => Navigator.of(context).pop(),
-                  style: IconButton.styleFrom(
-                    backgroundColor: p.surfaceSubtle,
-                    minimumSize: const Size(34, 34),
-                    padding: EdgeInsets.zero,
-                  ),
-                  icon: Icon(Icons.close_rounded, size: 18, color: p.inkSecondary),
-                ),
-              ],
+              ),
             ),
-          ),
-          Divider(height: 1, color: p.border),
-          Expanded(child: child),
-        ],
+            Expanded(child: child),
+          ],
+        ),
       ),
     );
   }

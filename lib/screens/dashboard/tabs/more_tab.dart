@@ -2,9 +2,9 @@ import 'package:flutter/material.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../widgets/invite_code_dialog.dart';
 import '../../../widgets/pro_ui_kit.dart';
 import '../../admin/halaqah_management_sheet.dart';
+import '../../admin/invite_codes_bottom_sheet.dart';
 import '../../admin/user_management_screen.dart';
 import '../../announcements/announcements_sheet.dart';
 import '../../announcements/post_announcement_dialog.dart';
@@ -84,7 +84,7 @@ class MoreTab extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Ustaz: ${AuthSessionService.instance.userName} • ${classStudents.length} Students Enrolled',
+                'Ustaz: ${AuthSessionService.instance.userName} • ${classStudents.length} ${classStudents.length == 1 ? 'Student' : 'Students'} Enrolled',
                 style: TextStyle(
                   fontSize: 12.5,
                   color: p.primary,
@@ -184,8 +184,8 @@ class MoreTab extends StatelessWidget {
         final userName = AuthSessionService.instance.userName;
         final userEmail = AuthSessionService.instance.userEmail;
         final roleLabel = isAdmin
-            ? 'Center Director'
-            : (isTeacher ? 'Assigned Ustaz' : 'Parent / Guardian');
+            ? 'Director'
+            : (isTeacher ? 'Ustaz' : 'Parent');
 
         return ListView(
           physics: const BouncingScrollPhysics(),
@@ -232,19 +232,22 @@ class MoreTab extends StatelessWidget {
                         const SizedBox(height: 6),
                         Container(
                           padding: const EdgeInsets.symmetric(
-                            horizontal: 9,
-                            vertical: 3,
+                            horizontal: 10,
+                            vertical: 3.5,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.14),
+                            color: Colors.white.withOpacity(0.16),
                             borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: const Color(0xFFFAD882).withOpacity(0.35),
+                            ),
                           ),
                           child: Text(
                             roleLabel,
                             style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
-                              color: AppColors.goldWarm,
+                              color: Color(0xFFFAD882),
                             ),
                           ),
                         ),
@@ -292,23 +295,12 @@ class MoreTab extends StatelessWidget {
                     _buildDivider(p),
                     _buildMenuTile(
                       p: p,
-                      icon: Icons.school_rounded,
+                      icon: Icons.vpn_key_rounded,
                       iconColor: p.gold,
-                      title: 'Invite Teacher (Ustaz)',
-                      subtitle: 'Generate registration code for a new teacher',
-                      onTap: () =>
-                          InviteCodeDialog.show(context, initialRole: 'teacher'),
-                    ),
-                    _buildDivider(p),
-                    _buildMenuTile(
-                      p: p,
-                      icon: Icons.family_restroom_rounded,
-                      iconColor: p.gold,
-                      title: 'Invite Parent',
+                      title: 'Registration & Invite Codes',
                       subtitle:
-                          'Generate registration code for parent onboarding',
-                      onTap: () =>
-                          InviteCodeDialog.show(context, initialRole: 'parent'),
+                          'Generate sign-up codes for teachers & parents',
+                      onTap: () => InviteCodesBottomSheet.show(context),
                     ),
                   ],
                 ),
@@ -348,7 +340,7 @@ class MoreTab extends StatelessWidget {
                     subtitle: isAdmin
                         ? 'Broadcast notices to parents & teachers'
                         : 'Official circulars, reminders & schedule updates',
-                    onTap: () => AnnouncementsSheet.show(context),
+                    onTap: () => AnnouncementsSheet.show(context, initialTab: 1),
                     trailing: isAdmin
                         ? InkWell(
                             onTap: () {
@@ -413,7 +405,7 @@ class MoreTab extends StatelessWidget {
               padding: EdgeInsets.zero,
               child: _buildMenuTile(
                 p: p,
-                icon: Icons.tune_rounded,
+                icon: Icons.settings_rounded,
                 iconColor: p.primary,
                 title: 'Portal Settings',
                 subtitle: 'Theme appearance, account details & sign out',

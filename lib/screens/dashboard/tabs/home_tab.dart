@@ -67,17 +67,15 @@ class _HomeTabState extends State<HomeTab> {
                 const SizedBox(height: 24),
                 _buildQuickActionsRow(context, p),
                 const SizedBox(height: 24),
-                _buildAnnouncementsSection(context, p, isAdmin: true),
-                const SizedBox(height: 18),
-                _buildInviteCodesCollapsedRow(context, p),
+                _buildAnnouncementsSection(context, p),
               ] else if (isTeacher) ...[
                 _buildTeacherOverviewCard(p),
                 const SizedBox(height: 24),
-                _buildAnnouncementsSection(context, p, isAdmin: false),
+                _buildAnnouncementsSection(context, p),
               ] else ...[
                 _buildParentOverviewCard(p),
                 const SizedBox(height: 24),
-                _buildAnnouncementsSection(context, p, isAdmin: false),
+                _buildAnnouncementsSection(context, p),
               ],
             ],
           ),
@@ -129,7 +127,7 @@ class _HomeTabState extends State<HomeTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            Column(
+                            const Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
@@ -138,11 +136,11 @@ class _HomeTabState extends State<HomeTab> {
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w700,
                                     letterSpacing: 1.0,
-                                    color: AppColors.goldWarm,
+                                    color: Color(0xFFF6CE6B),
                                   ),
                                 ),
-                                const SizedBox(height: 3),
-                                const Text(
+                                SizedBox(height: 3),
+                                Text(
                                   'Kheyrukum Islamic Center',
                                   style: TextStyle(
                                     fontSize: 17,
@@ -155,32 +153,28 @@ class _HomeTabState extends State<HomeTab> {
                             ),
                             Container(
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 9,
-                                vertical: 4,
+                                horizontal: 10,
+                                vertical: 5,
                               ),
                               decoration: BoxDecoration(
                                 color: Colors.white.withOpacity(0.14),
                                 borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: Colors.white.withOpacity(0.22),
-                                ),
                               ),
-                              child: const Row(
+                              child: Row(
                                 mainAxisSize: MainAxisSize.min,
                                 children: [
-                                  Icon(
-                                    Icons.circle,
-                                    size: 7,
-                                    color: Color(0xFF4ADE80),
+                                  const Icon(
+                                    Icons.calendar_today_rounded,
+                                    size: 11,
+                                    color: Color(0xFFF6CE6B),
                                   ),
-                                  SizedBox(width: 5),
+                                  const SizedBox(width: 5),
                                   Text(
-                                    'LIVE',
-                                    style: TextStyle(
-                                      fontSize: 9.5,
-                                      fontWeight: FontWeight.w800,
+                                    _formatTodayLabel(),
+                                    style: const TextStyle(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
                                       color: Colors.white,
-                                      letterSpacing: 0.6,
                                     ),
                                   ),
                                 ],
@@ -188,36 +182,38 @@ class _HomeTabState extends State<HomeTab> {
                             ),
                           ],
                         ),
-                        const SizedBox(height: 20),
+                        const SizedBox(height: 18),
                         Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 6,
                             vertical: 12,
                           ),
                           decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.10),
-                            borderRadius: BorderRadius.circular(18),
-                            border: Border.all(
-                              color: Colors.white.withOpacity(0.14),
-                            ),
+                            color: Colors.black.withOpacity(0.16),
+                            borderRadius: BorderRadius.circular(16),
                           ),
                           child: Row(
                             children: [
                               _buildHeroStatItem(
-                                label: 'Students',
+                                label: students.length == 1
+                                    ? 'Student'
+                                    : 'Students',
                                 value: '${students.length}',
                                 onTap: () => widget.onNavigateToTab?.call(1),
                               ),
                               _buildHeroStatDivider(),
                               _buildHeroStatItem(
-                                label: 'Circles',
+                                label: halaqahs.length == 1
+                                    ? 'Circle'
+                                    : 'Circles',
                                 value: '${halaqahs.length}',
                                 onTap: () =>
                                     HalaqahManagementSheet.show(context),
                               ),
                               _buildHeroStatDivider(),
                               _buildHeroStatItem(
-                                label: 'Ustazs',
+                                label:
+                                    teachersCount == 1 ? 'Ustaz' : 'Ustazs',
                                 value: '$teachersCount',
                                 onTap: () =>
                                     InviteCodesBottomSheet.show(context),
@@ -379,6 +375,16 @@ class _HomeTabState extends State<HomeTab> {
     );
   }
 
+  String _formatTodayLabel() {
+    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final now = DateTime.now();
+    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
+  }
+
   Widget _buildHeroStatItem({
     required String label,
     required String value,
@@ -396,19 +402,20 @@ class _HomeTabState extends State<HomeTab> {
               Text(
                 value,
                 style: const TextStyle(
-                  fontSize: 22,
+                  fontSize: 26,
                   fontWeight: FontWeight.w800,
                   color: Colors.white,
-                  letterSpacing: -0.5,
+                  letterSpacing: -0.6,
+                  height: 1.05,
                   fontFeatures: [FontFeature.tabularFigures()],
                 ),
               ),
-              const SizedBox(height: 2),
+              const SizedBox(height: 3),
               Text(
                 label,
                 style: TextStyle(
                   fontSize: 11.5,
-                  color: Colors.white.withOpacity(0.76),
+                  color: Colors.white.withOpacity(0.80),
                   fontWeight: FontWeight.w500,
                 ),
               ),
@@ -422,13 +429,13 @@ class _HomeTabState extends State<HomeTab> {
   Widget _buildHeroStatDivider() {
     return Container(
       width: 1,
-      height: 30,
+      height: 32,
       color: Colors.white.withOpacity(0.18),
     );
   }
 
   // ===========================================================================
-  // QUICK ACTIONS GRID (Admin)
+  // QUICK ACTIONS 2x2 HORIZONTAL GRID (Admin)
   // ===========================================================================
   Widget _buildQuickActionsRow(BuildContext context, AppPalette p) {
     return Column(
@@ -442,6 +449,7 @@ class _HomeTabState extends State<HomeTab> {
               p: p,
               icon: Icons.campaign_outlined,
               label: 'Post Notice',
+              subtitle: 'Broadcast circular',
               accent: p.primary,
               onTap: () {
                 showDialog(
@@ -455,22 +463,29 @@ class _HomeTabState extends State<HomeTab> {
               p: p,
               icon: Icons.vpn_key_outlined,
               label: 'Invite Codes',
+              subtitle: 'Teacher & parent keys',
               accent: p.gold,
               onTap: () => InviteCodesBottomSheet.show(context),
             ),
-            const SizedBox(width: 10),
+          ],
+        ),
+        const SizedBox(height: 10),
+        Row(
+          children: [
             _buildActionItem(
               p: p,
               icon: Icons.person_add_outlined,
               label: 'Add Student',
+              subtitle: 'Enroll learner',
               accent: p.primary,
               onTap: () => AddStudentDialog.show(context),
             ),
             const SizedBox(width: 10),
             _buildActionItem(
               p: p,
-              icon: Icons.menu_book_outlined,
-              label: 'Circles',
+              icon: Icons.auto_stories_outlined,
+              label: 'Study Circles',
+              subtitle: 'Manage halaqahs',
               accent: p.gold,
               onTap: () => HalaqahManagementSheet.show(context),
             ),
@@ -484,6 +499,7 @@ class _HomeTabState extends State<HomeTab> {
     required AppPalette p,
     required IconData icon,
     required String label,
+    required String subtitle,
     required Color accent,
     required VoidCallback onTap,
   }) {
@@ -491,29 +507,46 @@ class _HomeTabState extends State<HomeTab> {
       child: ProCard(
         onTap: onTap,
         borderRadius: 18,
-        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 14),
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: Row(
           children: [
             Container(
-              width: 40,
-              height: 40,
+              width: 38,
+              height: 38,
               decoration: BoxDecoration(
                 color: accent.withOpacity(0.12),
-                borderRadius: BorderRadius.circular(12),
+                borderRadius: BorderRadius.circular(11),
               ),
-              child: Icon(icon, size: 20, color: accent),
+              child: Icon(icon, size: 19, color: accent),
             ),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              textAlign: TextAlign.center,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-              style: TextStyle(
-                fontSize: 11,
-                fontWeight: FontWeight.w600,
-                color: p.ink,
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: p.ink,
+                      letterSpacing: -0.1,
+                    ),
+                  ),
+                  const SizedBox(height: 1),
+                  Text(
+                    subtitle,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: p.inkSecondary,
+                    ),
+                  ),
+                ],
               ),
             ),
           ],
@@ -566,13 +599,13 @@ class _HomeTabState extends State<HomeTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text(
+                            const Text(
                               'ASSIGNED STUDY CIRCLE',
                               style: TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.0,
-                                color: AppColors.goldWarm,
+                                color: Color(0xFFF6CE6B),
                               ),
                             ),
                             const SizedBox(height: 4),
@@ -603,7 +636,7 @@ class _HomeTabState extends State<HomeTab> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '$total Students',
+                          '$total ${total == 1 ? 'Student' : 'Students'}',
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
@@ -759,13 +792,13 @@ class _HomeTabState extends State<HomeTab> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
+                      const Text(
                         'FAMILY LEARNING HUB',
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.0,
-                          color: AppColors.goldWarm,
+                          color: Color(0xFFF6CE6B),
                         ),
                       ),
                       const SizedBox(height: 3),
@@ -912,46 +945,31 @@ class _HomeTabState extends State<HomeTab> {
   // ===========================================================================
   // ANNOUNCEMENTS EDITORIAL FEED
   // ===========================================================================
-  Widget _buildAnnouncementsSection(
-    BuildContext context,
-    AppPalette p, {
-    required bool isAdmin,
-  }) {
+  Widget _buildAnnouncementsSection(BuildContext context, AppPalette p) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ProSectionHeader(
           title: 'School Announcements',
           subtitle: 'Official circulars and schedule notices',
-          trailing: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              if (isAdmin)
-                IconButton(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => const PostAnnouncementDialog(),
-                    );
-                  },
-                  icon: Icon(Icons.add_circle_outline_rounded,
-                      size: 20, color: p.primary),
-                  padding: const EdgeInsets.all(6),
-                  constraints:
-                      const BoxConstraints(minWidth: 32, minHeight: 32),
-                  tooltip: 'Post notice',
+          trailing: TextButton(
+            onPressed: () => AnnouncementsSheet.show(context, initialTab: 1),
+            style: TextButton.styleFrom(
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+              minimumSize: Size.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text(
+                  'View all',
+                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
                 ),
-              TextButton(
-                onPressed: () => AnnouncementsSheet.show(context),
-                style: TextButton.styleFrom(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                  minimumSize: Size.zero,
-                  tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                ),
-                child: const Text('View all'),
-              ),
-            ],
+                const SizedBox(width: 2),
+                Icon(Icons.chevron_right_rounded, size: 17, color: p.primary),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 12),
@@ -979,54 +997,6 @@ class _HomeTabState extends State<HomeTab> {
       ],
     );
   }
-
-  // ===========================================================================
-  // ADMIN INVITE CODES QUICK ROW
-  // ===========================================================================
-  Widget _buildInviteCodesCollapsedRow(BuildContext context, AppPalette p) {
-    return ProCard(
-      onTap: () => InviteCodesBottomSheet.show(context),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      child: Row(
-        children: [
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: p.goldSoft,
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Icon(Icons.vpn_key_outlined, size: 20, color: p.gold),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Invitation Codes',
-                  style: TextStyle(
-                    fontSize: 14.5,
-                    fontWeight: FontWeight.w700,
-                    color: p.ink,
-                  ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  'Generate teacher & parent onboarding codes',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: p.inkSecondary,
-                  ),
-                ),
-              ],
-            ),
-          ),
-          Icon(Icons.chevron_right_rounded, size: 20, color: p.inkMuted),
-        ],
-      ),
-    );
-  }
 }
 
 class _VerticalAnnouncementsList extends StatelessWidget {
@@ -1039,14 +1009,22 @@ class _VerticalAnnouncementsList extends StatelessWidget {
   });
 
   String _formatAnnouncementDate(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 60) {
-      return diff.inMinutes <= 1 ? 'Just now' : '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else {
-      return '${dt.month}/${dt.day}';
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
+    final now = DateTime.now();
+    final diff = now.difference(dt);
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24 && now.day == dt.day) return '${diff.inHours}h ago';
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (dt.year == yesterday.year &&
+        dt.month == yesterday.month &&
+        dt.day == yesterday.day) {
+      return 'Yesterday';
     }
+    return '${months[dt.month - 1]} ${dt.day}';
   }
 
   bool _isImage(String url, String? name) {
@@ -1072,6 +1050,10 @@ class _VerticalAnnouncementsList extends StatelessWidget {
     return Column(
       children: items.map((item) {
         final isPinned = item.isPinned;
+        final hasAudienceTag = item.targetAudience == 'parents' ||
+            item.targetAudience == 'teachers';
+        final audienceLabel =
+            item.targetAudience == 'parents' ? 'Parents' : 'Teachers';
         final hasImage = item.attachmentUrl != null &&
             item.attachmentUrl!.isNotEmpty &&
             _isImage(item.attachmentUrl!, item.attachmentName);
@@ -1079,7 +1061,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
         return Padding(
           padding: const EdgeInsets.only(bottom: 12),
           child: ProCard(
-            onTap: () => AnnouncementsSheet.show(context),
+            onTap: () => AnnouncementsSheet.show(context, initialTab: 1),
             accentStripeColor: isPinned ? p.gold : null,
             borderColor: isPinned ? p.gold.withOpacity(0.45) : p.border,
             padding: const EdgeInsets.all(16),
@@ -1089,16 +1071,40 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    ProStatusPill(
-                      label: isPinned ? 'Pinned Notice' : 'Center Notice',
-                      icon: isPinned
-                          ? Icons.push_pin_rounded
-                          : Icons.campaign_rounded,
-                      color: isPinned ? p.gold : p.primary,
-                    ),
+                    if (isPinned || hasAudienceTag)
+                      Wrap(
+                        spacing: 6,
+                        children: [
+                          if (isPinned)
+                            ProStatusPill(
+                              label: 'Pinned',
+                              icon: Icons.push_pin_rounded,
+                              color: p.gold,
+                            ),
+                          if (hasAudienceTag)
+                            ProStatusPill(
+                              label: audienceLabel,
+                              color: p.primary,
+                            ),
+                        ],
+                      )
+                    else
+                      Text(
+                        'CENTER NOTICE',
+                        style: TextStyle(
+                          fontSize: 10.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.primary,
+                          letterSpacing: 0.6,
+                        ),
+                      ),
                     Text(
                       _formatAnnouncementDate(item.createdAt),
-                      style: TextStyle(fontSize: 11, color: p.inkMuted),
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: p.inkSecondary,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                   ],
                 ),
@@ -1106,21 +1112,22 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                 Text(
                   item.title,
                   style: TextStyle(
-                    fontSize: 15,
+                    fontSize: 16.5,
                     fontWeight: FontWeight.w700,
                     color: p.ink,
-                    letterSpacing: -0.15,
+                    letterSpacing: -0.25,
+                    height: 1.25,
                   ),
                 ),
-                const SizedBox(height: 5),
+                const SizedBox(height: 6),
                 Text(
                   item.content,
                   maxLines: hasImage ? 2 : 3,
                   overflow: TextOverflow.ellipsis,
                   style: TextStyle(
-                    fontSize: 12.5,
+                    fontSize: 13.5,
                     color: p.inkSecondary,
-                    height: 1.45,
+                    height: 1.48,
                   ),
                 ),
                 if (hasImage) ...[
@@ -1128,16 +1135,21 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                   ClipRRect(
                     borderRadius: BorderRadius.circular(14),
                     child: Container(
-                      constraints: const BoxConstraints(maxHeight: 190),
+                      constraints: const BoxConstraints(maxHeight: 240),
                       width: double.infinity,
-                      color: p.surfaceSubtle,
+                      decoration: BoxDecoration(
+                        color: p.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: p.border),
+                      ),
                       child: Image.network(
                         item.attachmentUrl!,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
+                        width: double.infinity,
                         loadingBuilder: (context, child, progress) {
                           if (progress == null) return child;
                           return SizedBox(
-                            height: 120,
+                            height: 130,
                             child: Center(
                               child: CircularProgressIndicator(
                                 strokeWidth: 2,
@@ -1187,21 +1199,38 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                   ),
                 ],
                 if (item.authorName.isNotEmpty) ...[
-                  const SizedBox(height: 10),
+                  const SizedBox(height: 12),
                   Row(
                     children: [
-                      Icon(
-                        Icons.person_outline_rounded,
-                        size: 13,
-                        color: p.inkMuted,
+                      Container(
+                        width: 18,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          color: p.primary.withOpacity(0.12),
+                        ),
+                        child: Center(
+                          child: Text(
+                            item.authorName.trim()[0].toUpperCase(),
+                            style: TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w700,
+                              color: p.primary,
+                            ),
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 5),
-                      Text(
-                        item.authorName,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: p.inkMuted,
-                          fontWeight: FontWeight.w500,
+                      const SizedBox(width: 7),
+                      Expanded(
+                        child: Text(
+                          item.authorName.replaceAll(' (Director)', ' · Director'),
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: p.inkMuted,
+                            fontWeight: FontWeight.w500,
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                       ),
                     ],

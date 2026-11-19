@@ -19,10 +19,10 @@ class SettingsSheet extends StatelessWidget {
           final p = AppColors.of(context);
           return ProBottomSheetShell(
             title: 'Portal Settings',
-            subtitle: 'Appearance, account identity & security',
-            icon: Icons.tune_rounded,
+            subtitle: 'Appearance & account preferences',
+            icon: Icons.settings_rounded,
             iconColor: p.primary,
-            heightFactor: 0.88,
+            heightFactor: 0.78,
             child: const SettingsTab(),
           );
         },

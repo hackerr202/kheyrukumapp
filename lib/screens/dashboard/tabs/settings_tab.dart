@@ -9,15 +9,12 @@ import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
-import '../../../widgets/invite_code_dialog.dart';
 import '../../../widgets/pro_ui_kit.dart';
 
 /// Flagship Settings & Profile Tab:
-/// 1. User profile card with role badge
+/// 1. User profile card with unified role pill
 /// 2. Visual side-by-side Appearance Picker (Warm Sanctuary Light vs Emerald Night Dark)
-/// 3. Cryptographic account security info
-/// 4. Admin-only Invite Codes Generator
-/// 5. Clean Sign Out clearing stack to Auth screen
+/// 3. Clean Sign Out clearing stack to Auth screen
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
@@ -59,6 +56,8 @@ class _SettingsTabState extends State<SettingsTab> {
             final userEmail = AuthSessionService.instance.userEmail;
             final roleColor =
                 isAdmin ? p.gold : (isTeacher ? p.primary : p.info);
+            final roleLabel =
+                isAdmin ? 'Director' : (isTeacher ? 'Ustaz' : 'Parent');
 
             return ListView(
               padding: const EdgeInsets.fromLTRB(20, 14, 20, 48),
@@ -97,10 +96,25 @@ class _SettingsTabState extends State<SettingsTab> {
                                 ),
                               ),
                             ],
-                            const SizedBox(height: 6),
-                            ProStatusPill(
-                              label: currentRole.toUpperCase(),
-                              color: roleColor,
+                            const SizedBox(height: 8),
+                            Wrap(
+                              spacing: 6,
+                              runSpacing: 6,
+                              children: [
+                                ProStatusPill(
+                                  label: roleLabel,
+                                  color: roleColor,
+                                ),
+                                if (isTeacher &&
+                                    AuthSessionService
+                                        .instance.assignedHalaqahName.isNotEmpty)
+                                  ProStatusPill(
+                                    label: AuthSessionService
+                                        .instance.assignedHalaqahName,
+                                    icon: Icons.auto_stories_rounded,
+                                    color: p.primary,
+                                  ),
+                              ],
                             ),
                           ],
                         ),
@@ -130,6 +144,7 @@ class _SettingsTabState extends State<SettingsTab> {
                         subtitle: 'Daylight Ivory',
                         previewCanvas: AppColors.canvasLight,
                         previewSurface: AppColors.surfaceCardLight,
+                        previewBarColor: const Color(0xFFE6E1D6),
                         previewAccent: AppColors.pinePrimary,
                         isSelected: !isDark,
                         p: p,
@@ -142,7 +157,8 @@ class _SettingsTabState extends State<SettingsTab> {
                         title: 'Emerald Night',
                         subtitle: 'Midnight Pine',
                         previewCanvas: AppColors.background,
-                        previewSurface: AppColors.surfaceCard,
+                        previewSurface: const Color(0xFF132D2B),
+                        previewBarColor: const Color(0xFF1F3E3B),
                         previewAccent: AppColors.pineJade,
                         isSelected: isDark,
                         p: p,
@@ -151,155 +167,6 @@ class _SettingsTabState extends State<SettingsTab> {
                     ),
                   ],
                 ),
-
-                const SizedBox(height: 22),
-
-                // Account Security
-                Text(
-                  'ACCOUNT & SECURITY',
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    letterSpacing: 0.8,
-                    color: p.inkMuted,
-                  ),
-                ),
-                const SizedBox(height: 10),
-                ProCard(
-                  padding: const EdgeInsets.all(16),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        children: [
-                          Container(
-                            width: 40,
-                            height: 40,
-                            decoration: BoxDecoration(
-                              color: roleColor.withOpacity(0.12),
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Icon(
-                              isAdmin
-                                  ? Icons.verified_user_rounded
-                                  : (isTeacher
-                                      ? Icons.school_rounded
-                                      : Icons.family_restroom_rounded),
-                              size: 20,
-                              color: roleColor,
-                            ),
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  isAdmin
-                                      ? 'Administrator Access Verified'
-                                      : (isTeacher
-                                          ? 'Ustaz / Teacher Portal'
-                                          : 'Parent / Guardian Portal'),
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    fontWeight: FontWeight.w700,
-                                    color: p.ink,
-                                  ),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Authenticated via Supabase Cloud Auth',
-                                  style: TextStyle(
-                                    fontSize: 11.5,
-                                    color: p.inkSecondary,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                      if (isTeacher &&
-                          AuthSessionService
-                              .instance.assignedHalaqahName.isNotEmpty) ...[
-                        const SizedBox(height: 12),
-                        ProStatusPill(
-                          label:
-                              'Assigned Circle: ${AuthSessionService.instance.assignedHalaqahName}',
-                          icon: Icons.menu_book_rounded,
-                          color: p.primary,
-                        ),
-                      ],
-                    ],
-                  ),
-                ),
-
-                if (isAdmin) ...[
-                  const SizedBox(height: 22),
-                  Text(
-                    'ADMINISTRATION',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      letterSpacing: 0.8,
-                      color: p.inkMuted,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  ProCard(
-                    padding: const EdgeInsets.all(16),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(9),
-                              decoration: BoxDecoration(
-                                color: p.primarySoft,
-                                borderRadius: BorderRadius.circular(11),
-                              ),
-                              child: Icon(Icons.vpn_key_rounded,
-                                  color: p.primary, size: 20),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    'Invite Codes Generator',
-                                    style: TextStyle(
-                                      fontSize: 14,
-                                      fontWeight: FontWeight.w700,
-                                      color: p.ink,
-                                    ),
-                                  ),
-                                  Text(
-                                    'Generate realtime codes for Teachers & Parents',
-                                    style: TextStyle(
-                                      fontSize: 11.5,
-                                      color: p.inkSecondary,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: ElevatedButton.icon(
-                            onPressed: () => InviteCodeDialog.show(context),
-                            icon: const Icon(Icons.add_rounded, size: 17),
-                            label: const Text('Manage & Generate Invite Codes'),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                ],
 
                 const SizedBox(height: 26),
 
@@ -335,6 +202,7 @@ class _ThemeOptionCard extends StatelessWidget {
   final String subtitle;
   final Color previewCanvas;
   final Color previewSurface;
+  final Color previewBarColor;
   final Color previewAccent;
   final bool isSelected;
   final AppPalette p;
@@ -345,6 +213,7 @@ class _ThemeOptionCard extends StatelessWidget {
     required this.subtitle,
     required this.previewCanvas,
     required this.previewSurface,
+    required this.previewBarColor,
     required this.previewAccent,
     required this.isSelected,
     required this.p,
@@ -375,7 +244,11 @@ class _ThemeOptionCard extends StatelessWidget {
               decoration: BoxDecoration(
                 color: previewCanvas,
                 borderRadius: BorderRadius.circular(11),
-                border: Border.all(color: p.border),
+                border: Border.all(
+                  color: p.isDark
+                      ? Colors.white.withOpacity(0.10)
+                      : p.border,
+                ),
               ),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -396,7 +269,7 @@ class _ThemeOptionCard extends StatelessWidget {
                         child: Container(
                           height: 6,
                           decoration: BoxDecoration(
-                            color: previewSurface,
+                            color: previewBarColor,
                             borderRadius: BorderRadius.circular(3),
                           ),
                         ),
@@ -408,6 +281,7 @@ class _ThemeOptionCard extends StatelessWidget {
                     decoration: BoxDecoration(
                       color: previewSurface,
                       borderRadius: BorderRadius.circular(5),
+                      border: Border.all(color: previewBarColor.withOpacity(0.6)),
                     ),
                   ),
                 ],

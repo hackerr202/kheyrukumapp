@@ -14,14 +14,16 @@ import 'post_announcement_dialog.dart';
 /// - Real-time student alerts & notifications
 /// - Official center announcements with functional audience/pinned/attachment filters
 class AnnouncementsSheet extends StatefulWidget {
-  const AnnouncementsSheet({super.key});
+  final int initialTab;
 
-  static Future<void> show(BuildContext context) {
+  const AnnouncementsSheet({super.key, this.initialTab = 0});
+
+  static Future<void> show(BuildContext context, {int initialTab = 0}) {
     return showModalBottomSheet(
       context: context,
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
-      builder: (_) => const AnnouncementsSheet(),
+      builder: (_) => AnnouncementsSheet(initialTab: initialTab),
     );
   }
 
@@ -30,8 +32,17 @@ class AnnouncementsSheet extends StatefulWidget {
 }
 
 class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
-  int _activeTab = 0; // 0: Alerts, 1: Notices
+  late int _activeTab; // 0: Alerts, 1: Notices
   String _selectedFilter = 'all';
+
+  @override
+  void initState() {
+    super.initState();
+    _activeTab = widget.initialTab;
+    if (_activeTab == 1) {
+      AnnouncementService.instance.markAllAsRead();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -40,34 +51,28 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
 
     return ProBottomSheetShell(
       title: 'Notices & Activity',
-      subtitle: 'School circulars and account updates',
+      subtitle: 'Circulars & alerts',
       icon: Icons.campaign_rounded,
       iconColor: p.gold,
       heightFactor: 0.88,
-      trailingAction: _activeTab == 0
-          ? TextButton(
-              onPressed: () =>
-                  NotificationCenterService.instance.markAllAsRead(),
-              child: const Text('Mark read', style: TextStyle(fontSize: 12)),
+      trailingAction: (_activeTab == 1 && isAdmin)
+          ? ElevatedButton.icon(
+              onPressed: () {
+                showDialog(
+                  context: context,
+                  builder: (_) => const PostAnnouncementDialog(),
+                );
+              },
+              icon: const Icon(Icons.add_rounded, size: 15),
+              label: const Text('Post', style: TextStyle(fontSize: 12)),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: p.gold,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+              ),
             )
-          : (isAdmin
-              ? ElevatedButton.icon(
-                  onPressed: () {
-                    showDialog(
-                      context: context,
-                      builder: (_) => const PostAnnouncementDialog(),
-                    );
-                  },
-                  icon: const Icon(Icons.add_rounded, size: 15),
-                  label: const Text('Post', style: TextStyle(fontSize: 12)),
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.gold,
-                    foregroundColor: Colors.white,
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                  ),
-                )
-              : null),
+          : null,
       child: Column(
         children: [
           Padding(
@@ -75,7 +80,12 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
             child: ProSegmentedControl(
               labels: const ['Activity Alerts', 'Announcements'],
               selectedIndex: _activeTab,
-              onChanged: (idx) => setState(() => _activeTab = idx),
+              onChanged: (idx) {
+                setState(() => _activeTab = idx);
+                if (idx == 1) {
+                  AnnouncementService.instance.markAllAsRead();
+                }
+              },
             ),
           ),
 
@@ -89,9 +99,10 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   final notifs = snapshot.data ?? [];
 
                   if (notifs.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(
+                    return const Align(
+                      alignment: Alignment(0, -0.22),
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
                         child: ProEmptyState(
                           icon: Icons.notifications_none_rounded,
                           title: 'No alerts yet',
@@ -102,13 +113,45 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                     );
                   }
 
-                  return ListView.separated(
-                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
-                    itemCount: notifs.length,
-                    separatorBuilder: (_, __) => const SizedBox(height: 10),
-                    itemBuilder: (context, index) {
-                      return _buildNotificationCard(notifs[index], p);
-                    },
+                  final hasUnread = notifs.any((n) => !n.isRead);
+
+                  return Column(
+                    children: [
+                      if (hasUnread)
+                        Padding(
+                          padding: const EdgeInsets.fromLTRB(18, 2, 18, 4),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.end,
+                            children: [
+                              TextButton(
+                                onPressed: () => NotificationCenterService
+                                    .instance
+                                    .markAllAsRead(),
+                                style: TextButton.styleFrom(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 4),
+                                  minimumSize: Size.zero,
+                                  tapTargetSize:
+                                      MaterialTapTargetSize.shrinkWrap,
+                                ),
+                                child: const Text('Mark all read',
+                                    style: TextStyle(fontSize: 12)),
+                              ),
+                            ],
+                          ),
+                        ),
+                      Expanded(
+                        child: ListView.separated(
+                          padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
+                          itemCount: notifs.length,
+                          separatorBuilder: (_, __) =>
+                              const SizedBox(height: 10),
+                          itemBuilder: (context, index) {
+                            return _buildNotificationCard(notifs[index], p);
+                          },
+                        ),
+                      ),
+                    ],
                   );
                 },
               ),
@@ -161,9 +204,10 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   }).toList();
 
                   if (list.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.all(24),
-                      child: Center(
+                    return const Align(
+                      alignment: Alignment(0, -0.22),
+                      child: Padding(
+                        padding: EdgeInsets.all(24),
                         child: ProEmptyState(
                           icon: Icons.campaign_outlined,
                           title: 'No notices found',
@@ -216,6 +260,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     final isPaymentType = item.type.startsWith('payment');
 
     return ProCard(
+      onTap: () => NotificationCenterService.instance.markAsRead(item.id),
+      borderColor: item.isRead ? p.border : iconColor.withOpacity(0.45),
       padding: const EdgeInsets.all(14),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -240,7 +286,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                       child: Text(
                         item.title,
                         style: TextStyle(
-                          fontWeight: FontWeight.w700,
+                          fontWeight:
+                              item.isRead ? FontWeight.w600 : FontWeight.w700,
                           fontSize: 13.5,
                           color: p.ink,
                         ),
@@ -248,8 +295,23 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                     ),
                     Text(
                       _formatDate(item.createdAt),
-                      style: TextStyle(color: p.inkMuted, fontSize: 10.5),
+                      style: TextStyle(
+                        color: p.inkSecondary,
+                        fontSize: 11,
+                        fontWeight: FontWeight.w500,
+                      ),
                     ),
+                    if (!item.isRead) ...[
+                      const SizedBox(width: 6),
+                      Container(
+                        width: 7,
+                        height: 7,
+                        decoration: BoxDecoration(
+                          color: iconColor,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
                   ],
                 ),
                 const SizedBox(height: 4),
@@ -319,6 +381,11 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   }
 
   Widget _buildAnnouncementCard(Announcement item, AppPalette p) {
+    final hasAudienceTag =
+        item.targetAudience == 'parents' || item.targetAudience == 'teachers';
+    final audienceLabel =
+        item.targetAudience == 'parents' ? 'Parents' : 'Teachers';
+
     return ProCard(
       accentStripeColor: item.isPinned ? p.gold : null,
       borderColor: item.isPinned ? p.gold.withOpacity(0.45) : p.border,
@@ -329,25 +396,40 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Wrap(
-                spacing: 6,
-                children: [
-                  ProStatusPill(
-                    label: 'Official Notice',
-                    icon: Icons.campaign_rounded,
+              if (item.isPinned || hasAudienceTag)
+                Wrap(
+                  spacing: 6,
+                  children: [
+                    if (item.isPinned)
+                      ProStatusPill(
+                        label: 'Pinned',
+                        icon: Icons.push_pin_rounded,
+                        color: p.gold,
+                      ),
+                    if (hasAudienceTag)
+                      ProStatusPill(
+                        label: audienceLabel,
+                        color: p.primary,
+                      ),
+                  ],
+                )
+              else
+                Text(
+                  'CENTER NOTICE',
+                  style: TextStyle(
+                    fontSize: 10.5,
+                    fontWeight: FontWeight.w700,
                     color: p.primary,
+                    letterSpacing: 0.6,
                   ),
-                  if (item.isPinned)
-                    ProStatusPill(
-                      label: 'Pinned',
-                      icon: Icons.push_pin_rounded,
-                      color: p.gold,
-                    ),
-                ],
-              ),
+                ),
               Text(
                 _formatDate(item.createdAt),
-                style: TextStyle(color: p.inkMuted, fontSize: 11),
+                style: TextStyle(
+                  color: p.inkSecondary,
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
             ],
           ),
@@ -356,8 +438,10 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
             item.title,
             style: TextStyle(
               color: p.ink,
-              fontSize: 15.5,
+              fontSize: 16.5,
               fontWeight: FontWeight.w700,
+              letterSpacing: -0.25,
+              height: 1.25,
             ),
           ),
           const SizedBox(height: 6),
@@ -365,8 +449,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
             item.content,
             style: TextStyle(
               color: p.inkSecondary,
-              fontSize: 12.5,
-              height: 1.45,
+              fontSize: 13.5,
+              height: 1.48,
             ),
           ),
           if (item.attachmentUrl != null &&
@@ -378,12 +462,17 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 child: ClipRRect(
                   borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    color: p.surfaceSubtle,
-                    constraints: const BoxConstraints(maxHeight: 220),
+                    decoration: BoxDecoration(
+                      color: p.surfaceSubtle,
+                      borderRadius: BorderRadius.circular(14),
+                      border: Border.all(color: p.border),
+                    ),
+                    constraints: const BoxConstraints(maxHeight: 260),
                     width: double.infinity,
                     child: Image.network(
                       item.attachmentUrl!,
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
+                      width: double.infinity,
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
                         return SizedBox(
@@ -454,36 +543,66 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 ),
               ),
           ],
-          const SizedBox(height: 12),
-          Row(
-            children: [
-              Icon(Icons.person_outline_rounded, size: 14, color: p.inkMuted),
-              const SizedBox(width: 5),
-              Text(
-                item.authorName,
-                style: TextStyle(
-                  color: p.inkMuted,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w500,
+          if (item.authorName.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Container(
+                  width: 18,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: p.primary.withOpacity(0.12),
+                  ),
+                  child: Center(
+                    child: Text(
+                      item.authorName.trim()[0].toUpperCase(),
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontWeight: FontWeight.w700,
+                        color: p.primary,
+                      ),
+                    ),
+                  ),
                 ),
-              ),
-            ],
-          ),
+                const SizedBox(width: 7),
+                Expanded(
+                  child: Text(
+                    item.authorName.replaceAll(' (Director)', ' · Director'),
+                    style: TextStyle(
+                      color: p.inkMuted,
+                      fontSize: 11.5,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ],
         ],
       ),
     );
   }
 
   String _formatDate(DateTime dt) {
+    const months = [
+      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+    ];
     final now = DateTime.now();
     final diff = now.difference(dt);
-    if (diff.inMinutes < 60) {
-      return '${diff.inMinutes}m ago';
-    } else if (diff.inHours < 24) {
-      return '${diff.inHours}h ago';
-    } else {
-      return '${dt.day}/${dt.month}/${dt.year}';
+    if (diff.inMinutes < 1) return 'Just now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+    if (diff.inHours < 24 && now.day == dt.day) return '${diff.inHours}h ago';
+    final yesterday = now.subtract(const Duration(days: 1));
+    if (dt.year == yesterday.year &&
+        dt.month == yesterday.month &&
+        dt.day == yesterday.day) {
+      return 'Yesterday';
     }
+    return '${months[dt.month - 1]} ${dt.day}';
   }
 
   bool _isImageAttachment(String url, String? name) {

@@ -187,12 +187,12 @@ class _DashboardScreenState extends State<DashboardScreen> {
           KheyrukumNavItem(
             icon: Icons.chat_bubble_outline_rounded,
             activeIcon: Icons.chat_bubble_rounded,
-            label: 'Messages',
+            label: 'Chats',
             badgeCount: _unreadMessagesCount,
           ),
           const KheyrukumNavItem(
-            icon: Icons.menu_book_outlined,
-            activeIcon: Icons.menu_book_rounded,
+            icon: Icons.auto_stories_outlined,
+            activeIcon: Icons.auto_stories_rounded,
             label: 'Homework',
           ),
           const KheyrukumNavItem(
@@ -211,7 +211,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    // Editorial App Header
+                    // Context-Aware Editorial App Header
                     ValueListenableBuilder<String>(
                       valueListenable:
                           AuthSessionService.instance.roleNotifier,
@@ -226,82 +226,122 @@ class _DashboardScreenState extends State<DashboardScreen> {
                             ? p.gold
                             : (currentRole == 'teacher' ? p.primary : p.info);
 
+                        String? pageTitle;
+                        if (_currentTabIndex == 1) {
+                          pageTitle = currentRole == 'parent'
+                              ? 'My Children'
+                              : 'Students';
+                        } else if (_currentTabIndex == 2) {
+                          pageTitle = 'Messages';
+                        } else if (_currentTabIndex == 3) {
+                          pageTitle = 'Homework';
+                        } else if (_currentTabIndex == 4) {
+                          pageTitle = 'Center';
+                        }
+
                         return Padding(
                           padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                           child: Row(
                             children: [
-                              ProAvatar(
-                                name: displayName,
-                                radius: 22,
-                                color: roleColor,
-                                showGoldRing: currentRole == 'admin',
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Text(
-                                          'Assalamu Alaikum',
-                                          style: TextStyle(
-                                            fontSize: 11.5,
-                                            color: p.inkSecondary,
-                                            fontWeight: FontWeight.w500,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 7),
-                                        Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 7,
-                                            vertical: 2,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: roleColor.withOpacity(0.12),
-                                            borderRadius:
-                                                BorderRadius.circular(6),
-                                            border: Border.all(
-                                              color: roleColor.withOpacity(0.28),
-                                            ),
-                                          ),
-                                          child: Text(
-                                            roleLabel.toUpperCase(),
-                                            style: TextStyle(
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w800,
-                                              color: roleColor,
-                                              letterSpacing: 0.5,
-                                            ),
-                                          ),
-                                        ),
-                                      ],
+                              if (pageTitle != null)
+                                Expanded(
+                                  child: Text(
+                                    pageTitle,
+                                    style: TextStyle(
+                                      fontSize: 22,
+                                      fontWeight: FontWeight.w800,
+                                      color: p.ink,
+                                      letterSpacing: -0.4,
                                     ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      displayName,
-                                      style: TextStyle(
-                                        fontSize: 17.5,
-                                        fontWeight: FontWeight.w700,
-                                        color: p.ink,
-                                        letterSpacing: -0.3,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                )
+                              else ...[
+                                ProAvatar(
+                                  name: displayName,
+                                  radius: 22,
+                                  color: roleColor,
+                                  showGoldRing: currentRole == 'admin',
                                 ),
-                              ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          Text(
+                                            'Assalamu Alaikum',
+                                            style: TextStyle(
+                                              fontSize: 11.5,
+                                              color: p.inkSecondary,
+                                              fontWeight: FontWeight.w500,
+                                            ),
+                                          ),
+                                          const SizedBox(width: 7),
+                                          Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 7,
+                                              vertical: 2,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color:
+                                                  roleColor.withOpacity(0.12),
+                                              borderRadius:
+                                                  BorderRadius.circular(6),
+                                              border: Border.all(
+                                                color:
+                                                    roleColor.withOpacity(0.28),
+                                              ),
+                                            ),
+                                            child: Text(
+                                              roleLabel.toUpperCase(),
+                                              style: TextStyle(
+                                                fontSize: 9,
+                                                fontWeight: FontWeight.w800,
+                                                color: roleColor,
+                                                letterSpacing: 0.5,
+                                              ),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        displayName,
+                                        style: TextStyle(
+                                          fontSize: 17.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: p.ink,
+                                          letterSpacing: -0.3,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               // Notification Bell
                               Stack(
                                 clipBehavior: Clip.none,
                                 children: [
                                   _HeaderIconButton(
                                     icon: Icons.notifications_none_rounded,
-                                    tooltip: 'Activity & Alerts',
-                                    onTap: () =>
-                                        _showUnifiedNotificationsSheet(context),
+                                    tooltip: 'Notices & Activity',
+                                    onTap: () {
+                                      AnnouncementService.instance
+                                          .markAllAsRead();
+                                      setState(
+                                          () => _unreadAnnouncementsCount = 0);
+                                      AnnouncementsSheet.show(
+                                        context,
+                                        initialTab: 0,
+                                      );
+                                    },
                                   ),
                                   if (_totalUnreadCount > 0)
                                     Positioned(
@@ -343,7 +383,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ),
                               const SizedBox(width: 8),
                               _HeaderIconButton(
-                                icon: Icons.tune_rounded,
+                                icon: Icons.settings_outlined,
                                 tooltip: 'Settings',
                                 onTap: () => SettingsSheet.show(context),
                               ),
@@ -374,7 +414,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     announcement: _activeAlertAnnouncement!,
                     onTap: () {
                       setState(() => _activeAlertAnnouncement = null);
-                      AnnouncementsSheet.show(context);
+                      AnnouncementsSheet.show(context, initialTab: 1);
                     },
                     onDismiss: () {
                       setState(() => _activeAlertAnnouncement = null);
@@ -382,236 +422,56 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
 
-              // Floating Frosted-Glass Pill Dock
+              // Bottom Fade Scrim + Floating Frosted-Glass Pill Dock
               Positioned(
-                left: 16,
-                right: 16,
-                bottom: MediaQuery.of(context).padding.bottom + 14,
-                child: KheyrukumNavBar(
-                  selectedIndex: _currentTabIndex,
-                  items: navItems,
-                  onTabChanged: (index) {
-                    setState(() {
-                      _currentTabIndex = index;
-                    });
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
-    );
-  }
-
-  void _showUnifiedNotificationsSheet(BuildContext context) {
-    final p = AppColors.of(context);
-    AnnouncementService.instance.markAllAsRead();
-    setState(() => _unreadAnnouncementsCount = 0);
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (sheetCtx) {
-        return ProBottomSheetShell(
-          title: 'Activity & Alerts',
-          subtitle: 'Real-time updates across your account',
-          icon: Icons.notifications_active_rounded,
-          iconColor: p.primary,
-          heightFactor: 0.78,
-          trailingAction: IconButton(
-            icon: Icon(Icons.campaign_outlined, color: p.ink, size: 21),
-            tooltip: 'View All Notices',
-            onPressed: () {
-              Navigator.pop(sheetCtx);
-              AnnouncementsSheet.show(context);
-            },
-          ),
-          child: Column(
-            children: [
-              Padding(
-                padding: const EdgeInsets.fromLTRB(20, 10, 16, 4),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                left: 0,
+                right: 0,
+                bottom: 0,
+                child: Stack(
+                  alignment: Alignment.bottomCenter,
                   children: [
-                    Text(
-                      'RECENT ACTIVITY',
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        letterSpacing: 0.7,
-                        color: p.inkMuted,
+                    Positioned.fill(
+                      child: IgnorePointer(
+                        child: DecoratedBox(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              stops: const [0.0, 0.35, 0.72, 1.0],
+                              colors: [
+                                p.canvas.withOpacity(0.0),
+                                p.canvas.withOpacity(0.86),
+                                p.canvas,
+                                p.canvas,
+                              ],
+                            ),
+                          ),
+                        ),
                       ),
                     ),
-                    TextButton(
-                      onPressed: () {
-                        NotificationCenterService.instance.markAllAsRead();
-                      },
-                      style: TextButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                    SafeArea(
+                      top: false,
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
+                        child: KheyrukumNavBar(
+                          selectedIndex: _currentTabIndex,
+                          items: navItems,
+                          onTabChanged: (index) {
+                            setState(() {
+                              _currentTabIndex = index;
+                            });
+                          },
                         ),
-                        minimumSize: Size.zero,
-                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-                      ),
-                      child: const Text(
-                        'Mark all read',
-                        style: TextStyle(fontSize: 12),
                       ),
                     ),
                   ],
                 ),
               ),
-              Expanded(
-                child: StreamBuilder<List<AppNotification>>(
-                  stream: NotificationCenterService.instance.stream,
-                  initialData:
-                      NotificationCenterService.instance.currentNotifications,
-                  builder: (context, snapshot) {
-                    final items = snapshot.data ?? [];
-                    if (items.isEmpty) {
-                      return Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            ProEmptyState(
-                              icon: Icons.notifications_none_rounded,
-                              title: 'No recent alerts',
-                              message:
-                                  'Attendance updates, messages, homework tasks, and school circulars will appear here.',
-                            ),
-                            const SizedBox(height: 16),
-                            OutlinedButton.icon(
-                              onPressed: () {
-                                Navigator.pop(sheetCtx);
-                                AnnouncementsSheet.show(context);
-                              },
-                              icon: const Icon(Icons.campaign_outlined, size: 17),
-                              label: const Text('View Center Notices'),
-                            ),
-                          ],
-                        ),
-                      );
-                    }
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
-                      itemCount: items.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, idx) {
-                        final notif = items[idx];
-                        IconData icon = Icons.notifications_rounded;
-                        Color iconColor = p.primary;
-                        if (notif.type.contains('message')) {
-                          icon = Icons.chat_bubble_rounded;
-                          iconColor = p.info;
-                        } else if (notif.type.contains('payment')) {
-                          icon = Icons.receipt_long_rounded;
-                          iconColor = p.gold;
-                        } else if (notif.type.contains('homework')) {
-                          icon = Icons.menu_book_rounded;
-                          iconColor = p.excused;
-                        } else if (notif.type.contains('attendance') ||
-                            notif.type.contains('absence')) {
-                          icon = Icons.fact_check_rounded;
-                          iconColor = p.success;
-                        }
-
-                        return ProCard(
-                          onTap: () => NotificationCenterService.instance
-                              .markAsRead(notif.id),
-                          padding: const EdgeInsets.all(14),
-                          borderColor: notif.isRead
-                              ? p.border
-                              : iconColor.withOpacity(0.45),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                width: 40,
-                                height: 40,
-                                decoration: BoxDecoration(
-                                  color: iconColor.withOpacity(0.12),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(icon, size: 19, color: iconColor),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        Expanded(
-                                          child: Text(
-                                            notif.title,
-                                            style: TextStyle(
-                                              fontSize: 13.5,
-                                              fontWeight: notif.isRead
-                                                  ? FontWeight.w600
-                                                  : FontWeight.w700,
-                                              color: p.ink,
-                                            ),
-                                          ),
-                                        ),
-                                        const SizedBox(width: 8),
-                                        Text(
-                                          _formatTime(notif.createdAt),
-                                          style: TextStyle(
-                                            fontSize: 10.5,
-                                            color: p.inkMuted,
-                                          ),
-                                        ),
-                                        if (!notif.isRead) ...[
-                                          const SizedBox(width: 6),
-                                          Container(
-                                            width: 7,
-                                            height: 7,
-                                            decoration: BoxDecoration(
-                                              color: iconColor,
-                                              shape: BoxShape.circle,
-                                            ),
-                                          ),
-                                        ],
-                                      ],
-                                    ),
-                                    const SizedBox(height: 3),
-                                    Text(
-                                      notif.body,
-                                      style: TextStyle(
-                                        fontSize: 12,
-                                        color: p.inkSecondary,
-                                        height: 1.4,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
             ],
           ),
         );
       },
     );
-  }
-
-  String _formatTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
-    if (diff.inHours < 24) return '${diff.inHours}h';
-    return '${dt.month}/${dt.day}';
   }
 }
 

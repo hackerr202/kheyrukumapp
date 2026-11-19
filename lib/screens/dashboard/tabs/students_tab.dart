@@ -1290,29 +1290,31 @@ class _StudentsTabState extends State<StudentsTab> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    'Student Roster (${allStudents.length})',
-                    style: TextStyle(
-                      fontSize: 21,
-                      fontWeight: FontWeight.w800,
-                      color: p.ink,
-                      letterSpacing: -0.4,
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      '${allStudents.length} enrolled ${allStudents.length == 1 ? 'learner' : 'learners'}',
+                      style: TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
+                        color: p.ink,
+                        letterSpacing: -0.2,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 2),
-                  Text(
-                    'Enrolled learners linked to parent accounts',
-                    style: TextStyle(fontSize: 12, color: p.inkSecondary),
-                  ),
-                ],
+                    const SizedBox(height: 2),
+                    Text(
+                      'Linked to parent accounts',
+                      style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                    ),
+                  ],
+                ),
               ),
               ElevatedButton.icon(
                 onPressed: () => _showAddStudentDialog(context),
                 icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: const Text('Add', style: TextStyle(fontSize: 12.5)),
+                label: const Text('Enroll', style: TextStyle(fontSize: 12.5)),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
