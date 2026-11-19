@@ -10,12 +10,14 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
 import '../../../widgets/invite_code_dialog.dart';
+import '../../../widgets/pro_ui_kit.dart';
 
-/// Settings & Profile Tab:
-/// 1. Functional Light/Dark theme toggle
-/// 2. Role status overview
-/// 3. Admin-only Invite Codes Generator (hidden for Teacher & Parent)
-/// 4. User profile and sign out
+/// Flagship Settings & Profile Tab:
+/// 1. User profile card with role badge
+/// 2. Visual side-by-side Appearance Picker (Warm Sanctuary Light vs Emerald Night Dark)
+/// 3. Cryptographic account security info
+/// 4. Admin-only Invite Codes Generator
+/// 5. Clean Sign Out clearing stack to Auth screen
 class SettingsTab extends StatefulWidget {
   const SettingsTab({super.key});
 
@@ -35,7 +37,8 @@ class _SettingsTabState extends State<SettingsTab> {
     ]);
     await SupabaseService.instance.signOut();
     if (mounted) {
-      Navigator.of(context).pushReplacementNamed(AppRoutes.auth);
+      Navigator.of(context, rootNavigator: true)
+          .pushNamedAndRemoveUntil(AppRoutes.auth, (_) => false);
     }
   }
 
@@ -44,52 +47,32 @@ class _SettingsTabState extends State<SettingsTab> {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
+        final p = AppColors.of(context);
         final isDark = themeMode == ThemeMode.dark;
-        final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-        final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-        final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-        final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
 
         return ValueListenableBuilder<String>(
           valueListenable: AuthSessionService.instance.roleNotifier,
           builder: (context, currentRole, _) {
             final isAdmin = currentRole == 'admin';
             final isTeacher = currentRole == 'teacher';
-            final isParent = currentRole == 'parent';
-
             final fullName = AuthSessionService.instance.userName;
-            final userRole = currentRole.toUpperCase();
             final userEmail = AuthSessionService.instance.userEmail;
+            final roleColor =
+                isAdmin ? p.gold : (isTeacher ? p.primary : p.info);
 
             return ListView(
-              padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+              padding: const EdgeInsets.fromLTRB(20, 14, 20, 48),
               children: [
-                // User Account Card
-                Container(
+                // User Profile Card
+                ProCard(
                   padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(18),
-                    border: Border.all(color: borderColor),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
                   child: Row(
                     children: [
-                      CircleAvatar(
+                      ProAvatar(
+                        name: fullName,
                         radius: 26,
-                        backgroundColor: isTeacher
-                            ? AppColors.accentTeal
-                            : (isParent ? AppColors.accentAmber : const Color(0xFFFF4B72)),
-                        child: Text(
-                          fullName.isNotEmpty ? fullName[0].toUpperCase() : 'U',
-                          style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 18),
-                        ),
+                        color: roleColor,
+                        showGoldRing: isAdmin,
                       ),
                       const SizedBox(width: 14),
                       Expanded(
@@ -98,28 +81,26 @@ class _SettingsTabState extends State<SettingsTab> {
                           children: [
                             Text(
                               fullName,
-                              style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 15),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              userEmail,
-                              style: TextStyle(color: subtextColor, fontSize: 12),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: (isTeacher ? AppColors.accentTeal : AppColors.accentAmber).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
+                              style: TextStyle(
+                                color: p.ink,
+                                fontWeight: FontWeight.w700,
+                                fontSize: 16,
                               ),
-                              child: Text(
-                                userRole,
+                            ),
+                            if (userEmail.isNotEmpty) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                userEmail,
                                 style: TextStyle(
-                                  color: isTeacher ? AppColors.accentTeal : AppColors.accentAmber,
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.bold,
+                                  color: p.inkSecondary,
+                                  fontSize: 12,
                                 ),
                               ),
+                            ],
+                            const SizedBox(height: 6),
+                            ProStatusPill(
+                              label: currentRole.toUpperCase(),
+                              color: roleColor,
                             ),
                           ],
                         ),
@@ -128,234 +109,345 @@ class _SettingsTabState extends State<SettingsTab> {
                   ),
                 ),
 
-                const SizedBox(height: 20),
+                const SizedBox(height: 22),
 
-                // =============================================================
-                // VERIFIED PRODUCTION ACCOUNT & ROLE INFORMATION
-                // =============================================================
+                // Visual Theme Appearance Picker
                 Text(
-                  'Account Authentication & Security',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
+                  'APPEARANCE',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: p.inkMuted,
+                  ),
                 ),
                 const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: _ThemeOptionCard(
+                        title: 'Warm Sanctuary',
+                        subtitle: 'Daylight Ivory',
+                        previewCanvas: AppColors.canvasLight,
+                        previewSurface: AppColors.surfaceCardLight,
+                        previewAccent: AppColors.pinePrimary,
+                        isSelected: !isDark,
+                        p: p,
+                        onTap: () => AppTheme.setThemeMode(ThemeMode.light),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: _ThemeOptionCard(
+                        title: 'Emerald Night',
+                        subtitle: 'Midnight Pine',
+                        previewCanvas: AppColors.background,
+                        previewSurface: AppColors.surfaceCard,
+                        previewAccent: AppColors.pineJade,
+                        isSelected: isDark,
+                        p: p,
+                        onTap: () => AppTheme.setThemeMode(ThemeMode.dark),
+                      ),
+                    ),
+                  ],
+                ),
 
-                Container(
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: borderColor),
+                const SizedBox(height: 22),
+
+                // Account Security
+                Text(
+                  'ACCOUNT & SECURITY',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    letterSpacing: 0.8,
+                    color: p.inkMuted,
                   ),
+                ),
+                const SizedBox(height: 10),
+                ProCard(
+                  padding: const EdgeInsets.all(16),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Row(
                         children: [
-                          Icon(
-                            isAdmin
-                                ? Icons.shield_rounded
-                                : (isTeacher ? Icons.school_rounded : Icons.family_restroom_rounded),
-                            size: 20,
-                            color: isAdmin
-                                ? const Color(0xFFFF4B72)
-                                : (isTeacher ? AppColors.accentTeal : AppColors.accentAmber),
+                          Container(
+                            width: 40,
+                            height: 40,
+                            decoration: BoxDecoration(
+                              color: roleColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Icon(
+                              isAdmin
+                                  ? Icons.verified_user_rounded
+                                  : (isTeacher
+                                      ? Icons.school_rounded
+                                      : Icons.family_restroom_rounded),
+                              size: 20,
+                              color: roleColor,
+                            ),
                           ),
-                          const SizedBox(width: 10),
+                          const SizedBox(width: 12),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
                                   isAdmin
-                                      ? 'Administrator Access Verified 🛡️'
-                                      : (isTeacher ? 'Ustaz / Teacher Portal 🎓' : 'Parent / Guardian Portal 👨‍👩‍👧'),
-                                  style: TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: textColor),
+                                      ? 'Administrator Access Verified'
+                                      : (isTeacher
+                                          ? 'Ustaz / Teacher Portal'
+                                          : 'Parent / Guardian Portal'),
+                                  style: TextStyle(
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                    color: p.ink,
+                                  ),
                                 ),
                                 const SizedBox(height: 2),
                                 Text(
-                                  'Cryptographically authenticated via Supabase Cloud Auth',
-                                  style: TextStyle(fontSize: 11, color: subtextColor),
+                                  'Authenticated via Supabase Cloud Auth',
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: p.inkSecondary,
+                                  ),
                                 ),
                               ],
                             ),
                           ),
                         ],
                       ),
-                      if (isTeacher && AuthSessionService.instance.assignedHalaqahName.isNotEmpty) ...[
+                      if (isTeacher &&
+                          AuthSessionService
+                              .instance.assignedHalaqahName.isNotEmpty) ...[
                         const SizedBox(height: 12),
-                        Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentTeal.withOpacity(0.12),
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Text(
-                            'Assigned Halaqah: ${AuthSessionService.instance.assignedHalaqahName}',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              color: AppColors.accentTeal,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
+                        ProStatusPill(
+                          label:
+                              'Assigned Circle: ${AuthSessionService.instance.assignedHalaqahName}',
+                          icon: Icons.menu_book_rounded,
+                          color: p.primary,
                         ),
                       ],
                     ],
                   ),
                 ),
 
-                const SizedBox(height: 20),
-
-                // Appearance & Theme Mode
-                Text(
-                  'Appearance & Display',
-                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
-                ),
-                const SizedBox(height: 10),
-
-                Container(
-                  decoration: BoxDecoration(
-                    color: cardBg,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: borderColor),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: SwitchListTile(
-                    value: !isDark,
-                    onChanged: (val) {
-                      AppTheme.setThemeMode(val ? ThemeMode.light : ThemeMode.dark);
-                    },
-                    secondary: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: (!isDark ? const Color(0xFFD97706) : AppColors.accentAmber).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Icon(
-                        !isDark ? Icons.light_mode_rounded : Icons.dark_mode_rounded,
-                        color: !isDark ? const Color(0xFFD97706) : AppColors.accentAmber,
-                        size: 22,
-                      ),
-                    ),
-                    title: Text(
-                      'Light Theme Mode',
-                      style: TextStyle(color: textColor, fontSize: 14, fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: Text(
-                      !isDark ? 'Bright daylight mode active' : 'Midnight dark aesthetic active',
-                      style: TextStyle(color: subtextColor, fontSize: 12),
-                    ),
-                    activeColor: const Color(0xFFD97706),
-                  ),
-                ),
-
-                const SizedBox(height: 20),
-
-                // =============================================================
-                // ADMIN ONLY ACCESS: INVITATION CODES GENERATOR (HIDDEN FOR OTHERS)
-                // =============================================================
                 if (isAdmin) ...[
+                  const SizedBox(height: 22),
                   Text(
-                    'Administration & Access Control (Admin Only)',
-                    style: TextStyle(fontSize: 14, fontWeight: FontWeight.w600, color: subtextColor),
+                    'ADMINISTRATION',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: 0.8,
+                      color: p.inkMuted,
+                    ),
                   ),
                   const SizedBox(height: 10),
-
-                  Container(
+                  ProCard(
                     padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: cardBg,
-                      borderRadius: BorderRadius.circular(16),
-                      border: Border.all(color: borderColor),
-                      boxShadow: [
-                        BoxShadow(
-                          color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
-                          blurRadius: 8,
-                          offset: const Offset(0, 2),
-                        ),
-                      ],
-                    ),
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(9),
                               decoration: BoxDecoration(
-                                color: AppColors.accentTeal.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(10),
+                                color: p.primarySoft,
+                                borderRadius: BorderRadius.circular(11),
                               ),
-                              child: const Icon(Icons.vpn_key_rounded, color: AppColors.accentTeal, size: 20),
+                              child: Icon(Icons.vpn_key_rounded,
+                                  color: p.primary, size: 20),
                             ),
                             const SizedBox(width: 12),
                             Expanded(
                               child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Invite Codes Generator',
-                                  style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: textColor),
-                                ),
-                                Text(
-                                  'Generate realtime signup codes for Teachers and Parents',
-                                  style: TextStyle(fontSize: 11.5, color: subtextColor),
-                                ),
-                              ],
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Invite Codes Generator',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w700,
+                                      color: p.ink,
+                                    ),
+                                  ),
+                                  Text(
+                                    'Generate realtime codes for Teachers & Parents',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: p.inkSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
+                          ],
+                        ),
+                        const SizedBox(height: 14),
+                        SizedBox(
+                          width: double.infinity,
+                          child: ElevatedButton.icon(
+                            onPressed: () => InviteCodeDialog.show(context),
+                            icon: const Icon(Icons.add_rounded, size: 17),
+                            label: const Text('Manage & Generate Invite Codes'),
                           ),
-                        ],
+                        ),
+                      ],
+                    ),
+                  ),
+                ],
+
+                const SizedBox(height: 26),
+
+                SizedBox(
+                  width: double.infinity,
+                  child: OutlinedButton.icon(
+                    onPressed: _handleSignOut,
+                    icon: Icon(Icons.logout_rounded, size: 17, color: p.danger),
+                    label: Text(
+                      'Sign Out of Account',
+                      style: TextStyle(
+                        color: p.danger,
+                        fontWeight: FontWeight.w700,
                       ),
-                      const SizedBox(height: 14),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: () => InviteCodeDialog.show(context),
-                          icon: const Icon(Icons.add_rounded, size: 16, color: Colors.black),
-                          label: const Text(
-                            'Manage & Generate Invite Codes',
-                            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: Colors.black),
-                          ),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.accentTeal,
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: p.danger.withOpacity(0.55)),
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                    ),
+                  ),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+}
+
+class _ThemeOptionCard extends StatelessWidget {
+  final String title;
+  final String subtitle;
+  final Color previewCanvas;
+  final Color previewSurface;
+  final Color previewAccent;
+  final bool isSelected;
+  final AppPalette p;
+  final VoidCallback onTap;
+
+  const _ThemeOptionCard({
+    required this.title,
+    required this.subtitle,
+    required this.previewCanvas,
+    required this.previewSurface,
+    required this.previewAccent,
+    required this.isSelected,
+    required this.p,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: p.surface,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(
+            color: isSelected ? p.primary : p.border,
+            width: isSelected ? 2 : 1,
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              height: 54,
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: previewCanvas,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(color: p.border),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    children: [
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: previewAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      const SizedBox(width: 6),
+                      Expanded(
+                        child: Container(
+                          height: 6,
+                          decoration: BoxDecoration(
+                            color: previewSurface,
+                            borderRadius: BorderRadius.circular(3),
                           ),
                         ),
                       ),
                     ],
                   ),
-                ),
-                const SizedBox(height: 20),
-              ],
-
-              // Sign Out Button
-              SizedBox(
-                width: double.infinity,
-                child: OutlinedButton.icon(
-                  onPressed: _handleSignOut,
-                  icon: const Icon(Icons.logout_rounded, size: 16, color: Color(0xFFEF4444)),
-                  label: const Text(
-                    'Sign Out of Account',
-                    style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.bold),
+                  Container(
+                    height: 16,
+                    decoration: BoxDecoration(
+                      color: previewSurface,
+                      borderRadius: BorderRadius.circular(5),
+                    ),
                   ),
-                  style: OutlinedButton.styleFrom(
-                    side: const BorderSide(color: Color(0xFFEF4444), width: 1.2),
-                    padding: const EdgeInsets.symmetric(vertical: 12),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                ),
+                ],
               ),
-            ],
-          );
-        },
-      );
-    },
-  );
-}
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
+                        ),
+                      ),
+                      Text(
+                        subtitle,
+                        style: TextStyle(fontSize: 10.5, color: p.inkMuted),
+                      ),
+                    ],
+                  ),
+                ),
+                Icon(
+                  isSelected
+                      ? Icons.check_circle_rounded
+                      : Icons.radio_button_unchecked_rounded,
+                  size: 18,
+                  color: isSelected ? p.primary : p.inkMuted,
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }

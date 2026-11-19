@@ -2,7 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/announcement.dart';
-import 'notification_center_service.dart';
+import 'local_storage_service.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
@@ -10,15 +10,35 @@ import 'supabase_service.dart';
 /// and instant notification delivery for Kheyrukum.
 class AnnouncementService {
   AnnouncementService._() {
+    _loadReadIds();
     _initRealtimeSubscription();
   }
   static final AnnouncementService instance = AnnouncementService._();
 
   final Set<String> _readIds = {};
+  final Set<String> _knownIds = {};
   final StreamController<Announcement> _incomingAlertController =
       StreamController<Announcement>.broadcast();
   RealtimeChannel? _realtimeSubscription;
   final Set<String> _handledAnnouncementIds = {};
+
+  Future<void> _loadReadIds() async {
+    try {
+      final raw = await LocalStorageService.instance.getString('read_announcement_ids');
+      if (raw != null && raw.isNotEmpty) {
+        _readIds.addAll(raw.split(',').where((e) => e.isNotEmpty));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _saveReadIds() async {
+    try {
+      await LocalStorageService.instance.saveString(
+        'read_announcement_ids',
+        _readIds.join(','),
+      );
+    } catch (_) {}
+  }
 
   /// Stream of newly arrived announcements for triggering immediate popup notifications
   Stream<Announcement> get onNewAnnouncementAlert =>
@@ -27,7 +47,20 @@ class AnnouncementService {
   Set<String> get readIds => _readIds;
 
   void markAsRead(String id) {
-    _readIds.add(id);
+    if (_readIds.add(id)) {
+      _saveReadIds();
+    }
+  }
+
+  void markAllAsRead() {
+    if (_knownIds.isNotEmpty) {
+      _readIds.addAll(_knownIds);
+      _saveReadIds();
+    }
+  }
+
+  void registerKnownIds(Iterable<String> ids) {
+    _knownIds.addAll(ids);
   }
 
   bool isRead(String id) => _readIds.contains(id);

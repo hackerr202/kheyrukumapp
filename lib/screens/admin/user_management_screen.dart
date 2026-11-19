@@ -3,9 +3,12 @@ import '../../core/services/halaqah_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/invite_code_dialog.dart';
+import '../../widgets/pro_ui_kit.dart';
 
-/// Redesigned Modern User Management Screen with Telegram-grade clean aesthetics,
-/// full search, role tabs, user suspension, and account removal.
+/// Flagship User Management Screen for Center Administrators:
+/// - Teachers, Parents, and Invites tabs
+/// - Search across name, email, or phone
+/// - Assign Study Circle (Halaqah), Suspend/Reactivate, Remove User, and Delete Invite Codes
 class UserManagementScreen extends StatefulWidget {
   const UserManagementScreen({super.key});
 
@@ -23,9 +26,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   List<Map<String, dynamic>> _inviteCodes = [];
   bool _isLoading = true;
   String _searchQuery = '';
-
-  static const Color _limeGreen = Color(0xFF10B981);
-  static const Color _alertRed = Color(0xFFEF4444);
 
   @override
   void initState() {
@@ -61,7 +61,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       await HalaqahService.instance.fetchHalaqahs();
       final teachersRes = await client
           .from('profiles')
-          .select('id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, created_at')
+          .select(
+              'id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, created_at')
           .eq('role', 'teacher')
           .order('created_at', ascending: false);
 
@@ -91,6 +92,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Future<void> _toggleSuspendUser(Map<String, dynamic> user) async {
+    final p = AppColors.of(context);
     final bool currentStatus = user['is_suspended'] == true;
     final bool newStatus = !currentStatus;
     final String actionWord = newStatus ? 'Suspend' : 'Activate';
@@ -98,7 +100,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: Text('$actionWord ${user['full_name']}?'),
         content: Text(
           newStatus
@@ -106,12 +107,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               : 'The user account will be restored and allowed to log in.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
-              backgroundColor: newStatus ? _alertRed : _limeGreen,
-              foregroundColor: newStatus ? Colors.white : Colors.black,
+              backgroundColor: newStatus ? p.danger : p.success,
+              foregroundColor: Colors.white,
             ),
             child: Text(actionWord),
           ),
@@ -128,18 +131,20 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     final client = SupabaseService.instance.client;
     if (client != null) {
       try {
-        await client.from('profiles').update({'is_suspended': newStatus}).eq('id', user['id']);
+        await client
+            .from('profiles')
+            .update({'is_suspended': newStatus}).eq('id', user['id']);
       } catch (e) {
-        debugPrint('[UserManagement] Suspend error: $e');
         if (mounted) {
           setState(() {
             user['is_suspended'] = currentStatus;
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}'),
-              backgroundColor: _alertRed,
-              behavior: SnackBarBehavior.floating,
+              content: Text(
+                'Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}',
+              ),
+              backgroundColor: p.danger,
             ),
           );
         }
@@ -150,34 +155,40 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('${user['full_name']} has been ${newStatus ? 'suspended' : 'reactivated'}.'),
-          backgroundColor: newStatus ? _alertRed : _limeGreen,
-          behavior: SnackBarBehavior.floating,
+          content: Text(
+            '${user['full_name']} has been ${newStatus ? 'suspended' : 'reactivated'}.',
+          ),
+          backgroundColor: newStatus ? p.danger : p.success,
         ),
       );
     }
   }
 
   Future<void> _removeUser(Map<String, dynamic> user, String listType) async {
+    final p = AppColors.of(context);
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Row(
+        title: Row(
           children: [
-            Icon(Icons.delete_forever_rounded, color: _alertRed, size: 24),
-            SizedBox(width: 8),
-            Text('Remove User Account?'),
+            Icon(Icons.delete_forever_rounded, color: p.danger, size: 22),
+            const SizedBox(width: 8),
+            const Expanded(child: Text('Remove User Account?')),
           ],
         ),
         content: Text(
           'Are you sure you want to permanently remove "${user['full_name']}"? This cannot be undone.',
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
-            style: ElevatedButton.styleFrom(backgroundColor: _alertRed, foregroundColor: Colors.white),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: p.danger,
+              foregroundColor: Colors.white,
+            ),
             child: const Text('Remove Permanently'),
           ),
         ],
@@ -190,7 +201,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       if (listType == 'teacher') {
         _teachers.removeWhere((t) => t['id'] == user['id']);
       } else {
-        _parents.removeWhere((p) => p['id'] == user['id']);
+        _parents.removeWhere((par) => par['id'] == user['id']);
       }
     });
 
@@ -199,7 +210,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       try {
         await client.from('profiles').delete().eq('id', user['id']);
       } catch (e) {
-        debugPrint('[UserManagement] Delete error: $e');
         if (mounted) {
           setState(() {
             if (listType == 'teacher') {
@@ -210,9 +220,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           });
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Failed to remove user: ${SupabaseService.cleanErrorMessage(e)}'),
-              backgroundColor: _alertRed,
-              behavior: SnackBarBehavior.floating,
+              content: Text(
+                'Failed to remove user: ${SupabaseService.cleanErrorMessage(e)}',
+              ),
+              backgroundColor: p.danger,
             ),
           );
         }
@@ -224,21 +235,20 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Removed ${user['full_name']} from center.'),
-          backgroundColor: _alertRed,
-          behavior: SnackBarBehavior.floating,
+          backgroundColor: p.danger,
         ),
       );
     }
   }
 
   Future<void> _showAssignHalaqahDialog(Map<String, dynamic> teacher) async {
+    final p = AppColors.of(context);
     final halaqahs = HalaqahService.instance.halaqahs;
     if (halaqahs.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Please create a Study Circle (Halaqah) first.'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -260,7 +270,6 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Text('Assign ${teacher['full_name']}'),
           content: DropdownButtonFormField<String>(
             value: selectedId,
@@ -277,13 +286,15 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 });
               }
             },
-            decoration: const InputDecoration(labelText: 'Study Circle (Halaqah)'),
+            decoration:
+                const InputDecoration(labelText: 'Study Circle (Halaqah)'),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+            TextButton(
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              style: ElevatedButton.styleFrom(backgroundColor: _limeGreen, foregroundColor: Colors.black),
               child: const Text('Assign'),
             ),
           ],
@@ -306,8 +317,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('${teacher['full_name']} assigned to $selectedName.'),
-          backgroundColor: _limeGreen,
-          behavior: SnackBarBehavior.floating,
+          backgroundColor: p.primary,
         ),
       );
     }
@@ -315,47 +325,58 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? AppColors.background : const Color(0xFFF8FAFC);
-    final surfaceBg = isDark ? AppColors.surfaceCard : Colors.white;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final subtleBorder = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    final p = AppColors.of(context);
 
     return Scaffold(
-      backgroundColor: cardBg,
+      backgroundColor: p.canvas,
       appBar: AppBar(
-        backgroundColor: surfaceBg,
+        backgroundColor: p.surface,
         elevation: 0,
+        leading: IconButton(
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
+          onPressed: () => Navigator.pop(context),
+        ),
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('User Management', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 18)),
-            Text('${_teachers.length} Teachers • ${_parents.length} Parents', style: TextStyle(color: subtextColor, fontSize: 11)),
+            Text(
+              'User Management',
+              style: TextStyle(
+                color: p.ink,
+                fontWeight: FontWeight.w700,
+                fontSize: 17.5,
+              ),
+            ),
+            Text(
+              '${_teachers.length} Teachers • ${_parents.length} Parents',
+              style: TextStyle(color: p.inkSecondary, fontSize: 11.5),
+            ),
           ],
         ),
         actions: [
           IconButton(
-            icon: const Icon(Icons.person_add_rounded, color: _limeGreen),
+            icon: Icon(Icons.person_add_rounded, color: p.primary),
             tooltip: 'Generate Invite Code',
             onPressed: () => InviteCodeDialog.show(context),
           ),
           IconButton(
-            icon: const Icon(Icons.refresh_rounded),
+            icon: Icon(Icons.refresh_rounded, color: p.inkSecondary),
             onPressed: _loadAllUserData,
           ),
         ],
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(48),
           child: Container(
-            color: surfaceBg,
+            decoration: BoxDecoration(
+              color: p.surface,
+              border: Border(bottom: BorderSide(color: p.border)),
+            ),
             child: TabBar(
               controller: _tabController,
-              indicatorColor: _limeGreen,
+              indicatorColor: p.primary,
               indicatorWeight: 3,
-              labelColor: _limeGreen,
-              unselectedLabelColor: subtextColor,
-              labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+              labelColor: p.primary,
+              unselectedLabelColor: p.inkSecondary,
               tabs: [
                 Tab(text: 'Teachers (${_teachers.length})'),
                 Tab(text: 'Parents (${_parents.length})'),
@@ -367,46 +388,25 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ),
       body: Column(
         children: [
-          // Search Bar
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-            child: TextField(
+            padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
+            child: ProSearchField(
               controller: _searchController,
-              onChanged: (v) => setState(() => _searchQuery = v.trim().toLowerCase()),
-              style: TextStyle(fontSize: 13.5, color: textColor),
-              decoration: InputDecoration(
-                hintText: 'Search by name, email, or phone...',
-                hintStyle: TextStyle(color: subtextColor.withOpacity(0.6), fontSize: 13),
-                prefixIcon: Icon(Icons.search_rounded, size: 20, color: subtextColor),
-                suffixIcon: _searchQuery.isNotEmpty
-                    ? IconButton(
-                        icon: const Icon(Icons.clear_rounded, size: 16),
-                        onPressed: () {
-                          _searchController.clear();
-                          setState(() => _searchQuery = '');
-                        },
-                      )
-                    : null,
-                filled: true,
-                fillColor: surfaceBg,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: _limeGreen, width: 1.5)),
-              ),
+              hintText: 'Search by name, email, or phone...',
+              query: _searchQuery,
+              onChanged: (v) =>
+                  setState(() => _searchQuery = v.trim().toLowerCase()),
             ),
           ),
-
-          // Tab Views
           Expanded(
             child: _isLoading
-                ? const Center(child: CircularProgressIndicator(color: _limeGreen))
+                ? Center(child: CircularProgressIndicator(color: p.primary))
                 : TabBarView(
                     controller: _tabController,
                     children: [
-                      _buildUserList(_teachers, 'teacher', surfaceBg, textColor, subtextColor, subtleBorder),
-                      _buildUserList(_parents, 'parent', surfaceBg, textColor, subtextColor, subtleBorder),
-                      _buildInviteCodesList(surfaceBg, textColor, subtextColor, subtleBorder),
+                      _buildUserList(_teachers, 'teacher', p),
+                      _buildUserList(_parents, 'parent', p),
+                      _buildInviteCodesList(p),
                     ],
                   ),
           ),
@@ -418,267 +418,296 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   Widget _buildUserList(
     List<Map<String, dynamic>> users,
     String listType,
-    Color surfaceBg,
-    Color textColor,
-    Color subtextColor,
-    Color subtleBorder,
+    AppPalette p,
   ) {
     final filtered = users.where((u) {
       final name = (u['full_name'] ?? '').toString().toLowerCase();
       final email = (u['email'] ?? '').toString().toLowerCase();
       final phone = (u['phone'] ?? '').toString().toLowerCase();
-      return name.contains(_searchQuery) || email.contains(_searchQuery) || phone.contains(_searchQuery);
+      return name.contains(_searchQuery) ||
+          email.contains(_searchQuery) ||
+          phone.contains(_searchQuery);
     }).toList();
 
     if (filtered.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.person_off_rounded, size: 48, color: subtextColor),
-            const SizedBox(height: 10),
-            Text('No ${listType}s found', style: TextStyle(color: subtextColor, fontSize: 13)),
-          ],
+      return Padding(
+        padding: const EdgeInsets.all(24),
+        child: Center(
+          child: ProEmptyState(
+            icon: Icons.person_off_outlined,
+            title: 'No ${listType}s found',
+            message: _searchQuery.isNotEmpty
+                ? 'Try clearing or modifying your search query.'
+                : 'Registered ${listType}s will appear here.',
+          ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: filtered.length,
-      itemBuilder: (context, index) {
-        final user = filtered[index];
-        final bool isSuspended = user['is_suspended'] == true;
-        final name = user['full_name'] ?? 'User';
-        final initial = name.isNotEmpty ? name[0].toUpperCase() : 'U';
+    return RefreshIndicator(
+      color: p.primary,
+      onRefresh: _loadAllUserData,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        itemCount: filtered.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final user = filtered[index];
+          final bool isSuspended = user['is_suspended'] == true;
+          final name = (user['full_name'] ?? 'User').toString();
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 10),
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: surfaceBg,
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(color: isSuspended ? _alertRed.withOpacity(0.5) : subtleBorder),
-          ),
-          child: Row(
-            children: [
-              // Avatar
-              Container(
-                width: 44,
-                height: 44,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: isSuspended ? _alertRed.withOpacity(0.15) : _limeGreen.withOpacity(0.15),
-                  border: Border.all(color: isSuspended ? _alertRed : _limeGreen, width: 1.5),
+          return ProCard(
+            padding: const EdgeInsets.all(14),
+            borderColor: isSuspended ? p.danger.withOpacity(0.5) : p.border,
+            child: Row(
+              children: [
+                ProAvatar(
+                  name: name,
+                  radius: 22,
+                  color: isSuspended
+                      ? p.danger
+                      : (listType == 'teacher' ? p.primary : p.gold),
                 ),
-                child: Center(
-                  child: Text(
-                    initial,
-                    style: TextStyle(
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                      color: isSuspended ? _alertRed : _limeGreen,
-                    ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              name,
+                              style: TextStyle(
+                                fontSize: 14.5,
+                                fontWeight: FontWeight.w700,
+                                color: p.ink,
+                                decoration: isSuspended
+                                    ? TextDecoration.lineThrough
+                                    : null,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          if (isSuspended) ...[
+                            const SizedBox(width: 6),
+                            ProStatusPill(label: 'SUSPENDED', color: p.danger),
+                          ],
+                        ],
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        (user['phone'] != null &&
+                                user['phone'].toString().isNotEmpty)
+                            ? user['phone'].toString()
+                            : (user['email']?.toString() ?? 'No contact info'),
+                        style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                      ),
+                      if (listType == 'teacher') ...[
+                        const SizedBox(height: 5),
+                        Builder(
+                          builder: (_) {
+                            final matches = HalaqahService.instance.halaqahs
+                                .where((h) => h.teacherId == user['id']);
+                            final profileHalaqah =
+                                user['halaqah_name']?.toString();
+                            final assignedName = (profileHalaqah != null &&
+                                    profileHalaqah.isNotEmpty)
+                                ? profileHalaqah
+                                : (matches.isNotEmpty
+                                    ? matches.first.name
+                                    : 'Unassigned Circle');
+                            return Text(
+                              assignedName,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: p.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            );
+                          },
+                        ),
+                      ],
+                    ],
                   ),
                 ),
-              ),
-              const SizedBox(width: 14),
-
-              // Details
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Flexible(
-                          child: Text(
-                            name,
-                            style: TextStyle(
-                              fontSize: 14.5,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
-                              decoration: isSuspended ? TextDecoration.lineThrough : null,
+                PopupMenuButton<String>(
+                  icon: Icon(Icons.more_vert_rounded, color: p.inkSecondary),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  color: p.surface,
+                  onSelected: (val) {
+                    if (val == 'assign_halaqah') {
+                      _showAssignHalaqahDialog(user);
+                    } else if (val == 'suspend') {
+                      _toggleSuspendUser(user);
+                    } else if (val == 'remove') {
+                      _removeUser(user, listType);
+                    }
+                  },
+                  itemBuilder: (context) => [
+                    if (listType == 'teacher')
+                      PopupMenuItem(
+                        value: 'assign_halaqah',
+                        child: Row(
+                          children: [
+                            Icon(Icons.school_outlined,
+                                size: 18, color: p.primary),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Assign Halaqah',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: p.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
                             ),
-                            overflow: TextOverflow.ellipsis,
-                          ),
+                          ],
                         ),
-                        if (isSuspended) ...[
-                          const SizedBox(width: 6),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                            decoration: BoxDecoration(
-                              color: _alertRed.withOpacity(0.15),
-                              borderRadius: BorderRadius.circular(6),
-                            ),
-                            child: const Text('SUSPENDED', style: TextStyle(color: _alertRed, fontSize: 9, fontWeight: FontWeight.bold)),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 3),
-                    Text(
-                      (user['phone'] != null && user['phone'].toString().isNotEmpty)
-                          ? user['phone'].toString()
-                          : (user['email']?.toString() ?? 'No contact info'),
-                      style: TextStyle(fontSize: 11.5, color: subtextColor),
-                    ),
-                    if (listType == 'teacher') ...[
-                      const SizedBox(height: 4),
-                      Builder(
-                        builder: (_) {
-                          final matches = HalaqahService.instance.halaqahs
-                              .where((h) => h.teacherId == user['id']);
-                          final profileHalaqah = user['halaqah_name']?.toString();
-                          final assignedName = (profileHalaqah != null && profileHalaqah.isNotEmpty)
-                              ? profileHalaqah
-                              : (matches.isNotEmpty ? matches.first.name : 'Unassigned Circle');
-                          return Text(
-                            assignedName,
-                            style: const TextStyle(
-                              fontSize: 11,
-                              color: AppColors.accentTealLight,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          );
-                        },
                       ),
-                    ],
-                  ],
-                ),
-              ),
-
-              // Popup Actions Menu: Assign Halaqah, Suspend / Reactivate & Remove
-              PopupMenuButton<String>(
-                icon: Icon(Icons.more_vert_rounded, color: subtextColor),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                color: surfaceBg,
-                onSelected: (val) {
-                  if (val == 'assign_halaqah') {
-                    _showAssignHalaqahDialog(user);
-                  } else if (val == 'suspend') {
-                    _toggleSuspendUser(user);
-                  } else if (val == 'remove') {
-                    _removeUser(user, listType);
-                  }
-                },
-                itemBuilder: (context) => [
-                  if (listType == 'teacher')
-                    const PopupMenuItem(
-                      value: 'assign_halaqah',
+                    PopupMenuItem(
+                      value: 'suspend',
                       child: Row(
                         children: [
-                          Icon(Icons.school_outlined, size: 18, color: AppColors.accentTealLight),
-                          SizedBox(width: 10),
+                          Icon(
+                            isSuspended
+                                ? Icons.play_arrow_rounded
+                                : Icons.block_rounded,
+                            size: 18,
+                            color: isSuspended ? p.success : p.warning,
+                          ),
+                          const SizedBox(width: 10),
                           Text(
-                            'Assign Halaqah',
+                            isSuspended
+                                ? 'Reactivate Account'
+                                : 'Suspend Account',
                             style: TextStyle(
                               fontSize: 13,
-                              color: AppColors.accentTealLight,
+                              color: isSuspended ? p.success : p.warning,
                               fontWeight: FontWeight.w600,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  PopupMenuItem(
-                    value: 'suspend',
-                    child: Row(
-                      children: [
-                        Icon(
-                          isSuspended ? Icons.play_arrow_rounded : Icons.block_rounded,
-                          size: 18,
-                          color: isSuspended ? _limeGreen : const Color(0xFFF59E0B),
-                        ),
-                        const SizedBox(width: 10),
-                        Text(
-                          isSuspended ? 'Reactivate Account' : 'Suspend Account',
-                          style: TextStyle(
-                            fontSize: 13,
-                            color: isSuspended ? _limeGreen : const Color(0xFFF59E0B),
-                            fontWeight: FontWeight.w600,
+                    PopupMenuItem(
+                      value: 'remove',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline_rounded,
+                              size: 18, color: p.danger),
+                          const SizedBox(width: 10),
+                          Text(
+                            'Remove User',
+                            style: TextStyle(
+                              fontSize: 13,
+                              color: p.danger,
+                              fontWeight: FontWeight.w600,
+                            ),
                           ),
-                        ),
-                      ],
+                        ],
+                      ),
                     ),
-                  ),
-                  const PopupMenuItem(
-                    value: 'remove',
-                    child: Row(
-                      children: [
-                        Icon(Icons.delete_outline_rounded, size: 18, color: _alertRed),
-                        SizedBox(width: 10),
-                        Text('Remove User', style: TextStyle(fontSize: 13, color: _alertRed, fontWeight: FontWeight.w600)),
-                      ],
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        );
-      },
+                  ],
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 
-  Widget _buildInviteCodesList(
-    Color surfaceBg,
-    Color textColor,
-    Color subtextColor,
-    Color subtleBorder,
-  ) {
+  Widget _buildInviteCodesList(AppPalette p) {
     if (_inviteCodes.isEmpty) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(Icons.vpn_key_off_rounded, size: 48, color: subtextColor),
-            const SizedBox(height: 10),
-            Text('No invitation codes active', style: TextStyle(color: subtextColor, fontSize: 13)),
-          ],
+      return const Padding(
+        padding: EdgeInsets.all(24),
+        child: Center(
+          child: ProEmptyState(
+            icon: Icons.vpn_key_off_outlined,
+            title: 'No invitation codes active',
+            message: 'Generate an invite code from the top right button.',
+          ),
         ),
       );
     }
 
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      itemCount: _inviteCodes.length,
-      itemBuilder: (context, index) {
-        final code = _inviteCodes[index];
-        final isTeacher = code['role'] == 'teacher';
+    return RefreshIndicator(
+      color: p.primary,
+      onRefresh: _loadAllUserData,
+      child: ListView.separated(
+        padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
+        itemCount: _inviteCodes.length,
+        separatorBuilder: (_, __) => const SizedBox(height: 10),
+        itemBuilder: (context, index) {
+          final code = _inviteCodes[index];
+          final isTeacher = code['role'] == 'teacher';
+          final isUsed = code['is_used'] == true;
+          final tone = isTeacher ? p.primary : p.gold;
 
-        return Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-          decoration: BoxDecoration(
-            color: surfaceBg,
-            borderRadius: BorderRadius.circular(14),
-            border: Border.all(color: subtleBorder),
-          ),
-          child: Row(
-            children: [
-              Icon(isTeacher ? Icons.school_rounded : Icons.family_restroom_rounded, size: 20, color: _limeGreen),
-              const SizedBox(width: 12),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(code['code'] ?? '', style: TextStyle(fontFamily: 'monospace', fontWeight: FontWeight.bold, fontSize: 14, color: textColor)),
-                  Text(isTeacher ? 'Teacher Registration' : 'Parent Registration', style: TextStyle(fontSize: 11, color: subtextColor)),
-                ],
-              ),
-              const Spacer(),
-              IconButton(
-                icon: const Icon(Icons.delete_outline_rounded, size: 18, color: _alertRed),
-                onPressed: () async {
-                  final id = code['id'];
-                  setState(() => _inviteCodes.removeAt(index));
-                  await SupabaseService.instance.deleteInviteCode(id);
-                },
-              ),
-            ],
-          ),
-        );
-      },
+          return ProCard(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+            child: Row(
+              children: [
+                Container(
+                  width: 38,
+                  height: 38,
+                  decoration: BoxDecoration(
+                    color: tone.withOpacity(0.12),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: Icon(
+                    isTeacher
+                        ? Icons.school_rounded
+                        : Icons.family_restroom_rounded,
+                    size: 19,
+                    color: tone,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        code['code'] ?? '',
+                        style: TextStyle(
+                          fontFamily: 'monospace',
+                          fontWeight: FontWeight.w800,
+                          fontSize: 14,
+                          color: isUsed ? p.inkMuted : p.ink,
+                          decoration:
+                              isUsed ? TextDecoration.lineThrough : null,
+                        ),
+                      ),
+                      Text(
+                        isTeacher
+                            ? 'Teacher Registration'
+                            : 'Parent Registration',
+                        style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+                ProStatusPill(
+                  label: isUsed ? 'USED' : 'ACTIVE',
+                  color: isUsed ? p.inkMuted : p.success,
+                ),
+                IconButton(
+                  icon: Icon(Icons.delete_outline_rounded,
+                      size: 19, color: p.danger),
+                  onPressed: () async {
+                    final id = code['id'];
+                    setState(() => _inviteCodes.removeAt(index));
+                    await SupabaseService.instance.deleteInviteCode(id);
+                  },
+                ),
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

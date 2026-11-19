@@ -14,10 +14,10 @@ class KheyrukumLogoPainter extends CustomPainter {
   final double crownProgress;    // 0.0 -> 1.0 (Phase 4)
   final double pulseScale;       // Pulse effect
 
-  static const Color tealPrimary = Color(0xFF007A78);     // Brand Deep Teal
-  static const Color tealGlow = Color(0xFF00BCD4);        // Glowing Teal
-  static const Color goldPrimary = Color(0xFFF5A623);     // Brand Golden Amber
-  static const Color goldLight = Color(0xFFFFD54F);
+  static const Color tealPrimary = Color(0xFF066E68); // Brand Deep Pine Teal
+  static const Color tealGlow = Color(0xFF0A857E);    // Pine Rich
+  static const Color goldPrimary = Color(0xFFF5AF2D); // Warm Logo Gold
+  static const Color goldLight = Color(0xFFFFD166);   // Soft Gold
 
   KheyrukumLogoPainter({
     required this.crescentProgress,

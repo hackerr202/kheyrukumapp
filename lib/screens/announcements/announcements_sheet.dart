@@ -1,15 +1,18 @@
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/pro_ui_kit.dart';
 import '../payments/payments_screen.dart';
 import 'post_announcement_dialog.dart';
 
 /// Modal bottom sheet showing:
-/// - Real-time student alerts & notifications (Daily attendance, weekly reports, tuition reminders, payment verification)
-/// - Official center announcements with real-time updates.
+/// - Real-time student alerts & notifications
+/// - Official center announcements with functional audience/pinned/attachment filters
 class AnnouncementsSheet extends StatefulWidget {
   const AnnouncementsSheet({super.key});
 
@@ -27,253 +30,156 @@ class AnnouncementsSheet extends StatefulWidget {
 }
 
 class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
-  int _activeTab = 0; // 0: Notifications & Alerts, 1: Center Announcements
+  int _activeTab = 0; // 0: Alerts, 1: Notices
   String _selectedFilter = 'all';
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    final p = AppColors.of(context);
+    final isAdmin = AuthSessionService.instance.isAdmin;
 
-    return Container(
-      height: MediaQuery.of(context).size.height * 0.88,
-      decoration: BoxDecoration(
-        color: Theme.of(context).scaffoldBackgroundColor,
-        borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-        border: Border(
-          top: BorderSide(
-            color: isDark ? const Color(0xFF2E334D) : const Color(0xFFCBD5E1),
-            width: 1.5,
-          ),
-        ),
-      ),
+    return ProBottomSheetShell(
+      title: 'Notices & Activity',
+      subtitle: 'School circulars and account updates',
+      icon: Icons.campaign_rounded,
+      iconColor: p.gold,
+      heightFactor: 0.88,
+      trailingAction: _activeTab == 0
+          ? TextButton(
+              onPressed: () =>
+                  NotificationCenterService.instance.markAllAsRead(),
+              child: const Text('Mark read', style: TextStyle(fontSize: 12)),
+            )
+          : (isAdmin
+              ? ElevatedButton.icon(
+                  onPressed: () {
+                    showDialog(
+                      context: context,
+                      builder: (_) => const PostAnnouncementDialog(),
+                    );
+                  },
+                  icon: const Icon(Icons.add_rounded, size: 15),
+                  label: const Text('Post', style: TextStyle(fontSize: 12)),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: p.gold,
+                    foregroundColor: Colors.white,
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                  ),
+                )
+              : null),
       child: Column(
         children: [
-          // Drag handle
-          Container(
-            margin: const EdgeInsets.only(top: 10, bottom: 6),
-            width: 40,
-            height: 4,
-            decoration: BoxDecoration(
-              color: const Color(0xFF475569),
-              borderRadius: BorderRadius.circular(4),
-            ),
-          ),
-
-          // Header
           Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 8),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF00BCD4).withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: const Icon(
-                        Icons.notifications_active_rounded,
-                        color: Color(0xFF00BCD4),
-                        size: 20,
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      'Notifications & Notices',
-                      style: TextStyle(
-                        color: textColor,
-                        fontSize: 17,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ],
-                ),
-                if (_activeTab == 0)
-                  TextButton(
-                    onPressed: () {
-                      NotificationCenterService.instance.markAllAsRead();
-                    },
-                    child: const Text('Mark All Read', style: TextStyle(fontSize: 11.5, color: Color(0xFF00BCD4))),
-                  )
-                else
-                  ElevatedButton.icon(
-                    onPressed: () {
-                      showDialog(
-                        context: context,
-                        builder: (_) => const PostAnnouncementDialog(),
-                      );
-                    },
-                    icon: const Icon(Icons.add_rounded, size: 16),
-                    label: const Text('Post', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFFFA000),
-                      foregroundColor: const Color(0xFF0F172A),
-                      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-              ],
+            padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
+            child: ProSegmentedControl(
+              labels: const ['Activity Alerts', 'Announcements'],
+              selectedIndex: _activeTab,
+              onChanged: (idx) => setState(() => _activeTab = idx),
             ),
           ),
 
-          // Tab Switcher: [ Alerts & Reports | Announcements ]
-          Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
-            child: Container(
-              padding: const EdgeInsets.all(4),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF1E293B) : const Color(0xFFE2E8F0),
-                borderRadius: BorderRadius.circular(14),
-              ),
-              child: Row(
-                children: [
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => _activeTab = 0),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _activeTab == 0 ? (isDark ? const Color(0xFF0F172A) : Colors.white) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: _activeTab == 0
-                              ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 2))]
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Alerts & Reports',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: _activeTab == 0 ? FontWeight.bold : FontWeight.w500,
-                              color: _activeTab == 0 ? const Color(0xFF00BCD4) : subtextColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 4),
-                  Expanded(
-                    child: InkWell(
-                      onTap: () => setState(() => _activeTab = 1),
-                      borderRadius: BorderRadius.circular(10),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        decoration: BoxDecoration(
-                          color: _activeTab == 1 ? (isDark ? const Color(0xFF0F172A) : Colors.white) : Colors.transparent,
-                          borderRadius: BorderRadius.circular(10),
-                          boxShadow: _activeTab == 1
-                              ? [BoxShadow(color: Colors.black.withOpacity(0.08), blurRadius: 4, offset: const Offset(0, 2))]
-                              : null,
-                        ),
-                        child: Center(
-                          child: Text(
-                            'Announcements',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: _activeTab == 1 ? FontWeight.bold : FontWeight.w500,
-                              color: _activeTab == 1 ? const Color(0xFFFFA000) : subtextColor,
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-          ),
-
-          const SizedBox(height: 6),
-
-          // TAB 0: NOTIFICATIONS & ALERTS
           if (_activeTab == 0)
             Expanded(
               child: StreamBuilder<List<AppNotification>>(
                 stream: NotificationCenterService.instance.stream,
-                initialData: NotificationCenterService.instance.currentNotifications,
+                initialData:
+                    NotificationCenterService.instance.currentNotifications,
                 builder: (context, snapshot) {
                   final notifs = snapshot.data ?? [];
 
                   if (notifs.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.notifications_none_rounded, size: 48, color: subtextColor),
-                          const SizedBox(height: 10),
-                          Text('No new notifications', style: TextStyle(color: subtextColor)),
-                        ],
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                        child: ProEmptyState(
+                          icon: Icons.notifications_none_rounded,
+                          title: 'No alerts yet',
+                          message:
+                              'Daily attendance updates, weekly reports, and tuition reminders will appear here.',
+                        ),
                       ),
                     );
                   }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(18, 8, 18, 24),
                     itemCount: notifs.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 10),
                     itemBuilder: (context, index) {
-                      final item = notifs[index];
-                      return _buildNotificationCard(item, isDark, cardBg, borderColor, textColor, subtextColor);
+                      return _buildNotificationCard(notifs[index], p);
                     },
                   );
                 },
               ),
-            ),
-
-          // TAB 1: ANNOUNCEMENTS
-          if (_activeTab == 1) ...[
-            // Filter Chips
-            SingleChildScrollView(
-              scrollDirection: Axis.horizontal,
-              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-              child: Row(
+            )
+          else ...[
+            SizedBox(
+              height: 44,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
                 children: [
-                  _buildFilterChip('all', 'All Notices'),
-                  _buildFilterChip('urgent', 'Urgent Alerts'),
-                  _buildFilterChip('event', 'Quran Events'),
-                  _buildFilterChip('quran_halaqah', 'Halaqah'),
+                  _buildFilterChip('all', 'All Notices', p),
+                  _buildFilterChip('pinned', 'Pinned', p),
+                  _buildFilterChip('parents', 'Parents', p),
+                  _buildFilterChip('teachers', 'Teachers', p),
+                  _buildFilterChip('attachments', 'Attachments', p),
                 ],
               ),
             ),
-            const Divider(color: Color(0xFF1E293B), height: 16),
-
-            // Streamed Realtime List
+            Divider(height: 8, color: p.border),
             Expanded(
               child: StreamBuilder<List<Announcement>>(
                 stream: AnnouncementService.instance.streamAnnouncements(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator());
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return Center(
+                      child: CircularProgressIndicator(color: p.primary),
+                    );
                   }
 
-                  final list = snapshot.data ?? [];
+                  final all = snapshot.data ?? [];
+                  final list = all.where((item) {
+                    switch (_selectedFilter) {
+                      case 'pinned':
+                        return item.isPinned;
+                      case 'parents':
+                        return item.targetAudience == 'parents' ||
+                            item.targetAudience == 'all';
+                      case 'teachers':
+                        return item.targetAudience == 'teachers' ||
+                            item.targetAudience == 'all';
+                      case 'attachments':
+                        return item.attachmentUrl != null &&
+                            item.attachmentUrl!.isNotEmpty;
+                      default:
+                        return true;
+                    }
+                  }).toList();
 
                   if (list.isEmpty) {
-                    return Center(
-                      child: Column(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(Icons.campaign_outlined, size: 48, color: subtextColor),
-                          const SizedBox(height: 10),
-                          Text('No announcements found', style: TextStyle(color: subtextColor)),
-                        ],
+                    return const Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Center(
+                        child: ProEmptyState(
+                          icon: Icons.campaign_outlined,
+                          title: 'No notices found',
+                          message:
+                              'No center announcements match the selected filter.',
+                        ),
                       ),
                     );
                   }
 
-                  return ListView.builder(
-                    padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  return ListView.separated(
+                    padding: const EdgeInsets.fromLTRB(18, 10, 18, 24),
                     itemCount: list.length,
+                    separatorBuilder: (_, __) => const SizedBox(height: 12),
                     itemBuilder: (context, index) {
-                      final item = list[index];
-                      return _buildAnnouncementCard(item);
+                      return _buildAnnouncementCard(list[index], p);
                     },
                   );
                 },
@@ -285,51 +191,43 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     );
   }
 
-  Widget _buildNotificationCard(
-    AppNotification item,
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    Color iconBg = const Color(0xFF00BCD4);
+  Widget _buildNotificationCard(AppNotification item, AppPalette p) {
+    Color iconColor = p.primary;
     IconData iconData = Icons.notifications_rounded;
 
     if (item.type == 'attendance') {
-      iconBg = const Color(0xFF10B981);
+      iconColor = p.success;
       iconData = Icons.fact_check_rounded;
     } else if (item.type == 'weekly_report') {
-      iconBg = const Color(0xFF8B5CF6);
+      iconColor = p.excused;
       iconData = Icons.menu_book_rounded;
-    } else if (item.type == 'payment_reminder' || item.type == 'payment_overdue') {
-      iconBg = const Color(0xFFFFA000);
+    } else if (item.type == 'payment_reminder' ||
+        item.type == 'payment_overdue') {
+      iconColor = p.gold;
       iconData = Icons.payment_rounded;
     } else if (item.type == 'payment_rejection') {
-      iconBg = const Color(0xFFEF4444);
+      iconColor = p.danger;
       iconData = Icons.error_rounded;
     } else if (item.type == 'prayer') {
-      iconBg = const Color(0xFF10B981);
-      iconData = Icons.access_time_filled_rounded;
+      iconColor = p.primary;
+      iconData = Icons.mosque_rounded;
     }
 
     final isPaymentType = item.type.startsWith('payment');
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
+    return ProCard(
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          CircleAvatar(
-            radius: 18,
-            backgroundColor: iconBg.withOpacity(0.18),
-            child: Icon(iconData, color: iconBg, size: 18),
+          Container(
+            width: 38,
+            height: 38,
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.14),
+              borderRadius: BorderRadius.circular(11),
+            ),
+            child: Icon(iconData, color: iconColor, size: 19),
           ),
           const SizedBox(width: 12),
           Expanded(
@@ -337,38 +235,51 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Expanded(
                       child: Text(
                         item.title,
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13.5,
+                          color: p.ink,
+                        ),
                       ),
                     ),
                     Text(
                       _formatDate(item.createdAt),
-                      style: TextStyle(color: subtextColor, fontSize: 10),
+                      style: TextStyle(color: p.inkMuted, fontSize: 10.5),
                     ),
                   ],
                 ),
                 const SizedBox(height: 4),
                 Text(
                   item.body,
-                  style: TextStyle(fontSize: 11.5, color: subtextColor, height: 1.35),
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: p.inkSecondary,
+                    height: 1.4,
+                  ),
                 ),
                 if (isPaymentType) ...[
-                  const SizedBox(height: 6),
+                  const SizedBox(height: 8),
                   InkWell(
                     onTap: () {
                       Navigator.pop(context);
                       Navigator.push(
                         context,
-                        MaterialPageRoute(builder: (_) => const PaymentsScreen()),
+                        MaterialPageRoute(
+                          builder: (_) => const PaymentsScreen(),
+                        ),
                       );
                     },
-                    child: const Text(
-                      'View in Payments Hub →',
-                      style: TextStyle(fontSize: 11, color: Color(0xFF00BCD4), fontWeight: FontWeight.bold),
+                    child: Text(
+                      'Open Tuition & Payments →',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: p.primary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   ),
                 ],
@@ -380,103 +291,63 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
     );
   }
 
-  Widget _buildFilterChip(String id, String label) {
+  Widget _buildFilterChip(String id, String label, AppPalette p) {
     final isSelected = _selectedFilter == id;
     return Padding(
       padding: const EdgeInsets.only(right: 8),
-      child: FilterChip(
-        label: Text(label),
-        selected: isSelected,
-        selectedColor: const Color(0xFFFFA000).withOpacity(0.2),
-        backgroundColor: const Color(0xFF1E293B),
-        side: BorderSide(
-          color: isSelected ? const Color(0xFFFFA000) : const Color(0xFF334155),
+      child: GestureDetector(
+        onTap: () => setState(() => _selectedFilter = id),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 180),
+          padding: const EdgeInsets.symmetric(horizontal: 13, vertical: 7),
+          decoration: BoxDecoration(
+            color: isSelected ? p.primary : p.surfaceSubtle,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: isSelected ? p.primary : p.border),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              color: isSelected ? p.onPrimary : p.inkSecondary,
+              fontSize: 11.5,
+              fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+            ),
+          ),
         ),
-        labelStyle: TextStyle(
-          color: isSelected ? const Color(0xFFFFA000) : const Color(0xFF94A3B8),
-          fontSize: 11,
-          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-        ),
-        onSelected: (_) => setState(() => _selectedFilter = id),
       ),
     );
   }
 
-  Widget _buildAnnouncementCard(Announcement item) {
-    const Color badgeColor = Color(0xFFC9F24A);
-    const String badgeLabel = 'OFFICIAL NOTICE';
-
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final borderColor = isDark ? const Color(0xFF23283E) : const Color(0xFFE2E8F0);
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
+  Widget _buildAnnouncementCard(Announcement item, AppPalette p) {
+    return ProCard(
+      accentStripeColor: item.isPinned ? p.gold : null,
+      borderColor: item.isPinned ? p.gold.withOpacity(0.45) : p.border,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: isDark ? const Color(0xFF161927) : Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: item.isPinned
-              ? const Color(0xFFFFA000).withOpacity(0.6)
-              : borderColor,
-          width: item.isPinned ? 1.4 : 1,
-        ),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
+              Wrap(
+                spacing: 6,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
-                    decoration: BoxDecoration(
-                      color: badgeColor.withOpacity(0.18),
-                      borderRadius: BorderRadius.circular(6),
-                    ),
-                    child: Text(
-                      badgeLabel,
-                      style: TextStyle(
-                        color: badgeColor,
-                        fontSize: 9,
-                        fontWeight: FontWeight.w800,
-                        letterSpacing: 0.5,
-                      ),
-                    ),
+                  ProStatusPill(
+                    label: 'Official Notice',
+                    icon: Icons.campaign_rounded,
+                    color: p.primary,
                   ),
-                  if (item.isPinned) ...[
-                    const SizedBox(width: 6),
-                    Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFFFA000).withOpacity(0.2),
-                        borderRadius: BorderRadius.circular(6),
-                      ),
-                      child: const Row(
-                        children: [
-                          Icon(Icons.push_pin_rounded, size: 10, color: Color(0xFFFFA000)),
-                          SizedBox(width: 3),
-                          Text(
-                            'PINNED',
-                            style: TextStyle(
-                              color: Color(0xFFFFA000),
-                              fontSize: 9,
-                              fontWeight: FontWeight.w800,
-                            ),
-                          ),
-                        ],
-                      ),
+                  if (item.isPinned)
+                    ProStatusPill(
+                      label: 'Pinned',
+                      icon: Icons.push_pin_rounded,
+                      color: p.gold,
                     ),
-                  ],
                 ],
               ),
               Text(
                 _formatDate(item.createdAt),
-                style: const TextStyle(color: Color(0xFF64748B), fontSize: 10),
+                style: TextStyle(color: p.inkMuted, fontSize: 11),
               ),
             ],
           ),
@@ -484,29 +355,30 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           Text(
             item.title,
             style: TextStyle(
-              color: isDark ? Colors.white : const Color(0xFF0F172A),
-              fontSize: 15,
-              fontWeight: FontWeight.bold,
+              color: p.ink,
+              fontSize: 15.5,
+              fontWeight: FontWeight.w700,
             ),
           ),
           const SizedBox(height: 6),
           Text(
             item.content,
             style: TextStyle(
-              color: isDark ? const Color(0xFFCBD5E1) : const Color(0xFF475569),
-              fontSize: 12,
-              height: 1.4,
+              color: p.inkSecondary,
+              fontSize: 12.5,
+              height: 1.45,
             ),
           ),
-          if (item.attachmentUrl != null && item.attachmentUrl!.isNotEmpty) ...[
-            const SizedBox(height: 10),
+          if (item.attachmentUrl != null &&
+              item.attachmentUrl!.isNotEmpty) ...[
+            const SizedBox(height: 12),
             if (_isImageAttachment(item.attachmentUrl!, item.attachmentName))
               GestureDetector(
                 onTap: () => _showFullScreenImage(item.attachmentUrl!),
                 child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
+                  borderRadius: BorderRadius.circular(14),
                   child: Container(
-                    color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
+                    color: p.surfaceSubtle,
                     constraints: const BoxConstraints(maxHeight: 220),
                     width: double.infinity,
                     child: Image.network(
@@ -514,18 +386,27 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                       fit: BoxFit.cover,
                       loadingBuilder: (context, child, progress) {
                         if (progress == null) return child;
-                        return const SizedBox(
-                          height: 160,
-                          child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                        return SizedBox(
+                          height: 150,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: p.primary,
+                            ),
+                          ),
                         );
                       },
                       errorBuilder: (_, __, ___) => Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
-                            const Icon(Icons.broken_image_rounded, size: 20, color: Color(0xFF94A3B8)),
+                            Icon(Icons.broken_image_rounded,
+                                size: 20, color: p.inkMuted),
                             const SizedBox(width: 8),
-                            Text('Image unavailable', style: TextStyle(color: subtextColor, fontSize: 12)),
+                            Text(
+                              'Image unavailable',
+                              style: TextStyle(color: p.inkMuted, fontSize: 12),
+                            ),
                           ],
                         ),
                       ),
@@ -534,40 +415,57 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 ),
               )
             else
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                decoration: BoxDecoration(
-                  color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                  borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: borderColor),
-                ),
-                child: Row(
-                  children: [
-                    const Icon(Icons.attach_file_rounded, size: 16, color: Color(0xFFFFA000)),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        item.attachmentName ?? 'Attached document',
-                        style: TextStyle(
-                          color: textColor,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w500,
+              InkWell(
+                onTap: () async {
+                  final uri = Uri.tryParse(item.attachmentUrl!);
+                  if (uri != null && await canLaunchUrl(uri)) {
+                    await launchUrl(uri, mode: LaunchMode.externalApplication);
+                  }
+                },
+                borderRadius: BorderRadius.circular(12),
+                child: Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  decoration: BoxDecoration(
+                    color: p.surfaceSubtle,
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: p.border),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.attach_file_rounded,
+                          size: 16, color: p.primary),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          item.attachmentName ?? 'Attached document',
+                          style: TextStyle(
+                            color: p.ink,
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,
                         ),
-                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                      Icon(Icons.open_in_new_rounded,
+                          size: 15, color: p.inkMuted),
+                    ],
+                  ),
                 ),
               ),
           ],
           const SizedBox(height: 12),
           Row(
             children: [
-              const Icon(Icons.person_outline_rounded, size: 13, color: Color(0xFF64748B)),
-              const SizedBox(width: 4),
+              Icon(Icons.person_outline_rounded, size: 14, color: p.inkMuted),
+              const SizedBox(width: 5),
               Text(
                 item.authorName,
-                style: const TextStyle(color: Color(0xFF94A3B8), fontSize: 10, fontWeight: FontWeight.w500),
+                style: TextStyle(
+                  color: p.inkMuted,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w500,
+                ),
               ),
             ],
           ),
@@ -607,7 +505,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   void _showFullScreenImage(String imageUrl) {
     showDialog(
       context: context,
-      barrierColor: Colors.black.withOpacity(0.9),
+      barrierColor: Colors.black.withOpacity(0.92),
       builder: (ctx) => Scaffold(
         backgroundColor: Colors.transparent,
         body: Stack(
@@ -621,17 +519,25 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   fit: BoxFit.contain,
                   loadingBuilder: (c, child, progress) {
                     if (progress == null) return child;
-                    return const Center(child: CircularProgressIndicator());
+                    return const Center(
+                      child: CircularProgressIndicator(
+                        color: AppColors.goldWarm,
+                      ),
+                    );
                   },
                 ),
               ),
             ),
-            SafeArea(
-              child: Positioned(
-                top: 16,
-                right: 16,
+            Positioned(
+              top: 12,
+              right: 12,
+              child: SafeArea(
                 child: IconButton(
-                  icon: const Icon(Icons.close_rounded, color: Colors.white, size: 28),
+                  icon: const Icon(
+                    Icons.close_rounded,
+                    color: Colors.white,
+                    size: 28,
+                  ),
                   onPressed: () => Navigator.of(ctx).pop(),
                 ),
               ),

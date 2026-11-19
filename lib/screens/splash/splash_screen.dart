@@ -1,19 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/islamic_pattern_painter.dart';
 import 'widgets/kheyrukum_logo_painter.dart';
 
-
-/// Animated Splash Screen matching the official Kheyrukum Islamic Center Logo.
-///
-/// Timeline:
-/// - 0.0s - 0.8s: Foundation Crescent arch sweep
-/// - 0.8s - 1.6s: Three Golden Pillars / Pedestals rising
-/// - 1.6s - 2.3s: Three Teal Lightbulbs of Knowledge & Sacred Open Quran
-/// - 2.3s - 2.9s: Royal Golden Crown (Taj Al-Waqar) descending & gentle pulse
-/// - 2.9s - 3.4s: Seamless brand reveal with official emblem, Amharic & English title, and Hadith
-/// - 3.5s: Automatic transition to Dashboard
+/// Animated Flagship Splash Screen for Kheyrukum Islamic Center.
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
 
@@ -25,7 +18,6 @@ class _SplashScreenState extends State<SplashScreen>
     with SingleTickerProviderStateMixin {
   late final AnimationController _controller;
 
-  // Staggered Animation Intervals
   late final Animation<double> _crescentAnim;
   late final Animation<double> _pillarsAnim;
   late final Animation<double> _bulbsAnim;
@@ -41,91 +33,83 @@ class _SplashScreenState extends State<SplashScreen>
 
     _controller = AnimationController(
       vsync: this,
-      duration: const Duration(milliseconds: 3500),
+      duration: const Duration(milliseconds: 2800),
     );
 
-    // 1. Crescent Foundation (0.0s - 0.8s) -> [0.0 / 3.5 to 0.8 / 3.5 = 0.0 to 0.228]
     _crescentAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.0, 0.228, curve: Curves.easeInOutCubic),
+      curve: const Interval(0.0, 0.22, curve: Curves.easeInOutCubic),
     );
 
-    // 2. Three Golden Pillars (0.8s - 1.6s) -> [0.228 to 0.457]
     _pillarsAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.228, 0.457, curve: Curves.easeOutBack),
+      curve: const Interval(0.20, 0.44, curve: Curves.easeOutBack),
     );
 
-    // 3. Three Lightbulbs & Quran (1.6s - 2.3s) -> [0.457 to 0.657]
     _bulbsAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.457, 0.657, curve: Curves.easeOut),
+      curve: const Interval(0.42, 0.64, curve: Curves.easeOut),
     );
 
-    // 4. Royal Golden Crown (2.3s - 2.9s) -> [0.657 to 0.828]
     _crownAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.657, 0.828, curve: Curves.bounceOut),
+      curve: const Interval(0.62, 0.80, curve: Curves.bounceOut),
     );
 
-    // Pulse: 2.7s - 3.1s
     _pulseAnim = TweenSequence<double>([
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.0, end: 1.08)
+        tween: Tween<double>(begin: 1.0, end: 1.06)
             .chain(CurveTween(curve: Curves.easeOutQuad)),
         weight: 50,
       ),
       TweenSequenceItem(
-        tween: Tween<double>(begin: 1.08, end: 1.0)
+        tween: Tween<double>(begin: 1.06, end: 1.0)
             .chain(CurveTween(curve: Curves.easeInQuad)),
         weight: 50,
       ),
     ]).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.771, 0.885, curve: Curves.linear),
+        curve: const Interval(0.74, 0.88, curve: Curves.linear),
       ),
     );
 
-    // Official Image Crossfade
     _assetFadeAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.800, 0.942, curve: Curves.easeIn),
+      curve: const Interval(0.76, 0.92, curve: Curves.easeIn),
     );
 
-    // 5. Typography Reveal (2.8s - 3.3s) -> [0.800 to 0.942]
     _textFadeAnim = CurvedAnimation(
       parent: _controller,
-      curve: const Interval(0.800, 0.942, curve: Curves.easeOut),
+      curve: const Interval(0.74, 0.92, curve: Curves.easeOut),
     );
 
     _textSlideAnim = Tween<Offset>(
-      begin: const Offset(0.0, 0.35),
+      begin: const Offset(0.0, 0.28),
       end: Offset.zero,
     ).animate(
       CurvedAnimation(
         parent: _controller,
-        curve: const Interval(0.800, 0.942, curve: Curves.easeOutCubic),
+        curve: const Interval(0.74, 0.92, curve: Curves.easeOutCubic),
       ),
     );
 
     _controller.addStatusListener((status) {
       if (status == AnimationStatus.completed) {
-        _navigateToDashboard();
+        _navigateNext();
       }
     });
 
     _controller.forward();
   }
 
-  void _navigateToDashboard() {
+  void _navigateNext() {
     if (!mounted) return;
     final targetRoute = SupabaseService.instance.isAuthenticated
         ? AppRoutes.dashboard
         : AppRoutes.auth;
     Navigator.of(context).pushReplacementNamed(targetRoute);
   }
-
 
   @override
   void dispose() {
@@ -136,165 +120,192 @@ class _SplashScreenState extends State<SplashScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: AppColors.background,
+      backgroundColor: AppColors.pineDeep,
       body: Stack(
         children: [
-          // Ambient Radial Glow
+          // Deep Pine Sanctuary radial gradient
           Positioned.fill(
             child: DecoratedBox(
               decoration: BoxDecoration(
                 gradient: RadialGradient(
-                  center: const Alignment(0, -0.15),
-                  radius: 0.9,
+                  center: const Alignment(0, -0.22),
+                  radius: 1.05,
                   colors: [
-                    const Color(0xFF007A78).withOpacity(0.18),
-                    AppColors.backgroundDark,
-                    AppColors.background,
+                    AppColors.pineRich,
+                    AppColors.pinePrimary,
+                    AppColors.pineDeep,
+                    const Color(0xFF032D2A),
                   ],
-                  stops: const [0.0, 0.55, 1.0],
+                  stops: const [0.0, 0.35, 0.72, 1.0],
                 ),
               ),
             ),
           ),
 
+          // Subtle geometric Khatam lattice
+          const Positioned.fill(
+            child: IslamicGeometricPattern(
+              color: Colors.white,
+              opacity: 0.055,
+              cellSize: 58,
+              showCornerArcs: true,
+            ),
+          ),
+
           SafeArea(
             child: Center(
-              child: AnimatedBuilder(
-                animation: _controller,
-                builder: (context, child) {
-                  return Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      // Circular Logo Animation Container - Seamless Full Circle
-                      Container(
-                        width: 250,
-                        height: 250,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: Colors.white,
-                          border: Border.all(
-                            color: const Color(0xFF00B4B0),
-                            width: 3.0,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: const Color(0xFF00B4B0).withOpacity(0.35),
-                              blurRadius: 30,
-                              spreadRadius: 3,
+              child: Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 28),
+                child: AnimatedBuilder(
+                  animation: _controller,
+                  builder: (context, child) {
+                    return Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        // Embossed Double-Ring Gold Halo + Circular Emblem Seal
+                        Container(
+                          width: 222,
+                          height: 222,
+                          padding: const EdgeInsets.all(7),
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.goldWarm.withOpacity(0.45),
+                              width: 1.5,
                             ),
-                            BoxShadow(
-                              color: Colors.black.withOpacity(0.35),
-                              blurRadius: 16,
-                              offset: const Offset(0, 8),
-                            ),
-                          ],
-                        ),
-                        child: ClipOval(
-                          child: Stack(
-                            fit: StackFit.expand,
-                            alignment: Alignment.center,
-                            children: [
-                              // 1. Procedural Custom Painting Animation
-                              CustomPaint(
-                                size: const Size(250, 250),
-                                painter: KheyrukumLogoPainter(
-                                  crescentProgress: _crescentAnim.value,
-                                  pillarsProgress: _pillarsAnim.value,
-                                  bulbsProgress: _bulbsAnim.value,
-                                  crownProgress: _crownAnim.value,
-                                  pulseScale: _pulseAnim.value,
-                                ),
+                            boxShadow: [
+                              BoxShadow(
+                                color: AppColors.goldWarm.withOpacity(0.22),
+                                blurRadius: 36,
+                                spreadRadius: 4,
                               ),
-
-                              // 2. High-Res Logo Overlay Fade-In filling the entire circular disc
-                              FadeTransition(
-                                opacity: _assetFadeAnim,
-                                child: Transform.scale(
-                                  scale: _pulseAnim.value,
-                                  child: Image.asset(
-                                    'assets/images/logo.png',
-                                    width: 250,
-                                    height: 250,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return const SizedBox.shrink();
-                                    },
-                                  ),
-                                ),
+                              BoxShadow(
+                                color: Colors.black.withOpacity(0.35),
+                                blurRadius: 24,
+                                offset: const Offset(0, 12),
                               ),
                             ],
                           ),
+                          child: Container(
+                            width: 200,
+                            height: 200,
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Colors.white,
+                              border: Border.all(
+                                color: AppColors.goldWarm,
+                                width: 2.5,
+                              ),
+                            ),
+                            child: ClipOval(
+                              child: Stack(
+                                fit: StackFit.expand,
+                                alignment: Alignment.center,
+                                children: [
+                                  CustomPaint(
+                                    size: const Size(200, 200),
+                                    painter: KheyrukumLogoPainter(
+                                      crescentProgress: _crescentAnim.value,
+                                      pillarsProgress: _pillarsAnim.value,
+                                      bulbsProgress: _bulbsAnim.value,
+                                      crownProgress: _crownAnim.value,
+                                      pulseScale: _pulseAnim.value,
+                                    ),
+                                  ),
+                                  FadeTransition(
+                                    opacity: _assetFadeAnim,
+                                    child: Transform.scale(
+                                      scale: _pulseAnim.value,
+                                      child: Padding(
+                                        padding: const EdgeInsets.all(8),
+                                        child: Image.asset(
+                                          'assets/images/logo.png',
+                                          fit: BoxFit.contain,
+                                          errorBuilder: (_, __, ___) =>
+                                              const SizedBox.shrink(),
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
 
-                      const SizedBox(height: 24),
+                        const SizedBox(height: 30),
 
-                      // Text Reveal: Amharic, English Brand, and Hadith
-                      FadeTransition(
-                        opacity: _textFadeAnim,
-                        child: SlideTransition(
-                          position: _textSlideAnim,
-                          child: Column(
-                            children: [
-                              // Amharic Title
-                              const Text(
-                                'ኸይሩኩም ኢስላማዊ ማዕከል',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  fontSize: 22,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFF00B4B0), // Vivid Teal
-                                  letterSpacing: 0.5,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              // English Brand Title
-                              const Text(
-                                'Kheyrukum Islamic Center',
-                                style: TextStyle(
-                                  fontSize: 20,
-                                  fontWeight: FontWeight.bold,
-                                  color: Color(0xFFF5A623), // Golden Amber
-                                  letterSpacing: 0.2,
-                                  fontFamily: 'Poppins',
-                                ),
-                              ),
-                              const SizedBox(height: 12),
-
-                              // Quranic Hadith Tagline
-                              Padding(
-                                padding: const EdgeInsets.symmetric(horizontal: 24),
-                                child: Text(
-                                  'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
+                        FadeTransition(
+                          opacity: _textFadeAnim,
+                          child: SlideTransition(
+                            position: _textSlideAnim,
+                            child: Column(
+                              children: [
+                                const Text(
+                                  'ኸይሩኩም ኢስላማዊ ማዕከል',
                                   textAlign: TextAlign.center,
-                                  textDirection: TextDirection.rtl,
                                   style: TextStyle(
-                                    fontSize: 16,
-                                    fontWeight: FontWeight.w500,
-                                    color: Colors.white.withOpacity(0.85),
+                                    fontSize: 21,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                     letterSpacing: 0.3,
                                   ),
                                 ),
-                              ),
-                              const SizedBox(height: 6),
-
-                              // Subtitle
-                              Text(
-                                'Parent & Teacher Quranic Collaborative Portal',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w400,
-                                  color: AppColors.textSecondary.withOpacity(0.7),
+                                const SizedBox(height: 6),
+                                Text(
+                                  'Kheyrukum Islamic Center',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.w800,
+                                    color: AppColors.goldWarm,
+                                    letterSpacing: -0.2,
+                                  ),
                                 ),
-                              ),
-                            ],
+                                const SizedBox(height: 16),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 18,
+                                    vertical: 10,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.08),
+                                    borderRadius: BorderRadius.circular(16),
+                                    border: Border.all(
+                                      color: Colors.white.withOpacity(0.14),
+                                    ),
+                                  ),
+                                  child: Text(
+                                    'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
+                                    textAlign: TextAlign.center,
+                                    textDirection: TextDirection.rtl,
+                                    style: GoogleFonts.amiri(
+                                      fontSize: 19,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white.withOpacity(0.95),
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  'Parent & Teacher Quranic Collaborative Portal',
+                                  textAlign: TextAlign.center,
+                                  style: GoogleFonts.plusJakartaSans(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w500,
+                                    color: Colors.white.withOpacity(0.75),
+                                    letterSpacing: 0.2,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ),
-                    ],
-                  );
-                },
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
           ),

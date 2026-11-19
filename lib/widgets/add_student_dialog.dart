@@ -2,12 +2,13 @@ import 'package:flutter/material.dart';
 import '../core/services/halaqah_service.dart';
 import '../core/services/student_service.dart';
 import '../core/services/supabase_service.dart';
+import '../core/theme/app_colors.dart';
 import '../screens/admin/halaqah_management_sheet.dart';
 
-/// Redesigned Modern, Spacious Dialog for Enrolling Students
-/// - Clean step-by-step layout with lime accents
-/// - Allows selecting existing parent OR instantly entering parent details
-/// - Immediately saves student to both local persistent storage and Supabase cloud
+/// Flagship Dialog for Enrolling Students:
+/// - Clean step-by-step layout in Deep Pine & Warm Gold
+/// - Allows selecting an existing parent OR entering parent details (auto-generating an invite code)
+/// - Immediately persists to Supabase Cloud and local offline cache
 class AddStudentDialog {
   static void show(BuildContext context) {
     final nameCtrl = TextEditingController();
@@ -17,29 +18,24 @@ class AddStudentDialog {
 
     final halaqahs = HalaqahService.instance.halaqahs;
     String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
-    String selectedHalaqahName = halaqahs.isNotEmpty ? halaqahs.first.name : '';
+    String selectedHalaqahName =
+        halaqahs.isNotEmpty ? halaqahs.first.name : '';
 
     final registeredParents = StudentService.instance.getRegisteredParents();
-    String? selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
+    String? selectedParentId =
+        registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
     bool createNewParent = registeredParents.isEmpty;
 
     int juz = 30;
     int surah = 1;
-    int ayah = 1;
+    const int ayah = 1;
     bool isSaving = false;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
-          final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
-          final fieldBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
-          final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-          final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-          final subtleBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-          const limeGreen = Color(0xFFC9F24A);
-
+          final p = AppColors.of(ctx);
           final currentHalaqahs = HalaqahService.instance.halaqahs;
           final currentParents = StudentService.instance.getRegisteredParents();
 
@@ -50,9 +46,13 @@ class AddStudentDialog {
               !isSaving;
 
           return Dialog(
-            backgroundColor: cardBg,
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-            insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
+            backgroundColor: p.surface,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(24),
+              side: BorderSide(color: p.border),
+            ),
+            insetPadding:
+                const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
             child: ConstrainedBox(
               constraints: const BoxConstraints(maxWidth: 500),
               child: SingleChildScrollView(
@@ -61,19 +61,22 @@ class AddStudentDialog {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Header
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Row(
                           children: [
                             Container(
-                              padding: const EdgeInsets.all(8),
+                              padding: const EdgeInsets.all(9),
                               decoration: BoxDecoration(
-                                color: limeGreen.withOpacity(0.15),
+                                color: p.primary.withOpacity(0.12),
                                 borderRadius: BorderRadius.circular(12),
                               ),
-                              child: const Icon(Icons.person_add_rounded, color: limeGreen, size: 22),
+                              child: Icon(
+                                Icons.person_add_rounded,
+                                color: p.primary,
+                                size: 22,
+                              ),
                             ),
                             const SizedBox(width: 12),
                             Column(
@@ -83,13 +86,16 @@ class AddStudentDialog {
                                   'Enroll New Student',
                                   style: TextStyle(
                                     fontSize: 17,
-                                    fontWeight: FontWeight.bold,
-                                    color: textColor,
+                                    fontWeight: FontWeight.w700,
+                                    color: p.ink,
                                   ),
                                 ),
                                 Text(
                                   'Assign to study circle & link parent',
-                                  style: TextStyle(fontSize: 11.5, color: subtextColor),
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: p.inkSecondary,
+                                  ),
                                 ),
                               ],
                             ),
@@ -97,66 +103,70 @@ class AddStudentDialog {
                         ),
                         IconButton(
                           onPressed: () => Navigator.of(ctx).pop(),
-                          icon: Icon(Icons.close_rounded, size: 20, color: subtextColor),
-                          padding: EdgeInsets.zero,
-                          constraints: const BoxConstraints(),
+                          icon: Icon(Icons.close_rounded,
+                              size: 20, color: p.inkSecondary),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 18),
 
-                    // Student Name
                     Text(
                       'STUDENT FULL NAME *',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.inkMuted,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     TextField(
                       controller: nameCtrl,
                       onChanged: (_) => setDialogState(() {}),
-                      style: TextStyle(fontSize: 14, color: textColor),
-                      decoration: InputDecoration(
+                      style: TextStyle(fontSize: 14, color: p.ink),
+                      decoration: const InputDecoration(
                         hintText: 'e.g. Abdur-Rahman Muhammed',
-                        prefixIcon: const Icon(Icons.face_rounded, size: 20),
-                        filled: true,
-                        fillColor: fieldBg,
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                        enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                        focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: limeGreen, width: 1.5)),
+                        prefixIcon: Icon(Icons.face_rounded, size: 20),
                       ),
                     ),
-
                     const SizedBox(height: 16),
 
-                    // Halaqah Selection
                     Text(
                       'ASSIGNED STUDY CIRCLE (HALAQAH) *',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.inkMuted,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     if (currentHalaqahs.isEmpty)
                       Container(
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
-                          color: limeGreen.withOpacity(0.1),
+                          color: p.primary.withOpacity(0.10),
                           borderRadius: BorderRadius.circular(14),
-                          border: Border.all(color: limeGreen.withOpacity(0.3)),
+                          border:
+                              Border.all(color: p.primary.withOpacity(0.28)),
                         ),
                         child: Row(
                           children: [
-                            const Icon(Icons.info_outline_rounded, size: 18, color: limeGreen),
+                            Icon(Icons.info_outline_rounded,
+                                size: 18, color: p.primary),
                             const SizedBox(width: 8),
                             Expanded(
-                              child: Text('No halaqahs yet. Create one first.', style: TextStyle(fontSize: 12, color: textColor)),
+                              child: Text(
+                                'No halaqahs yet. Create one first.',
+                                style: TextStyle(fontSize: 12, color: p.ink),
+                              ),
                             ),
                             TextButton(
                               onPressed: () {
                                 Navigator.of(ctx).pop();
                                 HalaqahManagementSheet.show(context);
                               },
-                              child: const Text('Create', style: TextStyle(color: limeGreen, fontWeight: FontWeight.bold)),
+                              child: const Text('Create'),
                             ),
                           ],
                         ),
@@ -164,47 +174,59 @@ class AddStudentDialog {
                     else
                       DropdownButtonFormField<String>(
                         value: selectedHalaqahId,
-                        dropdownColor: cardBg,
-                        style: TextStyle(fontSize: 13.5, color: textColor),
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.menu_book_rounded, size: 20),
-                          filled: true,
-                          fillColor: fieldBg,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                        dropdownColor: p.surface,
+                        style: TextStyle(fontSize: 13.5, color: p.ink),
+                        decoration: const InputDecoration(
+                          prefixIcon: Icon(Icons.menu_book_rounded, size: 20),
                         ),
                         items: currentHalaqahs.map((h) {
                           return DropdownMenuItem(
                             value: h.id,
-                            child: Text('${h.name} (${h.teacherName})', overflow: TextOverflow.ellipsis),
+                            child: Text(
+                              '${h.name} (${h.teacherName})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
                           setDialogState(() {
                             selectedHalaqahId = val;
-                            final match = currentHalaqahs.firstWhere((h) => h.id == val, orElse: () => currentHalaqahs.first);
+                            final match = currentHalaqahs.firstWhere(
+                              (h) => h.id == val,
+                              orElse: () => currentHalaqahs.first,
+                            );
                             selectedHalaqahName = match.name;
                           });
                         },
                       ),
-
                     const SizedBox(height: 16),
 
-                    // Parent Selection / Creation
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
                         Text(
                           'PARENT LINKAGE *',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: p.inkMuted,
+                            letterSpacing: 0.6,
+                          ),
                         ),
                         if (currentParents.isNotEmpty)
                           InkWell(
-                            onTap: () => setDialogState(() => createNewParent = !createNewParent),
+                            onTap: () => setDialogState(
+                              () => createNewParent = !createNewParent,
+                            ),
                             child: Text(
-                              createNewParent ? 'Select Existing Parent' : '+ Enter Parent Info',
-                              style: const TextStyle(fontSize: 11, color: limeGreen, fontWeight: FontWeight.bold),
+                              createNewParent
+                                  ? 'Select Existing Parent'
+                                  : '+ Enter Parent Info',
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: p.primary,
+                                fontWeight: FontWeight.w700,
+                              ),
                             ),
                           ),
                       ],
@@ -214,20 +236,19 @@ class AddStudentDialog {
                     if (!createNewParent && currentParents.isNotEmpty)
                       DropdownButtonFormField<String>(
                         value: selectedParentId,
-                        dropdownColor: cardBg,
-                        style: TextStyle(fontSize: 13.5, color: textColor),
-                        decoration: InputDecoration(
-                          prefixIcon: const Icon(Icons.family_restroom_rounded, size: 20),
-                          filled: true,
-                          fillColor: fieldBg,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                        dropdownColor: p.surface,
+                        style: TextStyle(fontSize: 13.5, color: p.ink),
+                        decoration: const InputDecoration(
+                          prefixIcon:
+                              Icon(Icons.family_restroom_rounded, size: 20),
                         ),
-                        items: currentParents.map((p) {
+                        items: currentParents.map((parent) {
                           return DropdownMenuItem(
-                            value: p['id'],
-                            child: Text('${p['name']} (${p['phone'] ?? p['email'] ?? 'Parent'})', overflow: TextOverflow.ellipsis),
+                            value: parent['id'],
+                            child: Text(
+                              '${parent['name']} (${parent['phone'] ?? parent['email'] ?? 'Parent'})',
+                              overflow: TextOverflow.ellipsis,
+                            ),
                           );
                         }).toList(),
                         onChanged: (val) {
@@ -238,40 +259,35 @@ class AddStudentDialog {
                       TextField(
                         controller: parentNameCtrl,
                         onChanged: (_) => setDialogState(() {}),
-                        style: TextStyle(fontSize: 13.5, color: textColor),
-                        decoration: InputDecoration(
-                          hintText: 'Parent Full Name (e.g. Abu Abdur-Rahman)',
-                          prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
-                          filled: true,
-                          fillColor: fieldBg,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                        style: TextStyle(fontSize: 13.5, color: p.ink),
+                        decoration: const InputDecoration(
+                          hintText:
+                              'Parent Full Name (e.g. Abu Abdur-Rahman)',
+                          prefixIcon:
+                              Icon(Icons.person_outline_rounded, size: 20),
                         ),
                       ),
                       const SizedBox(height: 8),
                       TextField(
                         controller: parentPhoneCtrl,
                         keyboardType: TextInputType.phone,
-                        style: TextStyle(fontSize: 13.5, color: textColor),
-                        decoration: InputDecoration(
+                        style: TextStyle(fontSize: 13.5, color: p.ink),
+                        decoration: const InputDecoration(
                           hintText: 'Parent Phone Number',
-                          prefixIcon: const Icon(Icons.phone_outlined, size: 20),
-                          filled: true,
-                          fillColor: fieldBg,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                          border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                          enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
+                          prefixIcon: Icon(Icons.phone_outlined, size: 20),
                         ),
                       ),
                     ],
-
                     const SizedBox(height: 16),
 
-                    // Memorization Progress
                     Text(
                       'STARTING MEMORIZATION MILESTONE',
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.inkMuted,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                     const SizedBox(height: 6),
                     Row(
@@ -280,52 +296,35 @@ class AddStudentDialog {
                           child: TextFormField(
                             initialValue: '$juz',
                             keyboardType: TextInputType.number,
-                            style: TextStyle(fontSize: 13, color: textColor),
-                            decoration: InputDecoration(
-                              labelText: 'Juz (1-30)',
-                              filled: true,
-                              fillColor: fieldBg,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                            ),
+                            style: TextStyle(fontSize: 13.5, color: p.ink),
+                            decoration:
+                                const InputDecoration(labelText: 'Juz (1-30)'),
                             onChanged: (v) => juz = int.tryParse(v) ?? 30,
                           ),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 10),
                         Expanded(
                           child: TextFormField(
                             initialValue: '$surah',
                             keyboardType: TextInputType.number,
-                            style: TextStyle(fontSize: 13, color: textColor),
-                            decoration: InputDecoration(
-                              labelText: 'Surah (1-114)',
-                              filled: true,
-                              fillColor: fieldBg,
-                              contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                              border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                              enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: subtleBorder)),
-                            ),
+                            style: TextStyle(fontSize: 13.5, color: p.ink),
+                            decoration: const InputDecoration(
+                                labelText: 'Surah (1-114)'),
                             onChanged: (v) => surah = int.tryParse(v) ?? 1,
                           ),
                         ),
                       ],
                     ),
-
                     const SizedBox(height: 22),
 
-                    // Buttons
                     Row(
                       children: [
                         Expanded(
                           child: OutlinedButton(
-                            onPressed: isSaving ? null : () => Navigator.of(ctx).pop(),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              side: BorderSide(color: subtleBorder),
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
-                            child: Text('Cancel', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                            onPressed: isSaving
+                                ? null
+                                : () => Navigator.of(ctx).pop(),
+                            child: const Text('Cancel'),
                           ),
                         ),
                         const SizedBox(width: 12),
@@ -337,12 +336,18 @@ class AddStudentDialog {
                                     setDialogState(() => isSaving = true);
                                     try {
                                       String finalParentId = '';
-                                      String finalParentName = parentNameCtrl.text.trim();
-                                      String finalParentPhone = parentPhoneCtrl.text.trim();
+                                      String finalParentName =
+                                          parentNameCtrl.text.trim();
+                                      String finalParentPhone =
+                                          parentPhoneCtrl.text.trim();
 
-                                      if (!createNewParent && currentParents.isNotEmpty && selectedParentId != null) {
-                                        final found = currentParents.firstWhere(
-                                          (p) => p['id'] == selectedParentId,
+                                      if (!createNewParent &&
+                                          currentParents.isNotEmpty &&
+                                          selectedParentId != null) {
+                                        final found =
+                                            currentParents.firstWhere(
+                                          (parent) =>
+                                              parent['id'] == selectedParentId,
                                           orElse: () => currentParents.first,
                                         );
                                         finalParentId = found['id'] ?? '';
@@ -350,52 +355,72 @@ class AddStudentDialog {
                                         finalParentPhone = found['phone'] ?? '';
                                       }
 
-                                      final student = await StudentService.instance.addStudent(
+                                      final student = await StudentService
+                                          .instance
+                                          .addStudent(
                                         fullName: nameCtrl.text.trim(),
                                         halaqahName: selectedHalaqahName,
                                         halaqahId: selectedHalaqahId,
                                         parentId: finalParentId,
-                                        parentName: finalParentName.isNotEmpty ? finalParentName : 'Parent',
+                                        parentName: finalParentName.isNotEmpty
+                                            ? finalParentName
+                                            : 'Parent',
                                         parentPhone: finalParentPhone,
-                                        parentEmail: parentEmailCtrl.text.trim(),
+                                        parentEmail:
+                                            parentEmailCtrl.text.trim(),
                                         currentJuz: juz,
                                         currentSurah: surah,
                                         currentAyah: ayah,
                                       );
 
-                                      // If a new parent was entered, generate an invitation code linked to this student
-                                      if (createNewParent && student.id.isNotEmpty && !student.id.startsWith('stu-')) {
+                                      if (createNewParent &&
+                                          student.id.isNotEmpty &&
+                                          !student.id.startsWith('stu-')) {
                                         try {
-                                          await SupabaseService.instance.generateInviteCode(
+                                          await SupabaseService.instance
+                                              .generateInviteCode(
                                             role: 'parent',
-                                            targetEmail: parentEmailCtrl.text.trim().isNotEmpty ? parentEmailCtrl.text.trim() : null,
+                                            targetEmail: parentEmailCtrl.text
+                                                    .trim()
+                                                    .isNotEmpty
+                                                ? parentEmailCtrl.text.trim()
+                                                : null,
                                             linkedStudentId: student.id,
                                           );
                                         } catch (e) {
-                                          debugPrint('[AddStudentDialog] Invite code creation notice: $e');
+                                          debugPrint(
+                                            '[AddStudentDialog] Invite code notice: $e',
+                                          );
                                         }
                                       }
 
                                       if (ctx.mounted) {
                                         Navigator.of(ctx).pop();
-                                        final isOfflineOnly = student.id.startsWith('stu-');
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        final isOfflineOnly =
+                                            student.id.startsWith('stu-');
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            content: Text(isOfflineOnly
-                                                ? 'Student "${student.fullName}" saved locally (will sync to cloud when connected) 🎓'
-                                                : 'Student "${student.fullName}" enrolled & saved successfully! 🎓'),
-                                            backgroundColor: isOfflineOnly ? const Color(0xFFF59E0B) : limeGreen,
-                                            behavior: SnackBarBehavior.floating,
+                                            content: Text(
+                                              isOfflineOnly
+                                                  ? 'Student "${student.fullName}" saved locally (will sync when connected).'
+                                                  : 'Student "${student.fullName}" enrolled successfully.',
+                                            ),
+                                            backgroundColor: isOfflineOnly
+                                                ? p.warning
+                                                : p.success,
                                           ),
                                         );
                                       }
                                     } catch (e) {
                                       if (ctx.mounted) {
-                                        ScaffoldMessenger.of(context).showSnackBar(
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
                                           SnackBar(
-                                            content: Text('Enrollment failed: ${SupabaseService.cleanErrorMessage(e)}'),
-                                            backgroundColor: const Color(0xFFEF4444),
-                                            behavior: SnackBarBehavior.floating,
+                                            content: Text(
+                                              'Enrollment failed: ${SupabaseService.cleanErrorMessage(e)}',
+                                            ),
+                                            backgroundColor: p.danger,
                                           ),
                                         );
                                       }
@@ -406,16 +431,16 @@ class AddStudentDialog {
                                     }
                                   }
                                 : null,
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: limeGreen,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(vertical: 12),
-                              elevation: 0,
-                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                            ),
                             child: isSaving
-                                ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                                : const Text('Enroll & Save Student', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13.5)),
+                                ? const SizedBox(
+                                    width: 16,
+                                    height: 16,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                      color: Colors.white,
+                                    ),
+                                  )
+                                : const Text('Enroll & Save Student'),
                           ),
                         ),
                       ],

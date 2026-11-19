@@ -489,6 +489,31 @@ class StudentService {
     return newStudent;
   }
 
+  /// Admin Action: Permanently remove a student record
+  Future<bool> deleteStudent(String studentId) async {
+    final index = _students.indexWhere((s) => s.id == studentId);
+    if (index == -1) return false;
+    final removed = _students.removeAt(index);
+    _studentsController.add(List.from(_students));
+
+    final jsonList = _students.map((s) => s.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_students', jsonList);
+
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(studentId)) {
+      try {
+        await client.from('students').delete().eq('id', studentId);
+        return true;
+      } catch (e) {
+        debugPrint('[StudentService] Cloud delete student error: $e');
+        _students.insert(index, removed);
+        _studentsController.add(List.from(_students));
+        return false;
+      }
+    }
+    return true;
+  }
+
   /// Teacher Action: Record or update daily attendance for a class student
   /// Emits immediate daily notification to the linked parent!
   Future<AttendanceRecord> recordDailyAttendance({

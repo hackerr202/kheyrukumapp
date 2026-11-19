@@ -1,25 +1,25 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/attendance.dart';
-import '../../../core/models/halaqah.dart';
 import '../../../core/models/student.dart';
 import '../../../core/models/weekly_report.dart';
 import '../../../core/services/absence_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/messaging_service.dart';
+import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/invite_code_dialog.dart';
+import '../../../widgets/pro_ui_kit.dart';
 import '../../admin/halaqah_management_sheet.dart';
 import '../../messages/chat_screen.dart';
-import '../../payments/payments_screen.dart';
 
-/// Students Tab with 3 completely distinct role interfaces:
-/// 1. Admin: Comprehensive center roster across halaqahs, student enrollment with parent linking.
-/// 2. Teacher: Assigned class roster, daily attendance marking with 1-tap status selector & remarks,
-///             direct parent messaging for class students, and weekly Quran reports.
-/// 3. Parent: Enrolled children multi-child switcher, attendance history, weekly reports, and Ustaz messaging.
+/// Students Tab with 3 role-specific interfaces:
+/// 1. Admin: Center roster across circles, Halaqah filters, enrollment with parent linking, removal.
+/// 2. Teacher: Assigned circle roster, 1-tap attendance marking, excuse approvals, parent chat, weekly reports.
+/// 3. Parent: Multi-child switcher, Juz progress tracker, attendance history, excuse submission, weekly reports.
 class StudentsTab extends StatefulWidget {
   const StudentsTab({super.key});
 
@@ -33,13 +33,18 @@ class _StudentsTabState extends State<StudentsTab> {
   String _selectedHalaqahFilter = 'All';
   DateTime _teacherSelectedDate = DateTime.now();
 
+  Future<void> _handleRefresh() async {
+    await Future.wait([
+      HalaqahService.instance.fetchHalaqahs(),
+      StudentService.instance.refreshAll(),
+      AbsenceService.instance.refreshAll(),
+      PaymentService.instance.refresh(),
+    ]);
+  }
+
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    final p = AppColors.of(context);
 
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
@@ -51,41 +56,16 @@ class _StudentsTabState extends State<StudentsTab> {
             final students = snapshot.data ?? [];
 
             if (currentRole == 'teacher') {
-              return _buildTeacherView(
-                context: context,
-                allStudents: students,
-                isDark: isDark,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                cardBg: cardBg,
-                borderColor: borderColor,
-              );
+              return _buildTeacherView(context, p);
             } else if (currentRole == 'parent') {
               final children = StudentService.instance.getStudentsForParent(
                 AuthSessionService.instance.userId,
                 parentEmail: AuthSessionService.instance.userEmail,
               );
-              return _buildParentView(
-                context: context,
-                children: children,
-                isDark: isDark,
-                textColor: textColor,
-                subtextColor: subtextColor,
-                cardBg: cardBg,
-                borderColor: borderColor,
-              );
+              return _buildParentView(context, children, p);
             }
 
-            // ADMIN VIEW
-            return _buildAdminView(
-              context: context,
-              allStudents: students,
-              isDark: isDark,
-              textColor: textColor,
-              subtextColor: subtextColor,
-              cardBg: cardBg,
-              borderColor: borderColor,
-            );
+            return _buildAdminView(context, students, p);
           },
         );
       },
@@ -93,22 +73,16 @@ class _StudentsTabState extends State<StudentsTab> {
   }
 
   // ===========================================================================
-  // 1. TEACHER VIEW: Assigned Class Roster, Daily Attendance, & Parent Chat
+  // 1. TEACHER VIEW: Assigned Class Roster, Daily Attendance & Parent Chat
   // ===========================================================================
-  Widget _buildTeacherView({
-    required BuildContext context,
-    required List<Student> allStudents,
-    required bool isDark,
-    required Color textColor,
-    required Color subtextColor,
-    required Color cardBg,
-    required Color borderColor,
-  }) {
+  Widget _buildTeacherView(BuildContext context, AppPalette p) {
     final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
     final assignedHalaqahId = AuthSessionService.instance.assignedHalaqahId;
-    final classStudents = StudentService.instance.getStudentsForHalaqah(assignedHalaqah, halaqahId: assignedHalaqahId);
+    final classStudents = StudentService.instance.getStudentsForHalaqah(
+      assignedHalaqah,
+      halaqahId: assignedHalaqahId,
+    );
 
-    // Calculate attendance metrics for selected date
     int presentCount = 0;
     int lateCount = 0;
     int absentCount = 0;
@@ -116,7 +90,10 @@ class _StudentsTabState extends State<StudentsTab> {
     int unmarkedCount = 0;
 
     for (final s in classStudents) {
-      final att = StudentService.instance.getTodayAttendanceForStudent(s.id, date: _teacherSelectedDate);
+      final att = StudentService.instance.getTodayAttendanceForStudent(
+        s.id,
+        date: _teacherSelectedDate,
+      );
       if (att == null) {
         unmarkedCount++;
       } else if (att.status == 'present') {
@@ -133,650 +110,639 @@ class _StudentsTabState extends State<StudentsTab> {
     final isToday = _teacherSelectedDate.toIso8601String().substring(0, 10) ==
         DateTime.now().toIso8601String().substring(0, 10);
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+    return RefreshIndicator(
+      color: p.primary,
+      onRefresh: _handleRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
         children: [
-          // Class Header Banner
-          Container(
-            padding: const EdgeInsets.all(18),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(color: AppColors.accentTeal.withOpacity(0.3)),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(isDark ? 0.2 : 0.05),
-                  blurRadius: 10,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-            ),
+          // Hero Class Header
+          ProHeroCard(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(7),
-                          decoration: BoxDecoration(
-                            color: AppColors.accentTeal.withOpacity(0.15),
-                            borderRadius: BorderRadius.circular(10),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'ASSIGNED CLASS',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
+                              color: AppColors.goldWarm,
+                            ),
                           ),
-                          child: const Icon(Icons.school_rounded, color: AppColors.accentTeal, size: 20),
-                        ),
-                        const SizedBox(width: 10),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              'Assigned Class',
-                              style: TextStyle(fontSize: 11, color: subtextColor, fontWeight: FontWeight.w600),
+                          const SizedBox(height: 3),
+                          Text(
+                            assignedHalaqah,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
-                            Text(
-                              assignedHalaqah,
-                              style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor),
-                            ),
-                          ],
-                        ),
-                      ],
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ],
+                      ),
                     ),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
                       decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(8),
+                        color: Colors.white.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
                         '${classStudents.length} Students',
                         style: const TextStyle(
-                          color: AppColors.accentTeal,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 11,
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 11.5,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 14),
-                // Date Switcher Row
+                const SizedBox(height: 16),
+                // Date Picker + Mark All Present
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     InkWell(
                       onTap: () async {
                         final picked = await showDatePicker(
                           context: context,
                           initialDate: _teacherSelectedDate,
-                          firstDate: DateTime.now().subtract(const Duration(days: 90)),
-                          lastDate: DateTime.now().add(const Duration(days: 7)),
+                          firstDate: DateTime.now()
+                              .subtract(const Duration(days: 90)),
+                          lastDate:
+                              DateTime.now().add(const Duration(days: 7)),
                         );
                         if (picked != null && mounted) {
                           setState(() => _teacherSelectedDate = picked);
                         }
                       },
-                      borderRadius: BorderRadius.circular(10),
+                      borderRadius: BorderRadius.circular(12),
                       child: Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 11,
+                          vertical: 8,
+                        ),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                          borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: borderColor),
+                          color: Colors.white.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: Colors.white.withOpacity(0.22),
+                          ),
                         ),
                         child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            const Icon(Icons.calendar_today_rounded, size: 14, color: AppColors.accentTeal),
+                            const Icon(
+                              Icons.calendar_today_rounded,
+                              size: 14,
+                              color: AppColors.goldWarm,
+                            ),
                             const SizedBox(width: 6),
                             Text(
                               isToday
                                   ? 'Today (${_teacherSelectedDate.month}/${_teacherSelectedDate.day})'
                                   : '${_teacherSelectedDate.year}-${_teacherSelectedDate.month.toString().padLeft(2, '0')}-${_teacherSelectedDate.day.toString().padLeft(2, '0')}',
-                              style: TextStyle(
+                              style: const TextStyle(
                                 fontSize: 12,
-                                fontWeight: FontWeight.bold,
-                                color: textColor,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
                               ),
                             ),
-                            const SizedBox(width: 4),
-                            Icon(Icons.arrow_drop_down_rounded, size: 18, color: subtextColor),
+                            const SizedBox(width: 2),
+                            Icon(
+                              Icons.arrow_drop_down_rounded,
+                              size: 18,
+                              color: Colors.white.withOpacity(0.8),
+                            ),
                           ],
                         ),
                       ),
                     ),
-                    // "Mark All Present" Action
+                    const Spacer(),
                     ElevatedButton.icon(
-                      onPressed: () async {
-                        await StudentService.instance.markHalaqahAllPresent(
-                          halaqahName: assignedHalaqah,
-                          halaqahId: assignedHalaqahId,
-                          markedBy: AuthSessionService.instance.userName,
-                          date: _teacherSelectedDate,
-                        );
-                        if (!mounted) return;
-                        setState(() {});
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text('All class students marked Present ✅. Parents notified!'),
-                              backgroundColor: AppColors.accentEmerald,
-                              behavior: SnackBarBehavior.floating,
-                            ),
-                          );
-                        }
-                      },
+                      onPressed: classStudents.isEmpty
+                          ? null
+                          : () async {
+                              await StudentService.instance
+                                  .markHalaqahAllPresent(
+                                halaqahName: assignedHalaqah,
+                                halaqahId: assignedHalaqahId,
+                                markedBy: AuthSessionService.instance.userName,
+                                date: _teacherSelectedDate,
+                              );
+                              if (!mounted) return;
+                              setState(() {});
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: const Text(
+                                      'All class students marked Present. Parents notified.',
+                                    ),
+                                    backgroundColor: p.success,
+                                  ),
+                                );
+                              }
+                            },
                       icon: const Icon(Icons.done_all_rounded, size: 15),
-                      label: const Text('Mark All Present', style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        'All Present',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                       style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.accentEmerald,
-                        foregroundColor: Colors.black,
-                        elevation: 1,
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                        backgroundColor: AppColors.goldWarm,
+                        foregroundColor: const Color(0xFF102322),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                // Attendance Summary Counter Bar
+                // 5-Column Glass Attendance Summary
                 Row(
                   children: [
-                    _buildAttCounterChip('Present', '$presentCount', AppColors.accentEmerald, isDark),
+                    _buildAttCounterChip('Present', '$presentCount',
+                        const Color(0xFF4ADE80)),
                     const SizedBox(width: 6),
-                    _buildAttCounterChip('Late', '$lateCount', const Color(0xFFFFA000), isDark),
+                    _buildAttCounterChip(
+                        'Late', '$lateCount', AppColors.goldWarm),
                     const SizedBox(width: 6),
-                    _buildAttCounterChip('Absent', '$absentCount', const Color(0xFFEF4444), isDark),
+                    _buildAttCounterChip(
+                        'Absent', '$absentCount', const Color(0xFFFCA5A5)),
                     const SizedBox(width: 6),
-                    _buildAttCounterChip('Excused', '$excusedCount', const Color(0xFF8B5CF6), isDark),
+                    _buildAttCounterChip(
+                        'Excused', '$excusedCount', const Color(0xFFC4B5FD)),
                     const SizedBox(width: 6),
-                    _buildAttCounterChip('Unmarked', '$unmarkedCount', Colors.grey, isDark),
+                    _buildAttCounterChip(
+                        'Open', '$unmarkedCount', Colors.white70),
                   ],
                 ),
               ],
             ),
           ),
 
-          const SizedBox(height: 18),
+          const SizedBox(height: 20),
 
-          // PENDING ABSENCE REQUESTS BANNER (From Parents)
+          // Pending Absence Requests
           StreamBuilder<List<AbsenceRequest>>(
             stream: AbsenceService.instance.requestsStream,
             initialData: AbsenceService.instance.allRequests,
             builder: (context, reqSnapshot) {
-              final pendingRequests = AbsenceService.instance.getPendingRequestsForHalaqah(
+              final pendingRequests = AbsenceService.instance
+                  .getPendingRequestsForHalaqah(
                 assignedHalaqah,
                 halaqahId: assignedHalaqahId,
               );
               if (pendingRequests.isEmpty) return const SizedBox.shrink();
 
-              return Container(
-                margin: const EdgeInsets.only(bottom: 18),
-                padding: const EdgeInsets.all(14),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF8B5CF6).withOpacity(isDark ? 0.15 : 0.08),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: const Color(0xFF8B5CF6).withOpacity(0.4)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        const Icon(Icons.mark_email_unread_rounded, size: 18, color: Color(0xFF8B5CF6)),
-                        const SizedBox(width: 8),
-                        Text(
-                          'Pending Absence Excuses (${pendingRequests.length})',
-                          style: const TextStyle(fontSize: 13.5, fontWeight: FontWeight.bold, color: Color(0xFF8B5CF6)),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    ...pendingRequests.map((req) => Container(
-                          margin: const EdgeInsets.only(bottom: 8),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: cardBg,
-                            borderRadius: BorderRadius.circular(12),
-                            border: Border.all(color: borderColor),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                children: [
-                                  Text(
-                                    req.studentName,
-                                    style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
-                                  ),
-                                  Text(
-                                    req.date.toIso8601String().substring(0, 10),
-                                    style: TextStyle(fontSize: 11, color: subtextColor),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                'Reason: ${req.reasonLabel}',
-                                style: const TextStyle(fontSize: 11.5, fontWeight: FontWeight.w600, color: Color(0xFF8B5CF6)),
-                              ),
-                              if (req.notes.isNotEmpty) ...[
-                                const SizedBox(height: 2),
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  ProSectionHeader(
+                    title:
+                        'Pending Absence Excuses (${pendingRequests.length})',
+                    subtitle: 'Submitted by parents for review',
+                  ),
+                  const SizedBox(height: 10),
+                  ...pendingRequests.map(
+                    (req) => Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: ProCard(
+                        accentStripeColor: p.excused,
+                        borderColor: p.excused.withOpacity(0.35),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                              children: [
                                 Text(
-                                  'Parent Note: "${req.notes}"',
-                                  style: TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: subtextColor),
+                                  req.studentName,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 14.5,
+                                    color: p.ink,
+                                  ),
+                                ),
+                                ProStatusPill(
+                                  label: req.date
+                                      .toIso8601String()
+                                      .substring(0, 10),
+                                  color: p.excused,
+                                  icon: Icons.event_rounded,
                                 ),
                               ],
-                              const SizedBox(height: 10),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: ElevatedButton.icon(
-                                      onPressed: () async {
-                                        await AbsenceService.instance.approveRequest(
-                                          req.id,
-                                          reviewedBy: AuthSessionService.instance.userName,
-                                        );
-                                        if (!mounted) return;
-                                        setState(() {});
-                                        if (context.mounted) {
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(
-                                              content: Text('Absence excuse approved for ${req.studentName}! Marked Excused in attendance.'),
-                                              backgroundColor: const Color(0xFF8B5CF6),
-                                            ),
-                                          );
-                                        }
-                                      },
-                                      icon: const Icon(Icons.check_rounded, size: 14, color: Colors.white),
-                                      label: const Text('Approve & Excuse', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: const Color(0xFF8B5CF6),
-                                        padding: const EdgeInsets.symmetric(vertical: 6),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: OutlinedButton.icon(
-                                      onPressed: () async {
-                                        await AbsenceService.instance.declineRequest(
-                                          req.id,
-                                          reviewedBy: AuthSessionService.instance.userName,
-                                        );
-                                        if (!mounted) return;
-                                        setState(() {});
-                                      },
-                                      icon: const Icon(Icons.close_rounded, size: 14, color: Color(0xFFEF4444)),
-                                      label: const Text('Decline', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Color(0xFFEF4444))),
-                                      style: OutlinedButton.styleFrom(
-                                        side: const BorderSide(color: Color(0xFFEF4444)),
-                                        padding: const EdgeInsets.symmetric(vertical: 6),
-                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                                      ),
-                                    ),
-                                  ),
-                                ],
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              'Reason: ${_cleanReasonLabel(req.reason)}',
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w600,
+                                color: p.excused,
+                              ),
+                            ),
+                            if (req.notes.isNotEmpty) ...[
+                              const SizedBox(height: 4),
+                              Text(
+                                '"${req.notes}"',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontStyle: FontStyle.italic,
+                                  color: p.inkSecondary,
+                                ),
                               ),
                             ],
-                          ),
-                        )),
-                  ],
-                ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    onPressed: () async {
+                                      await AbsenceService.instance
+                                          .approveRequest(
+                                        req.id,
+                                        reviewedBy: AuthSessionService
+                                            .instance.userName,
+                                      );
+                                      if (!mounted) return;
+                                      setState(() {});
+                                      if (context.mounted) {
+                                        ScaffoldMessenger.of(context)
+                                            .showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Absence excuse approved for ${req.studentName}.',
+                                            ),
+                                            backgroundColor: p.excused,
+                                          ),
+                                        );
+                                      }
+                                    },
+                                    icon: const Icon(Icons.check_rounded,
+                                        size: 15),
+                                    label: const Text('Approve & Excuse',
+                                        style: TextStyle(fontSize: 12)),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: p.excused,
+                                      foregroundColor: Colors.white,
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: OutlinedButton.icon(
+                                    onPressed: () async {
+                                      await AbsenceService.instance
+                                          .declineRequest(
+                                        req.id,
+                                        reviewedBy: AuthSessionService
+                                            .instance.userName,
+                                      );
+                                      if (!mounted) return;
+                                      setState(() {});
+                                    },
+                                    icon: Icon(Icons.close_rounded,
+                                        size: 15, color: p.danger),
+                                    label: Text('Decline',
+                                        style: TextStyle(
+                                            fontSize: 12, color: p.danger)),
+                                    style: OutlinedButton.styleFrom(
+                                      side: BorderSide(
+                                          color: p.danger.withOpacity(0.5)),
+                                      padding: const EdgeInsets.symmetric(
+                                          vertical: 10),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                ],
               );
             },
           ),
 
-          Text(
-            'Class Student Attendance Sheet',
-            style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+          const ProSectionHeader(
+            title: 'Class Attendance Sheet',
+            subtitle:
+                'Tap a status to record attendance; parents are notified automatically.',
           ),
-          const SizedBox(height: 4),
-          Text(
-            'Select status for each student. Linked parents receive an automated notification immediately.',
-            style: TextStyle(fontSize: 11.5, color: subtextColor),
-          ),
-
           const SizedBox(height: 12),
 
           if (classStudents.isEmpty)
-            Container(
-              padding: const EdgeInsets.all(28),
-              decoration: BoxDecoration(
-                color: cardBg,
-                borderRadius: BorderRadius.circular(18),
-                border: Border.all(color: borderColor),
-              ),
-              child: Center(
-                child: Column(
-                  children: [
-                    Icon(Icons.people_outline_rounded, size: 40, color: subtextColor),
-                    const SizedBox(height: 8),
-                    Text(
-                      'No students enrolled in your class yet.',
-                      style: TextStyle(color: textColor, fontWeight: FontWeight.bold),
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      'Students assigned to $assignedHalaqah by administration will appear here.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(color: subtextColor, fontSize: 11.5),
-                    ),
-                  ],
-                ),
-              ),
+            ProEmptyState(
+              icon: Icons.people_outline_rounded,
+              title: 'No students enrolled in this circle',
+              message:
+                  'Students assigned to $assignedHalaqah by administration will appear here.',
             )
           else
-            ...classStudents.map((s) => _buildTeacherStudentCard(
-                  student: s,
-                  isDark: isDark,
-                  cardBg: cardBg,
-                  borderColor: borderColor,
-                  textColor: textColor,
-                  subtextColor: subtextColor,
-                )),
+            ...classStudents
+                .map((s) => _buildTeacherStudentCard(context, s, p)),
         ],
       ),
     );
   }
 
-  Widget _buildAttCounterChip(String label, String count, Color color, bool isDark) {
+  Widget _buildAttCounterChip(String label, String count, Color color) {
     return Expanded(
       child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 7, horizontal: 3),
         decoration: BoxDecoration(
-          color: color.withOpacity(isDark ? 0.15 : 0.1),
-          borderRadius: BorderRadius.circular(8),
+          color: Colors.white.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: Colors.white.withOpacity(0.14)),
         ),
         child: Column(
           children: [
-            Text(count, style: TextStyle(color: color, fontWeight: FontWeight.bold, fontSize: 13)),
-            Text(label, style: TextStyle(color: color, fontSize: 9.5, fontWeight: FontWeight.w600)),
+            Text(
+              count,
+              style: TextStyle(
+                color: color,
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 1),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                color: Colors.white.withOpacity(0.82),
+                fontSize: 9.5,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ],
         ),
       ),
     );
   }
 
-  // Teacher Card for a single class student with 1-tap Attendance Selector and Chat button
-  Widget _buildTeacherStudentCard({
-    required Student student,
-    required bool isDark,
-    required Color cardBg,
-    required Color borderColor,
-    required Color textColor,
-    required Color subtextColor,
-  }) {
+  Widget _buildTeacherStudentCard(
+      BuildContext context, Student student, AppPalette p) {
     final todayAtt = StudentService.instance.getTodayAttendanceForStudent(
       student.id,
       date: _teacherSelectedDate,
     );
     final currentStatus = todayAtt?.status;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(
-          color: currentStatus != null
-              ? _statusColor(currentStatus).withOpacity(0.4)
-              : borderColor,
-          width: currentStatus != null ? 1.4 : 1.0,
-        ),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(isDark ? 0.18 : 0.04),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Student Header
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Row(
-                children: [
-                  CircleAvatar(
-                    radius: 18,
-                    backgroundColor: AppColors.accentTeal.withOpacity(0.2),
-                    child: Text(
-                      student.fullName.isNotEmpty ? student.fullName[0] : 'S',
-                      style: const TextStyle(
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.accentTeal,
-                        fontSize: 14,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Column(
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ProCard(
+        borderColor: currentStatus != null
+            ? _statusColor(currentStatus, p).withOpacity(0.45)
+            : p.border,
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                ProAvatar(
+                  name: student.fullName,
+                  radius: 20,
+                  color: p.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
                         student.fullName,
-                        style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textColor),
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
+                        ),
                       ),
+                      const SizedBox(height: 2),
                       Text(
                         'Juz ${student.currentJuz} • Surah #${student.currentSurah}, Ayah ${student.currentAyah}',
-                        style: TextStyle(fontSize: 11, color: subtextColor),
+                        style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
                       ),
                     ],
                   ),
-                ],
+                ),
+                const SizedBox(width: 6),
+                ProStatusPill(
+                  label: student.parentName,
+                  icon: Icons.family_restroom_rounded,
+                  color: p.gold,
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+            Text(
+              'Attendance for ${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w600,
+                color: p.inkSecondary,
               ),
-              // Linked Parent pill
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                _buildAttendanceButton(
+                  p: p,
+                  student: student,
+                  status: 'present',
+                  label: 'Present',
+                  icon: Icons.check_circle_rounded,
+                  color: p.success,
+                  isSelected: currentStatus == 'present',
+                ),
+                const SizedBox(width: 6),
+                _buildAttendanceButton(
+                  p: p,
+                  student: student,
+                  status: 'late',
+                  label: 'Late',
+                  icon: Icons.schedule_rounded,
+                  color: p.warning,
+                  isSelected: currentStatus == 'late',
+                ),
+                const SizedBox(width: 6),
+                _buildAttendanceButton(
+                  p: p,
+                  student: student,
+                  status: 'absent',
+                  label: 'Absent',
+                  icon: Icons.cancel_rounded,
+                  color: p.danger,
+                  isSelected: currentStatus == 'absent',
+                ),
+                const SizedBox(width: 6),
+                _buildAttendanceButton(
+                  p: p,
+                  student: student,
+                  status: 'excused',
+                  label: 'Excused',
+                  icon: Icons.note_alt_rounded,
+                  color: p.excused,
+                  isSelected: currentStatus == 'excused',
+                ),
+              ],
+            ),
+            if (todayAtt?.teacherRemarks != null) ...[
+              const SizedBox(height: 10),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
                 decoration: BoxDecoration(
-                  color: AppColors.accentAmber.withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
+                  color: p.surfaceSubtle,
+                  borderRadius: BorderRadius.circular(10),
                 ),
                 child: Row(
-                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    const Icon(Icons.person_pin_rounded, size: 12, color: AppColors.accentAmber),
-                    const SizedBox(width: 4),
-                    Text(
-                      student.parentName,
-                      style: const TextStyle(
-                        color: AppColors.accentAmber,
-                        fontSize: 10,
-                        fontWeight: FontWeight.bold,
+                    Icon(Icons.comment_outlined, size: 14, color: p.primary),
+                    const SizedBox(width: 7),
+                    Expanded(
+                      child: Text(
+                        '"${todayAtt!.teacherRemarks}"',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          color: p.ink,
+                          fontStyle: FontStyle.italic,
+                        ),
+                      ),
+                    ),
+                    InkWell(
+                      onTap: () =>
+                          _showEditRemarksDialog(context, student, todayAtt),
+                      borderRadius: BorderRadius.circular(8),
+                      child: Padding(
+                        padding: const EdgeInsets.all(4),
+                        child: Icon(Icons.edit_rounded,
+                            size: 14, color: p.primary),
                       ),
                     ),
                   ],
                 ),
               ),
             ],
-          ),
-
-          const SizedBox(height: 14),
-
-          // Daily Attendance 1-Tap Selector Buttons
-          Text(
-            'Mark Attendance for ${_teacherSelectedDate.month}/${_teacherSelectedDate.day}:',
-            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: subtextColor),
-          ),
-          const SizedBox(height: 8),
-
-          Row(
-            children: [
-              _buildAttendanceButton(
-                student: student,
-                status: 'present',
-                label: 'Present',
-                icon: Icons.check_circle_rounded,
-                color: AppColors.accentEmerald,
-                isSelected: currentStatus == 'present',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 6),
-              _buildAttendanceButton(
-                student: student,
-                status: 'late',
-                label: 'Late',
-                icon: Icons.access_time_rounded,
-                color: const Color(0xFFFFA000),
-                isSelected: currentStatus == 'late',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 6),
-              _buildAttendanceButton(
-                student: student,
-                status: 'absent',
-                label: 'Absent',
-                icon: Icons.cancel_rounded,
-                color: const Color(0xFFEF4444),
-                isSelected: currentStatus == 'absent',
-                isDark: isDark,
-              ),
-              const SizedBox(width: 6),
-              _buildAttendanceButton(
-                student: student,
-                status: 'excused',
-                label: 'Excused',
-                icon: Icons.note_alt_rounded,
-                color: const Color(0xFF8B5CF6),
-                isSelected: currentStatus == 'excused',
-                isDark: isDark,
-              ),
-            ],
-          ),
-
-          // Teacher Remarks for this student
-          if (todayAtt?.teacherRemarks != null) ...[
+            const SizedBox(height: 12),
+            Divider(height: 1, color: p.border),
             const SizedBox(height: 10),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-              decoration: BoxDecoration(
-                color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9),
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: Row(
-                children: [
-                  const Icon(Icons.comment_outlined, size: 12, color: AppColors.accentTeal),
-                  const SizedBox(width: 6),
-                  Expanded(
-                    child: Text(
-                      'Note: "${todayAtt!.teacherRemarks}"',
-                      style: TextStyle(fontSize: 11, color: textColor, fontStyle: FontStyle.italic),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCompactCardAction(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    label: 'Message Parent',
+                    color: p.gold,
+                    onTap: () => _openTeacherParentChat(context, student),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactCardAction(
+                    icon: Icons.menu_book_rounded,
+                    label: 'Weekly Report',
+                    color: p.primary,
+                    onTap: () => _showWeeklyReportDialog(context, student),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  onPressed: () => _showStudentHistoryDialog(context, student),
+                  icon: Icon(Icons.history_rounded,
+                      size: 20, color: p.inkSecondary),
+                  style: IconButton.styleFrom(
+                    backgroundColor: p.surfaceSubtle,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  InkWell(
-                    onTap: () => _showEditRemarksDialog(context, student, todayAtt),
-                    child: const Icon(Icons.edit_rounded, size: 13, color: AppColors.accentTeal),
-                  ),
-                ],
-              ),
+                  tooltip: 'Attendance History',
+                ),
+              ],
             ),
           ],
-
-          const Divider(height: 18),
-
-          // Action Buttons: Chat with Parent, Weekly Report, Attendance History
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              // CHAT WITH PARENT (CORE REQUIREMENT)
-              ElevatedButton.icon(
-                onPressed: () async {
-                  if (student.parentId == null || student.parentId!.isEmpty) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${student.fullName} does not have a linked parent account yet.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
-                      );
-                    }
-                    return;
-                  }
-                  final convo = await MessagingService.instance.startTeacherChatWithParent(
-                    teacherId: AuthSessionService.instance.userId,
-                    teacherName: AuthSessionService.instance.userName,
-                    parentId: student.parentId!,
-                    parentName: student.parentName,
-                    studentName: student.fullName,
-                    halaqahId: student.halaqahId,
-                  );
-
-                  if (context.mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          conversationId: convo.id,
-                          conversationTitle: convo.title,
-                          targetRole: 'parent',
-                        ),
-                      ),
-                    );
-                  }
-                },
-                icon: const Icon(Icons.chat_bubble_rounded, size: 14),
-                label: const Text(
-                  'Chat with Parent',
-                  style: TextStyle(fontSize: 11.5, fontWeight: FontWeight.bold),
-                ),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentAmber,
-                  foregroundColor: Colors.black,
-                  elevation: 1,
-                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-              ),
-
-              Row(
-                children: [
-                  // Weekly Report
-                  OutlinedButton.icon(
-                    onPressed: () => _showWeeklyReportDialog(context, student),
-                    icon: const Icon(Icons.menu_book_rounded, size: 13),
-                    label: const Text('Weekly Report', style: TextStyle(fontSize: 11)),
-                    style: OutlinedButton.styleFrom(
-                      foregroundColor: AppColors.accentTeal,
-                      side: const BorderSide(color: AppColors.accentTeal),
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                  const SizedBox(width: 6),
-                  // History
-                  IconButton(
-                    onPressed: () => _showStudentHistoryDialog(context, student),
-                    icon: const Icon(Icons.history_rounded, size: 18),
-                    color: subtextColor,
-                    tooltip: 'Attendance History',
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // 1-Tap Attendance Button
+  Future<void> _openTeacherParentChat(
+      BuildContext context, Student student) async {
+    if (student.parentId == null || student.parentId!.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${student.fullName} does not have a linked parent account yet.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    final convo = await MessagingService.instance.startTeacherChatWithParent(
+      teacherId: AuthSessionService.instance.userId,
+      teacherName: AuthSessionService.instance.userName,
+      parentId: student.parentId!,
+      parentName: student.parentName,
+      studentName: student.fullName,
+      halaqahId: student.halaqahId,
+    );
+
+    if (context.mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            conversationId: convo.id,
+            conversationTitle: convo.title,
+            targetRole: 'parent',
+          ),
+        ),
+      );
+    }
+  }
+
   Widget _buildAttendanceButton({
+    required AppPalette p,
     required Student student,
     required String status,
     required String label,
     required IconData icon,
     required Color color,
     required bool isSelected,
-    required bool isDark,
   }) {
     return Expanded(
       child: InkWell(
@@ -792,42 +758,43 @@ class _StudentsTabState extends State<StudentsTab> {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text('${student.fullName} marked ${status.toUpperCase()} ✅. Parent notified!'),
+                content: Text(
+                  '${student.fullName} marked ${status.toUpperCase()}. Parent notified.',
+                ),
                 duration: const Duration(seconds: 2),
                 backgroundColor: color,
-                behavior: SnackBarBehavior.floating,
               ),
             );
           }
         },
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
         child: AnimatedContainer(
           duration: const Duration(milliseconds: 180),
-          padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 2),
+          padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 2),
           decoration: BoxDecoration(
-            color: isSelected
-                ? color
-                : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
-            borderRadius: BorderRadius.circular(10),
+            color: isSelected ? color : p.surfaceSubtle,
+            borderRadius: BorderRadius.circular(12),
             border: Border.all(
-              color: isSelected ? color : color.withOpacity(0.3),
-              width: isSelected ? 1.8 : 1.0,
+              color: isSelected ? color : color.withOpacity(0.28),
+              width: isSelected ? 1.5 : 1,
             ),
           ),
           child: Column(
             children: [
               Icon(
                 icon,
-                size: 15,
-                color: isSelected ? Colors.black : color,
+                size: 16,
+                color: isSelected ? Colors.white : color,
               ),
               const SizedBox(height: 3),
               Text(
                 label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
                 style: TextStyle(
-                  fontSize: 10,
-                  fontWeight: FontWeight.bold,
-                  color: isSelected ? Colors.black : color,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w700,
+                  color: isSelected ? Colors.white : color,
                 ),
               ),
             ],
@@ -837,416 +804,488 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  Color _statusColor(String status) {
-    if (status == 'present') return AppColors.accentEmerald;
-    if (status == 'late') return const Color(0xFFFFA000);
-    if (status == 'absent') return const Color(0xFFEF4444);
-    if (status == 'excused') return const Color(0xFF8B5CF6);
-    return Colors.grey;
+  Color _statusColor(String status, AppPalette p) {
+    if (status == 'present') return p.success;
+    if (status == 'late') return p.warning;
+    if (status == 'absent') return p.danger;
+    if (status == 'excused') return p.excused;
+    return p.inkMuted;
   }
 
   // ===========================================================================
-  // 2. PARENT VIEW: Multi-child Switcher, Attendance Records & Ustaz Chat
+  // 2. PARENT VIEW: Multi-child Switcher, Progress & Attendance Records
   // ===========================================================================
-  Widget _buildParentView({
-    required BuildContext context,
-    required List<Student> children,
-    required bool isDark,
-    required Color textColor,
-    required Color subtextColor,
-    required Color cardBg,
-    required Color borderColor,
-  }) {
+  Widget _buildParentView(
+      BuildContext context, List<Student> children, AppPalette p) {
     if (children.isEmpty) {
-      return Center(
-        child: Padding(
-          padding: const EdgeInsets.all(32),
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.family_restroom_rounded, size: 48, color: subtextColor),
-              const SizedBox(height: 12),
-              Text('No Children Linked', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor)),
-              const SizedBox(height: 6),
-              Text(
-                'When school administration links your child with your parent invitation code or details, they will appear here.',
-                textAlign: TextAlign.center,
-                style: TextStyle(color: subtextColor, fontSize: 12),
-              ),
-            ],
-          ),
+      return RefreshIndicator(
+        color: p.primary,
+        onRefresh: _handleRefresh,
+        child: ListView(
+          padding: const EdgeInsets.all(24),
+          children: const [
+            SizedBox(height: 40),
+            ProEmptyState(
+              icon: Icons.family_restroom_rounded,
+              title: 'No Children Linked',
+              message:
+                  'When center administration enrolls your child and links them to your account, their Quran progress and attendance will appear here.',
+            ),
+          ],
         ),
       );
     }
 
-    final currentChild = children[_selectedChildIndex.clamp(0, children.length - 1)];
-    final attendanceHistory = StudentService.instance.getAttendanceForStudent(currentChild.id);
-    final weeklyReports = StudentService.instance.getWeeklyReportsForStudent(currentChild.id);
-    final todayAtt = StudentService.instance.getTodayAttendanceForStudent(currentChild.id);
+    final currentChild =
+        children[_selectedChildIndex.clamp(0, children.length - 1)];
+    final attendanceHistory =
+        StudentService.instance.getAttendanceForStudent(currentChild.id);
+    final weeklyReports =
+        StudentService.instance.getWeeklyReportsForStudent(currentChild.id);
+    final todayAtt =
+        StudentService.instance.getTodayAttendanceForStudent(currentChild.id);
+    final juzProgress = (currentChild.currentJuz / 30.0).clamp(0.03, 1.0);
 
-    return ListView(
-      padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
-      children: [
-        // Multi-child switcher if parent has more than 1 student
-        if (children.length > 1) ...[
-          Text(
-            'My Enrolled Children (${children.length})',
-            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: subtextColor),
-          ),
-          const SizedBox(height: 10),
-          SingleChildScrollView(
-            scrollDirection: Axis.horizontal,
-            child: Row(
-              children: List.generate(children.length, (index) {
-                final child = children[index];
-                final isSelected = _selectedChildIndex == index;
-                return Padding(
-                  padding: const EdgeInsets.only(right: 10),
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedChildIndex = index),
-                    borderRadius: BorderRadius.circular(16),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-                      decoration: BoxDecoration(
-                        color: isSelected
-                            ? AppColors.accentTeal.withOpacity(isDark ? 0.25 : 0.15)
-                            : cardBg,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(
-                          color: isSelected ? AppColors.accentTeal : borderColor,
-                          width: isSelected ? 1.8 : 1.0,
+    return RefreshIndicator(
+      color: p.primary,
+      onRefresh: _handleRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
+        children: [
+          if (children.length > 1) ...[
+            Text(
+              'My Enrolled Children (${children.length})',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: p.inkSecondary,
+              ),
+            ),
+            const SizedBox(height: 10),
+            SingleChildScrollView(
+              scrollDirection: Axis.horizontal,
+              child: Row(
+                children: List.generate(children.length, (index) {
+                  final child = children[index];
+                  final isSelected = _selectedChildIndex == index;
+                  return Padding(
+                    padding: const EdgeInsets.only(right: 10),
+                    child: InkWell(
+                      onTap: () => setState(() => _selectedChildIndex = index),
+                      borderRadius: BorderRadius.circular(20),
+                      child: AnimatedContainer(
+                        duration: const Duration(milliseconds: 200),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 8),
+                        decoration: BoxDecoration(
+                          color: isSelected ? p.primary : p.surface,
+                          borderRadius: BorderRadius.circular(20),
+                          border: Border.all(
+                            color: isSelected ? p.primary : p.border,
+                          ),
                         ),
-                      ),
-                      child: Row(
-                        children: [
-                          CircleAvatar(
-                            radius: 12,
-                            backgroundColor: isSelected ? AppColors.accentTeal : Colors.grey.withOpacity(0.3),
-                            child: Text(
-                              child.fullName.substring(0, 1),
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: FontWeight.bold,
-                                color: isSelected ? Colors.black : textColor,
+                        child: Row(
+                          children: [
+                            CircleAvatar(
+                              radius: 11,
+                              backgroundColor: isSelected
+                                  ? Colors.white.withOpacity(0.22)
+                                  : p.primarySoft,
+                              child: Text(
+                                child.fullName.isNotEmpty
+                                    ? child.fullName[0].toUpperCase()
+                                    : 'S',
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: isSelected ? Colors.white : p.primary,
+                                ),
                               ),
                             ),
-                          ),
-                          const SizedBox(width: 8),
+                            const SizedBox(width: 8),
+                            Text(
+                              child.fullName,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: isSelected ? Colors.white : p.ink,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
+          // Hero Child Learning Card
+          ProHeroCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Text(
-                            child.fullName,
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
-                              color: isSelected ? AppColors.accentTeal : textColor,
+                            currentChild.halaqahName.toUpperCase(),
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 0.9,
+                              color: AppColors.goldWarm,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            currentChild.fullName,
+                            style: const TextStyle(
+                              fontSize: 19,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
                             ),
                           ),
                         ],
                       ),
                     ),
-                  ),
-                );
-              }),
-            ),
-          ),
-          const SizedBox(height: 16),
-        ],
+                    ElevatedButton.icon(
+                      onPressed: () async {
+                        final halaqahs = HalaqahService.instance.halaqahs;
+                        final hMatch = halaqahs.where((h) =>
+                            h.name.toLowerCase() ==
+                            currentChild.halaqahName.toLowerCase());
+                        final teacherName = (hMatch.isNotEmpty &&
+                                hMatch.first.teacherName != 'Unassigned')
+                            ? hMatch.first.teacherName
+                            : 'Assigned Ustaz';
 
-        // Child Details Hero Card
-        Container(
-          padding: const EdgeInsets.all(18),
-          decoration: BoxDecoration(
-            color: cardBg,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(color: borderColor),
-          ),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        currentChild.fullName,
-                        style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: textColor),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        currentChild.halaqahName,
-                        style: TextStyle(fontSize: 12, color: AppColors.accentTeal, fontWeight: FontWeight.w600),
-                      ),
-                    ],
-                  ),
-                  // Chat with child's Ustaz button
-                  ElevatedButton.icon(
-                    onPressed: () async {
-                      final halaqahs = HalaqahService.instance.halaqahs;
-                      final hMatch = halaqahs.where((h) => h.name.toLowerCase() == currentChild.halaqahName.toLowerCase());
-                      final teacherName = (hMatch.isNotEmpty && hMatch.first.teacherName != 'Unassigned')
-                          ? hMatch.first.teacherName
-                          : 'Assigned Ustaz';
-
-                      final convo = await MessagingService.instance.startParentChat(
-                        parentId: AuthSessionService.instance.userId,
-                        parentName: AuthSessionService.instance.userName,
-                        targetRole: 'teacher',
-                        targetName: teacherName,
-                        targetId: hMatch.isNotEmpty ? hMatch.first.teacherId : null,
-                        halaqahName: currentChild.halaqahName,
-                      );
-
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              conversationId: convo.id,
-                              conversationTitle: convo.title,
-                              targetRole: 'teacher',
-                            ),
-                          ),
+                        final convo =
+                            await MessagingService.instance.startParentChat(
+                          parentId: AuthSessionService.instance.userId,
+                          parentName: AuthSessionService.instance.userName,
+                          targetRole: 'teacher',
+                          targetName: teacherName,
+                          targetId:
+                              hMatch.isNotEmpty ? hMatch.first.teacherId : null,
+                          halaqahName: currentChild.halaqahName,
                         );
-                      }
-                    },
-                    icon: const Icon(Icons.chat_bubble_outline_rounded, size: 14),
-                    label: const Text('Message Ustaz', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentTeal,
-                      foregroundColor: Colors.black,
-                      elevation: 1,
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                    ),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 14),
-              // Memorization Progress Track
-              Row(
-                children: [
-                  _buildStatBadge(
-                    label: 'Current Juz',
-                    value: 'Juz ${currentChild.currentJuz}',
-                    color: AppColors.accentTeal,
-                    isDark: isDark,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildStatBadge(
-                    label: 'Surah',
-                    value: '#${currentChild.currentSurah}',
-                    color: AppColors.accentAmber,
-                    isDark: isDark,
-                  ),
-                  const SizedBox(width: 8),
-                  _buildStatBadge(
-                    label: 'Ayah',
-                    value: 'Ayah ${currentChild.currentAyah}',
-                    color: const Color(0xFF10B981),
-                    isDark: isDark,
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
 
-        const SizedBox(height: 18),
-
-        // Today's Attendance Notification Card
-        Container(
-          padding: const EdgeInsets.all(14),
-          decoration: BoxDecoration(
-            color: (todayAtt?.status == 'present' ? AppColors.accentEmerald : const Color(0xFFFFA000)).withOpacity(0.12),
-            borderRadius: BorderRadius.circular(16),
-            border: Border.all(
-              color: (todayAtt?.status == 'present' ? AppColors.accentEmerald : const Color(0xFFFFA000)).withOpacity(0.4),
-            ),
-          ),
-          child: Row(
-            children: [
-              Icon(
-                todayAtt?.status == 'present' ? Icons.check_circle_rounded : Icons.schedule_rounded,
-                color: todayAtt?.status == 'present' ? AppColors.accentEmerald : const Color(0xFFFFA000),
-                size: 24,
-              ),
-              const SizedBox(width: 12),
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Today\'s Attendance: ${(todayAtt?.status ?? 'Unrecorded').toUpperCase()}',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: todayAtt?.status == 'present' ? AppColors.accentEmerald : const Color(0xFFFFA000),
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                conversationId: convo.id,
+                                conversationTitle: convo.title,
+                                targetRole: 'teacher',
+                              ),
+                            ),
+                          );
+                        }
+                      },
+                      icon: const Icon(Icons.chat_bubble_outline_rounded,
+                          size: 14),
+                      label: const Text('Message Ustaz',
+                          style: TextStyle(fontSize: 11.5)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.goldWarm,
+                        foregroundColor: const Color(0xFF102322),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 11, vertical: 8),
                       ),
-                    ),
-                    Text(
-                      todayAtt?.teacherRemarks ?? 'Teacher will record attendance during circle time.',
-                      style: TextStyle(fontSize: 11, color: textColor),
                     ),
                   ],
                 ),
-              ),
-            ],
+                const SizedBox(height: 16),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text(
+                      'Quran Memorization Progress',
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        color: Colors.white.withOpacity(0.8),
+                      ),
+                    ),
+                    Text(
+                      'Juz ${currentChild.currentJuz} of 30',
+                      style: const TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: AppColors.goldWarm,
+                        fontFeatures: [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(6),
+                  child: LinearProgressIndicator(
+                    value: juzProgress,
+                    minHeight: 6,
+                    backgroundColor: Colors.white.withOpacity(0.18),
+                    valueColor: const AlwaysStoppedAnimation<Color>(
+                      AppColors.goldWarm,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                Row(
+                  children: [
+                    _buildHeroMetricTile(
+                        'Current Juz', 'Juz ${currentChild.currentJuz}'),
+                    const SizedBox(width: 8),
+                    _buildHeroMetricTile(
+                        'Surah', '#${currentChild.currentSurah}'),
+                    const SizedBox(width: 8),
+                    _buildHeroMetricTile(
+                        'Ayah', 'Ayah ${currentChild.currentAyah}'),
+                  ],
+                ),
+              ],
+            ),
           ),
-        ),
 
-        const SizedBox(height: 20),
+          const SizedBox(height: 16),
 
-        // Attendance History Header & "+ Request Absence Excuse"
-        Row(
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Text('Daily Attendance History', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
-            ElevatedButton.icon(
-              onPressed: () => _showRequestAbsenceDialog(context, currentChild),
-              icon: const Icon(Icons.edit_calendar_rounded, size: 13, color: Colors.white),
-              label: const Text('+ Request Excuse', style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: Colors.white)),
+          // Today's Attendance Banner
+          ProCard(
+            borderColor: (todayAtt?.status == 'present'
+                    ? p.success
+                    : p.warning)
+                .withOpacity(0.4),
+            child: Row(
+              children: [
+                Container(
+                  width: 42,
+                  height: 42,
+                  decoration: BoxDecoration(
+                    color: (todayAtt?.status == 'present'
+                            ? p.success
+                            : p.warning)
+                        .withOpacity(0.14),
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Icon(
+                    todayAtt?.status == 'present'
+                        ? Icons.check_circle_rounded
+                        : Icons.schedule_rounded,
+                    color:
+                        todayAtt?.status == 'present' ? p.success : p.warning,
+                    size: 22,
+                  ),
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Today: ${(todayAtt?.status ?? 'Unrecorded').toUpperCase()}',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w700,
+                          color: todayAtt?.status == 'present'
+                              ? p.success
+                              : p.warning,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        todayAtt?.teacherRemarks ??
+                            'Ustaz will mark attendance during circle time.',
+                        style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 22),
+
+          ProSectionHeader(
+            title: 'Attendance History',
+            trailing: ElevatedButton.icon(
+              onPressed: () =>
+                  _showRequestAbsenceDialog(context, currentChild),
+              icon: const Icon(Icons.edit_calendar_rounded, size: 14),
+              label: const Text('Request Excuse',
+                  style: TextStyle(fontSize: 11.5)),
               style: ElevatedButton.styleFrom(
-                backgroundColor: const Color(0xFF8B5CF6),
-                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                backgroundColor: p.excused,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+              ),
+            ),
+          ),
+
+          // Live Absence Excuse Requests
+          StreamBuilder<List<AbsenceRequest>>(
+            stream: AbsenceService.instance.requestsStream,
+            initialData: AbsenceService.instance.allRequests,
+            builder: (context, snapshot) {
+              final childRequests = (snapshot.data ?? [])
+                  .where((r) => r.studentId == currentChild.id)
+                  .toList();
+              if (childRequests.isEmpty) return const SizedBox.shrink();
+
+              return Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const SizedBox(height: 12),
+                  ...childRequests.map((req) {
+                    final reqColor = req.isApproved
+                        ? p.success
+                        : (req.isDeclined ? p.danger : p.warning);
+                    final reqLabel = req.isApproved
+                        ? 'Approved'
+                        : (req.isDeclined ? 'Declined' : 'Pending');
+
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 8),
+                      child: ProCard(
+                        padding: const EdgeInsets.all(13),
+                        borderColor: reqColor.withOpacity(0.4),
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Excuse: ${_cleanReasonLabel(req.reason)}',
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 13,
+                                      color: p.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    'Date: ${req.date.toIso8601String().substring(0, 10)}${req.notes.isNotEmpty ? " • \"${req.notes}\"" : ""}',
+                                    style: TextStyle(
+                                      fontSize: 11.5,
+                                      color: p.inkSecondary,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            ProStatusPill(label: reqLabel, color: reqColor),
+                          ],
+                        ),
+                      ),
+                    );
+                  }),
+                ],
+              );
+            },
+          ),
+
+          const SizedBox(height: 12),
+          if (attendanceHistory.isEmpty)
+            const ProEmptyState(
+              icon: Icons.fact_check_outlined,
+              title: 'No attendance logged yet',
+              message:
+                  'Daily attendance entries recorded by Ustaz will appear here.',
+            )
+          else
+            ...attendanceHistory.map((att) => _buildAttendanceCard(att, p)),
+
+          const SizedBox(height: 22),
+
+          const ProSectionHeader(
+            title: 'Weekly Quran Progress Reports',
+            subtitle: 'Sabaq, Sabqi, Manzil & Tajweed evaluations',
+          ),
+          const SizedBox(height: 12),
+          if (weeklyReports.isEmpty)
+            const ProEmptyState(
+              icon: Icons.auto_stories_outlined,
+              title: 'No weekly reports yet',
+              message:
+                  'Weekly memorization and Tajweed evaluations will appear here once published.',
+            )
+          else
+            ...weeklyReports
+                .map((report) => _buildWeeklyReportCard(report, p)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildHeroMetricTile(String label, String value) {
+    return Expanded(
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 8),
+        decoration: BoxDecoration(
+          color: Colors.white.withOpacity(0.11),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.white.withOpacity(0.14)),
+        ),
+        child: Column(
+          children: [
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 10.5,
+                color: Colors.white.withOpacity(0.75),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 13.5,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ],
         ),
-
-        // Child's Absence Excuse Requests (Live Status)
-        StreamBuilder<List<AbsenceRequest>>(
-          stream: AbsenceService.instance.requestsStream,
-          initialData: AbsenceService.instance.allRequests,
-          builder: (context, snapshot) {
-            final childRequests = (snapshot.data ?? []).where((r) => r.studentId == currentChild.id).toList();
-            if (childRequests.isEmpty) return const SizedBox.shrink();
-
-            return Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                const SizedBox(height: 10),
-                ...childRequests.map((req) => Container(
-                      margin: const EdgeInsets.only(bottom: 8),
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: cardBg,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: req.isApproved
-                              ? const Color(0xFF10B981).withOpacity(0.5)
-                              : (req.isDeclined ? const Color(0xFFEF4444).withOpacity(0.5) : const Color(0xFF8B5CF6).withOpacity(0.4)),
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'Excuse: ${req.reasonLabel}',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12.5, color: textColor),
-                                ),
-                                const SizedBox(height: 2),
-                                Text(
-                                  'Date: ${req.date.toIso8601String().substring(0, 10)}${req.notes.isNotEmpty ? " • \"${req.notes}\"" : ""}',
-                                  style: TextStyle(fontSize: 11, color: subtextColor),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Container(
-                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                            decoration: BoxDecoration(
-                              color: req.isApproved
-                                  ? const Color(0xFF10B981).withOpacity(0.15)
-                                  : (req.isDeclined ? const Color(0xFFEF4444).withOpacity(0.15) : const Color(0xFFFFA000).withOpacity(0.15)),
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Text(
-                              req.isApproved
-                                  ? 'Approved ✅'
-                                  : (req.isDeclined ? 'Declined ❌' : 'Pending ⏳'),
-                              style: TextStyle(
-                                fontSize: 10.5,
-                                fontWeight: FontWeight.bold,
-                                color: req.isApproved
-                                    ? const Color(0xFF10B981)
-                                    : (req.isDeclined ? const Color(0xFFEF4444) : const Color(0xFFFFA000)),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    )),
-                const SizedBox(height: 4),
-              ],
-            );
-          },
-        ),
-
-        const SizedBox(height: 10),
-        if (attendanceHistory.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: Text('No attendance recorded yet.', style: TextStyle(color: subtextColor, fontSize: 12)),
-          )
-        else
-          ...attendanceHistory.map((att) => _buildAttendanceCard(att, isDark, cardBg, borderColor, textColor, subtextColor)),
-
-        const SizedBox(height: 20),
-
-        // Weekly Progress Reports
-        Text('Weekly Quran Progress Reports', style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
-        const SizedBox(height: 10),
-        if (weeklyReports.isEmpty)
-          Container(
-            padding: const EdgeInsets.all(16),
-            decoration: BoxDecoration(
-              color: cardBg,
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: borderColor),
-            ),
-            child: Text('No weekly reports published yet.', style: TextStyle(color: subtextColor, fontSize: 12)),
-          )
-        else
-          ...weeklyReports.map((report) => _buildWeeklyReportCard(report, isDark, cardBg, borderColor, textColor, subtextColor)),
-      ],
+      ),
     );
   }
 
   // ===========================================================================
-  // 3. ADMIN VIEW: Full Roster & Student Enrollment with Parent Linking
+  // 3. ADMIN VIEW: Full Roster, Circle Filter Chips & Student Enrollment
   // ===========================================================================
-  Widget _buildAdminView({
-    required BuildContext context,
-    required List<Student> allStudents,
-    required bool isDark,
-    required Color textColor,
-    required Color subtextColor,
-    required Color cardBg,
-    required Color borderColor,
-  }) {
+  Widget _buildAdminView(
+      BuildContext context, List<Student> allStudents, AppPalette p) {
     final filtered = allStudents.where((s) {
-      final matchesSearch = s.fullName.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-          s.parentName.toLowerCase().contains(_searchQuery.toLowerCase());
-      final matchesHalaqah = _selectedHalaqahFilter == 'All' || s.halaqahName.contains(_selectedHalaqahFilter);
+      final q = _searchQuery.toLowerCase();
+      final matchesSearch = s.fullName.toLowerCase().contains(q) ||
+          s.parentName.toLowerCase().contains(q);
+      final matchesHalaqah = _selectedHalaqahFilter == 'All' ||
+          s.halaqahName.contains(_selectedHalaqahFilter);
       return matchesSearch && matchesHalaqah;
     }).toList();
 
-    return Scaffold(
-      backgroundColor: Colors.transparent,
-      body: ListView(
-        padding: const EdgeInsets.fromLTRB(20, 12, 20, 100),
+    return RefreshIndicator(
+      color: p.primary,
+      onRefresh: _handleRefresh,
+      child: ListView(
+        physics: const AlwaysScrollableScrollPhysics(
+          parent: BouncingScrollPhysics(),
+        ),
+        padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1256,219 +1295,414 @@ class _StudentsTabState extends State<StudentsTab> {
                 children: [
                   Text(
                     'Student Roster (${allStudents.length})',
-                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: textColor),
+                    style: TextStyle(
+                      fontSize: 21,
+                      fontWeight: FontWeight.w800,
+                      color: p.ink,
+                      letterSpacing: -0.4,
+                    ),
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    'Linked to Specific Parents',
-                    style: TextStyle(fontSize: 11, color: subtextColor),
+                    'Enrolled learners linked to parent accounts',
+                    style: TextStyle(fontSize: 12, color: p.inkSecondary),
                   ),
                 ],
               ),
-              // ADMIN ADD STUDENT BUTTON
               ElevatedButton.icon(
                 onPressed: () => _showAddStudentDialog(context),
                 icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: const Text('Add Student', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12)),
+                label: const Text('Add', style: TextStyle(fontSize: 12.5)),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentTeal,
-                  foregroundColor: Colors.black,
-                  elevation: 2,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 14,
+                    vertical: 10,
+                  ),
                 ),
               ),
             ],
           ),
           const SizedBox(height: 14),
 
-          // Search Bar
           if (allStudents.isNotEmpty) ...[
-            TextField(
-              onChanged: (val) => setState(() => _searchQuery = val),
-              style: TextStyle(color: textColor, fontSize: 13),
-              decoration: InputDecoration(
-                hintText: 'Search student or parent name...',
-                hintStyle: TextStyle(color: subtextColor, fontSize: 12),
-                prefixIcon: Icon(Icons.search_rounded, size: 18, color: subtextColor),
-                filled: true,
-                fillColor: cardBg,
-                contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-                border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: borderColor)),
-                enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: borderColor)),
-              ),
+            ProSearchField(
+              hintText: 'Search student or parent name...',
+              query: _searchQuery,
+              onChanged: (val) => setState(() => _searchQuery = val.trim()),
             ),
-            const SizedBox(height: 14),
+            const SizedBox(height: 12),
+            ValueListenableBuilder(
+              valueListenable: HalaqahService.instance.halaqahsNotifier,
+              builder: (context, halaqahs, _) {
+                final circleNames = <String>[
+                  'All',
+                  ...halaqahs.map((h) => h.name),
+                ];
+                if (circleNames.length <= 1) return const SizedBox.shrink();
+                return SizedBox(
+                  height: 36,
+                  child: ListView.separated(
+                    scrollDirection: Axis.horizontal,
+                    itemCount: circleNames.length,
+                    separatorBuilder: (_, __) => const SizedBox(width: 8),
+                    itemBuilder: (context, i) {
+                      final name = circleNames[i];
+                      final isSelected = _selectedHalaqahFilter == name;
+                      return GestureDetector(
+                        onTap: () =>
+                            setState(() => _selectedHalaqahFilter = name),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 180),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 14,
+                            vertical: 7,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isSelected ? p.primary : p.surface,
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: isSelected ? p.primary : p.border,
+                            ),
+                          ),
+                          child: Text(
+                            name,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w500,
+                              color: isSelected ? p.onPrimary : p.inkSecondary,
+                            ),
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                );
+              },
+            ),
+            const SizedBox(height: 16),
           ],
 
           if (allStudents.isEmpty)
-            Container(
-              padding: const EdgeInsets.symmetric(vertical: 36, horizontal: 20),
-              decoration: BoxDecoration(color: cardBg, borderRadius: BorderRadius.circular(20), border: Border.all(color: borderColor)),
-              child: Column(
-                children: [
-                  Icon(Icons.school_outlined, size: 48, color: AppColors.accentTeal.withOpacity(0.7)),
-                  const SizedBox(height: 14),
-                  Text('No Students Enrolled Yet', style: TextStyle(color: textColor, fontWeight: FontWeight.bold, fontSize: 16)),
-                  const SizedBox(height: 6),
-                  Text(
-                    'Add your students and link each one to a specific parent account.',
-                    textAlign: TextAlign.center,
-                    style: TextStyle(color: subtextColor, fontSize: 12),
+            ProEmptyState(
+              icon: Icons.school_outlined,
+              title: 'No Students Enrolled Yet',
+              message:
+                  'Add your students and link each learner to their parent account and study circle.',
+              actionLabel: 'Enroll First Student',
+              onAction: () => _showAddStudentDialog(context),
+            )
+          else if (filtered.isEmpty)
+            const ProEmptyState(
+              icon: Icons.search_off_rounded,
+              title: 'No matching students',
+              message:
+                  'Try adjusting your search query or selected study circle filter.',
+            )
+          else
+            ...filtered.map((s) => _buildAdminStudentCard(s, p)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAdminStudentCard(Student student, AppPalette p) {
+    final parentContact = student.parentPhone.isNotEmpty
+        ? ' • ${student.parentPhone}'
+        : (student.parentEmail != null && student.parentEmail!.isNotEmpty
+            ? ' • ${student.parentEmail}'
+            : '');
+
+    final studentPayments = PaymentService.instance.allPayments
+        .where((pay) => pay.studentId == student.id)
+        .toList();
+    final String badgeText;
+    final Color badgeColor;
+    if (studentPayments.isNotEmpty) {
+      final latest = studentPayments.first.status;
+      badgeText = latest.toUpperCase();
+      badgeColor = latest == 'approved'
+          ? p.success
+          : (latest == 'rejected' || latest == 'overdue'
+              ? p.danger
+              : p.gold);
+    } else {
+      badgeText = student.halaqahName;
+      badgeColor = p.primary;
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 14),
+      child: ProCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                ProAvatar(
+                  name: student.fullName,
+                  radius: 21,
+                  color: p.primary,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        student.fullName,
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 2),
+                      Text(
+                        'Parent: ${student.parentName}$parentContact',
+                        style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
                   ),
-                  const SizedBox(height: 18),
-                  ElevatedButton.icon(
-                    onPressed: () => _showAddStudentDialog(context),
-                    icon: const Icon(Icons.person_add_rounded, size: 18),
-                    label: const Text('Add First Student', style: TextStyle(fontWeight: FontWeight.bold)),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: AppColors.accentTeal,
-                      foregroundColor: Colors.black,
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
-                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                ),
+                const SizedBox(width: 6),
+                ProStatusPill(label: badgeText, color: badgeColor),
+                PopupMenuButton<String>(
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints(),
+                  icon: Icon(Icons.more_vert_rounded,
+                      size: 19, color: p.inkMuted),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  color: p.surface,
+                  onSelected: (val) async {
+                    if (val == 'delete') {
+                      final confirm = await showDialog<bool>(
+                        context: context,
+                        builder: (c) => AlertDialog(
+                          title: Text('Remove ${student.fullName}?'),
+                          content: const Text(
+                            'This will permanently remove this student and their linked records from the roster.',
+                          ),
+                          actions: [
+                            TextButton(
+                              onPressed: () => Navigator.pop(c, false),
+                              child: const Text('Cancel'),
+                            ),
+                            ElevatedButton(
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: p.danger,
+                                foregroundColor: Colors.white,
+                              ),
+                              onPressed: () => Navigator.pop(c, true),
+                              child: const Text('Remove'),
+                            ),
+                          ],
+                        ),
+                      );
+                      if (confirm == true) {
+                        final ok = await StudentService.instance
+                            .deleteStudent(student.id);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                ok
+                                    ? 'Removed ${student.fullName} from roster.'
+                                    : 'Failed to remove student. Please check permissions.',
+                              ),
+                              backgroundColor: ok ? p.success : p.danger,
+                            ),
+                          );
+                        }
+                      }
+                    }
+                  },
+                  itemBuilder: (_) => [
+                    PopupMenuItem(
+                      value: 'delete',
+                      child: Row(
+                        children: [
+                          Icon(Icons.delete_outline_rounded,
+                              size: 18, color: p.danger),
+                          const SizedBox(width: 8),
+                          Text(
+                            'Remove Student',
+                            style: TextStyle(
+                              color: p.danger,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
+              decoration: BoxDecoration(
+                color: p.surfaceSubtle,
+                borderRadius: BorderRadius.circular(11),
+              ),
+              child: Row(
+                children: [
+                  Icon(Icons.auto_stories_outlined,
+                      size: 14, color: p.primary),
+                  const SizedBox(width: 7),
+                  Expanded(
+                    child: Text(
+                      '${student.halaqahName} • Juz ${student.currentJuz}, Surah #${student.currentSurah}, Ayah ${student.currentAyah}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: p.inkSecondary,
+                        fontWeight: FontWeight.w500,
+                      ),
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
                 ],
               ),
-            )
-          else
-            ...filtered.map((s) => _buildAdminStudentCard(s, isDark, cardBg, borderColor, textColor, subtextColor)),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildAdminStudentCard(
-    Student student,
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(student.fullName, style: TextStyle(fontSize: 15, fontWeight: FontWeight.bold, color: textColor)),
-                    const SizedBox(height: 2),
-                    Text('Linked Parent: ${student.parentName} (${student.parentPhone})', style: TextStyle(fontSize: 11.5, color: subtextColor)),
-                  ],
-                ),
-              ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: student.monthlyFeeStatus == 'paid' ? AppColors.accentEmerald.withOpacity(0.15) : const Color(0xFFFFA000).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  student.monthlyFeeStatus.toUpperCase(),
-                  style: TextStyle(
-                    color: student.monthlyFeeStatus == 'paid' ? AppColors.accentEmerald : const Color(0xFFFFA000),
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: _buildCompactCardAction(
+                    icon: Icons.check_circle_outline_rounded,
+                    label: 'Attendance',
+                    color: p.success,
+                    onTap: () => _showMarkAttendanceDialog(context, student),
                   ),
                 ),
-              ),
-            ],
-          ),
-          const SizedBox(height: 8),
-          Text(
-            '${student.halaqahName} • Juz ${student.currentJuz}, Surah #${student.currentSurah}, Ayah ${student.currentAyah}',
-            style: TextStyle(fontSize: 11, color: subtextColor),
-          ),
-          const Divider(height: 16),
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              ActionChip(
-                avatar: const Icon(Icons.check_circle_outline_rounded, size: 14, color: AppColors.accentEmerald),
-                label: const Text('Mark Attendance', style: TextStyle(fontSize: 11)),
-                onPressed: () => _showMarkAttendanceDialog(context, student),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.menu_book_rounded, size: 14, color: Color(0xFF00BCD4)),
-                label: const Text('Weekly Report', style: TextStyle(fontSize: 11)),
-                onPressed: () => _showWeeklyReportDialog(context, student),
-              ),
-              ActionChip(
-                avatar: const Icon(Icons.chat_bubble_outline_rounded, size: 14, color: Color(0xFFFFA000)),
-                label: const Text('Message Parent', style: TextStyle(fontSize: 11)),
-                onPressed: () async {
-                  if (student.parentId == null || student.parentId!.isEmpty) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text('${student.fullName} does not have a linked parent account yet.'),
-                          behavior: SnackBarBehavior.floating,
-                        ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactCardAction(
+                    icon: Icons.menu_book_rounded,
+                    label: 'Report',
+                    color: p.primary,
+                    onTap: () => _showWeeklyReportDialog(context, student),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _buildCompactCardAction(
+                    icon: Icons.chat_bubble_outline_rounded,
+                    label: 'Message',
+                    color: p.gold,
+                    onTap: () async {
+                      if (student.parentId == null ||
+                          student.parentId!.isEmpty) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                '${student.fullName} does not have a linked parent account yet.',
+                              ),
+                            ),
+                          );
+                        }
+                        return;
+                      }
+                      final convo = await MessagingService.instance
+                          .startDirectChatWithParent(
+                        parentId: student.parentId!,
+                        parentName: student.parentName,
                       );
-                    }
-                    return;
-                  }
-                  final convo = await MessagingService.instance.startDirectChatWithParent(
-                    parentId: student.parentId!,
-                    parentName: student.parentName,
-                  );
-                  if (context.mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => ChatScreen(
-                          conversationId: convo.id,
-                          conversationTitle: convo.title,
-                          targetRole: 'parent',
-                        ),
-                      ),
-                    );
-                  }
-                },
+                      if (context.mounted) {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              conversationId: convo.id,
+                              conversationTitle: convo.title,
+                              targetRole: 'parent',
+                            ),
+                          ),
+                        );
+                      }
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildCompactCardAction({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(11),
+      child: Container(
+        padding: const EdgeInsets.symmetric(vertical: 9, horizontal: 6),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.10),
+          borderRadius: BorderRadius.circular(11),
+          border: Border.all(color: color.withOpacity(0.28)),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 14, color: color),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w700,
+                  color: color,
+                ),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
               ),
-            ],
-          ),
-        ],
+            ),
+          ],
+        ),
       ),
     );
   }
 
   // ===========================================================================
-  // DIALOG: ADD STUDENT & LINK SPECIFIC PARENT (STRICT PRODUCTION REQUIREMENT)
+  // DIALOGS
   // ===========================================================================
   void _showAddStudentDialog(BuildContext context) {
+    final p = AppColors.of(context);
     final nameCtrl = TextEditingController();
 
     final halaqahs = HalaqahService.instance.halaqahs;
     String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
-    String selectedHalaqahName = halaqahs.isNotEmpty ? halaqahs.first.name : '';
+    String selectedHalaqahName =
+        halaqahs.isNotEmpty ? halaqahs.first.name : '';
 
     final registeredParents = StudentService.instance.getRegisteredParents();
-    String? selectedParentId = registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
+    String? selectedParentId =
+        registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
 
     int juz = 30;
     int surah = 1;
-    int ayah = 1;
+    const int ayah = 1;
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) {
-          final isDark = Theme.of(ctx).brightness == Brightness.dark;
           final currentHalaqahs = HalaqahService.instance.halaqahs;
           final currentParents = StudentService.instance.getRegisteredParents();
 
@@ -1479,12 +1713,16 @@ class _StudentsTabState extends State<StudentsTab> {
               selectedHalaqahId!.isNotEmpty;
 
           return AlertDialog(
-            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-            title: const Row(
+            title: Row(
               children: [
-                Icon(Icons.person_add_rounded, color: AppColors.accentTeal),
-                SizedBox(width: 8),
-                Text('Add Student & Link Parent', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 16)),
+                Icon(Icons.person_add_rounded, color: p.primary),
+                const SizedBox(width: 8),
+                const Expanded(
+                  child: Text(
+                    'Add Student & Link Parent',
+                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+                  ),
+                ),
               ],
             ),
             content: SingleChildScrollView(
@@ -1502,41 +1740,46 @@ class _StudentsTabState extends State<StudentsTab> {
                     ),
                   ),
                   const SizedBox(height: 14),
-
-                  // 1. DYNAMIC HALAQAH SELECTION
                   if (currentHalaqahs.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accentEmerald.withOpacity(0.1),
+                        color: p.primary.withOpacity(0.08),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.accentEmerald.withOpacity(0.3)),
+                        border: Border.all(color: p.primary.withOpacity(0.28)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.info_outline_rounded, size: 16, color: AppColors.accentEmerald),
-                              SizedBox(width: 6),
-                              Text('No Study Circles Created Yet', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentEmerald)),
+                              Icon(Icons.info_outline_rounded,
+                                  size: 16, color: p.primary),
+                              const SizedBox(width: 6),
+                              Text(
+                                'No Study Circles Created Yet',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 12,
+                                  color: p.primary,
+                                ),
+                              ),
                             ],
                           ),
                           const SizedBox(height: 4),
-                          const Text('Please create a halaqah circle first before enrolling students.', style: TextStyle(fontSize: 11)),
+                          const Text(
+                            'Please create a halaqah circle first before enrolling students.',
+                            style: TextStyle(fontSize: 11.5),
+                          ),
                           const SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: () {
                               Navigator.pop(ctx);
                               HalaqahManagementSheet.show(context);
                             },
-                            icon: const Icon(Icons.add_rounded, size: 14),
-                            label: const Text('Create Halaqah Circle', style: TextStyle(fontSize: 11)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentEmerald,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                            ),
+                            icon: const Icon(Icons.add_rounded, size: 15),
+                            label: const Text('Create Halaqah Circle',
+                                style: TextStyle(fontSize: 11.5)),
                           ),
                         ],
                       ),
@@ -1550,15 +1793,17 @@ class _StudentsTabState extends State<StudentsTab> {
                           child: Text(
                             '${h.name} (${h.teacherName})',
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
+                            style: const TextStyle(fontSize: 12.5),
                           ),
                         );
                       }).toList(),
                       onChanged: (val) {
                         setDialogState(() {
                           selectedHalaqahId = val;
-                          final match = currentHalaqahs.where((h) => h.id == val);
-                          selectedHalaqahName = match.isNotEmpty ? match.first.name : '';
+                          final match =
+                              currentHalaqahs.where((h) => h.id == val);
+                          selectedHalaqahName =
+                              match.isNotEmpty ? match.first.name : '';
                         });
                       },
                       decoration: const InputDecoration(
@@ -1566,64 +1811,71 @@ class _StudentsTabState extends State<StudentsTab> {
                         prefixIcon: Icon(Icons.school_rounded, size: 20),
                       ),
                     ),
-
-                  const SizedBox(height: 18),
+                  const SizedBox(height: 16),
                   const Divider(),
-                  const SizedBox(height: 6),
-
-                  // 2. STRICT EXISTING PARENT LINKING (NO NEW PARENT CREATION ALLOWED HERE)
+                  const SizedBox(height: 10),
                   Row(
                     children: [
-                      const Icon(Icons.family_restroom_rounded, size: 16, color: AppColors.accentAmber),
+                      Icon(Icons.family_restroom_rounded,
+                          size: 16, color: p.gold),
                       const SizedBox(width: 6),
-                      const Text(
-                        'Link to Existing Registered Parent *',
-                        style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: AppColors.accentAmber),
+                      Text(
+                        'Link to Registered Parent *',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12.5,
+                          color: p.gold,
+                        ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 8),
-
                   if (currentParents.isEmpty)
                     Container(
                       padding: const EdgeInsets.all(12),
                       decoration: BoxDecoration(
-                        color: AppColors.accentAmber.withOpacity(0.1),
+                        color: p.gold.withOpacity(0.10),
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: AppColors.accentAmber.withOpacity(0.3)),
+                        border: Border.all(color: p.gold.withOpacity(0.35)),
                       ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Row(
+                          Row(
                             children: [
-                              Icon(Icons.warning_amber_rounded, size: 16, color: AppColors.accentAmber),
-                              SizedBox(width: 6),
+                              Icon(Icons.warning_amber_rounded,
+                                  size: 16, color: p.gold),
+                              const SizedBox(width: 6),
                               Expanded(
                                 child: Text(
                                   'No Registered Parents Found',
-                                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 12, color: AppColors.accentAmber),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 12,
+                                    color: p.gold,
+                                  ),
                                 ),
                               ),
                             ],
                           ),
                           const SizedBox(height: 4),
                           const Text(
-                            'A student must be added to an existing parent account. Please invite a parent first using a Parent Invitation Code.',
-                            style: TextStyle(fontSize: 11),
+                            'Invite a parent first using a Parent Invitation Code so they can link their child.',
+                            style: TextStyle(fontSize: 11.5),
                           ),
                           const SizedBox(height: 8),
                           ElevatedButton.icon(
                             onPressed: () {
                               Navigator.pop(ctx);
-                              InviteCodeDialog.show(context, initialRole: 'parent');
+                              InviteCodeDialog.show(context,
+                                  initialRole: 'parent');
                             },
-                            icon: const Icon(Icons.qr_code_rounded, size: 14),
-                            label: const Text('Generate Parent Invite Code', style: TextStyle(fontSize: 11)),
+                            icon: const Icon(Icons.vpn_key_rounded, size: 14),
+                            label: const Text('Generate Parent Invite Code',
+                                style: TextStyle(fontSize: 11.5)),
                             style: ElevatedButton.styleFrom(
-                              backgroundColor: AppColors.accentAmber,
-                              foregroundColor: Colors.black,
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                              backgroundColor: p.gold,
+                              foregroundColor: Colors.white,
                             ),
                           ),
                         ],
@@ -1632,28 +1884,34 @@ class _StudentsTabState extends State<StudentsTab> {
                   else
                     DropdownButtonFormField<String>(
                       value: selectedParentId ?? currentParents.first['id'],
-                      items: currentParents.map((p) {
+                      items: currentParents.map((parent) {
                         return DropdownMenuItem<String>(
-                          value: p['id'],
+                          value: parent['id'],
                           child: Text(
-                            '${p['name']} (${(p['phone'] != null && (p['phone'] as String).isNotEmpty) ? p['phone'] : p['email']})',
+                            '${parent['name']} (${(parent['phone'] != null && (parent['phone'] as String).isNotEmpty) ? parent['phone'] : parent['email']})',
                             overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12),
+                            style: const TextStyle(fontSize: 12.5),
                           ),
                         );
                       }).toList(),
-                      onChanged: (val) => setDialogState(() => selectedParentId = val),
+                      onChanged: (val) =>
+                          setDialogState(() => selectedParentId = val),
                       decoration: const InputDecoration(
                         labelText: 'Select Registered Parent *',
                         prefixIcon: Icon(Icons.people_rounded, size: 20),
                       ),
                     ),
-
                   const SizedBox(height: 16),
                   const Divider(),
-                  const SizedBox(height: 6),
-
-                  const Text('Initial Quran Milestone:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Initial Quran Milestone',
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w700,
+                      color: p.inkSecondary,
+                    ),
+                  ),
                   const SizedBox(height: 8),
                   Row(
                     children: [
@@ -1661,16 +1919,18 @@ class _StudentsTabState extends State<StudentsTab> {
                         child: TextFormField(
                           initialValue: '$juz',
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Juz (1-30)'),
+                          decoration:
+                              const InputDecoration(labelText: 'Juz (1-30)'),
                           onChanged: (v) => juz = int.tryParse(v) ?? 30,
                         ),
                       ),
-                      const SizedBox(width: 8),
+                      const SizedBox(width: 10),
                       Expanded(
                         child: TextFormField(
                           initialValue: '$surah',
                           keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(labelText: 'Surah (1-114)'),
+                          decoration: const InputDecoration(
+                              labelText: 'Surah (1-114)'),
                           onChanged: (v) => surah = int.tryParse(v) ?? 1,
                         ),
                       ),
@@ -1680,12 +1940,15 @@ class _StudentsTabState extends State<StudentsTab> {
               ),
             ),
             actions: [
-              TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+              TextButton(
+                onPressed: () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
               ElevatedButton(
                 onPressed: canSubmit
                     ? () async {
                         final foundParent = currentParents.firstWhere(
-                          (p) => p['id'] == selectedParentId,
+                          (parent) => parent['id'] == selectedParentId,
                           orElse: () => currentParents.first,
                         );
 
@@ -1706,17 +1969,15 @@ class _StudentsTabState extends State<StudentsTab> {
                         if (context.mounted) {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
-                              content: Text('Enrolled ${nameCtrl.text.trim()} under ${foundParent['name']}.'),
-                              backgroundColor: AppColors.accentTeal,
+                              content: Text(
+                                'Enrolled ${nameCtrl.text.trim()} under ${foundParent['name']}.',
+                              ),
+                              backgroundColor: p.primary,
                             ),
                           );
                         }
                       }
                     : null,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppColors.accentTeal,
-                  foregroundColor: Colors.black,
-                ),
                 child: const Text('Enroll Student'),
               ),
             ],
@@ -1726,19 +1987,22 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  // Dialog: Edit remarks
-  void _showEditRemarksDialog(BuildContext context, Student student, AttendanceRecord att) {
+  void _showEditRemarksDialog(
+      BuildContext context, Student student, AttendanceRecord att) {
     final remarksCtrl = TextEditingController(text: att.teacherRemarks);
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Edit Remarks: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        title: Text('Edit Remarks: ${student.fullName}'),
         content: TextField(
           controller: remarksCtrl,
           decoration: const InputDecoration(labelText: 'Teacher Remarks / Notes'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
             onPressed: () async {
               await StudentService.instance.recordDailyAttendance(
@@ -1757,19 +2021,14 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  // Dialog: Student History
   void _showStudentHistoryDialog(BuildContext context, Student student) {
+    final p = AppColors.of(context);
     final history = StudentService.instance.getAttendanceForStudent(student.id);
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Attendance Log: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+        title: Text('Attendance Log: ${student.fullName}'),
         content: SizedBox(
           width: double.maxFinite,
           child: history.isEmpty
@@ -1780,24 +2039,19 @@ class _StudentsTabState extends State<StudentsTab> {
               : ListView.builder(
                   shrinkWrap: true,
                   itemCount: history.length,
-                  itemBuilder: (ctx, i) => _buildAttendanceCard(
-                    history[i],
-                    isDark,
-                    cardBg,
-                    borderColor,
-                    textColor,
-                    subtextColor,
-                  ),
+                  itemBuilder: (ctx, i) => _buildAttendanceCard(history[i], p),
                 ),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Close')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Close'),
+          ),
         ],
       ),
     );
   }
 
-  // Dialog: Admin single attendance record
   void _showMarkAttendanceDialog(BuildContext context, Student student) {
     String selectedStatus = 'present';
     final remarksCtrl = TextEditingController(text: 'Attended circle on time.');
@@ -1806,22 +2060,23 @@ class _StudentsTabState extends State<StudentsTab> {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Daily Attendance: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          title: Text('Daily Attendance: ${student.fullName}'),
           content: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
               DropdownButtonFormField<String>(
                 value: selectedStatus,
                 items: const [
-                  DropdownMenuItem(value: 'present', child: Text('Present ✅')),
-                  DropdownMenuItem(value: 'late', child: Text('Late ⏰')),
-                  DropdownMenuItem(value: 'absent', child: Text('Absent ❌')),
-                  DropdownMenuItem(value: 'excused', child: Text('Excused 📝')),
+                  DropdownMenuItem(value: 'present', child: Text('Present')),
+                  DropdownMenuItem(value: 'late', child: Text('Late')),
+                  DropdownMenuItem(value: 'absent', child: Text('Absent')),
+                  DropdownMenuItem(value: 'excused', child: Text('Excused')),
                 ],
-                onChanged: (val) => setDialogState(() => selectedStatus = val!),
-                decoration: const InputDecoration(labelText: 'Attendance Status'),
+                onChanged: (val) =>
+                    setDialogState(() => selectedStatus = val!),
+                decoration: const InputDecoration(labelText: 'Status'),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 12),
               TextField(
                 controller: remarksCtrl,
                 decoration: const InputDecoration(labelText: 'Teacher Remarks'),
@@ -1829,7 +2084,10 @@ class _StudentsTabState extends State<StudentsTab> {
             ],
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
                 await StudentService.instance.recordDailyAttendance(
@@ -1840,12 +2098,16 @@ class _StudentsTabState extends State<StudentsTab> {
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Attendance recorded! Parent ${student.parentName} notified.')),
+                    SnackBar(
+                      content: Text(
+                        'Attendance recorded. Parent ${student.parentName} notified.',
+                      ),
+                    ),
                   );
                 }
                 setState(() {});
               },
-              child: const Text('Post & Notify Parent'),
+              child: const Text('Save & Notify'),
             ),
           ],
         ),
@@ -1853,43 +2115,70 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  // Dialog: Weekly Report
   void _showWeeklyReportDialog(BuildContext context, Student student) {
     final sabaqCtrl = TextEditingController(text: 'Surah Al-Mulk (1-15)');
     final sabqiCtrl = TextEditingController(text: 'Surah Al-Qalam (1-20)');
     final manzilCtrl = TextEditingController(text: 'Juz 29 Retention');
-    final remarksCtrl = TextEditingController(text: 'Consistent Tajweed articulation.');
+    final remarksCtrl =
+        TextEditingController(text: 'Consistent Tajweed articulation.');
     String rating = 'Excellent';
 
     showDialog(
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Weekly Report: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+          title: Text('Weekly Report: ${student.fullName}'),
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(controller: sabaqCtrl, decoration: const InputDecoration(labelText: 'Sabaq (New Lesson)')),
-                TextField(controller: sabqiCtrl, decoration: const InputDecoration(labelText: 'Sabqi (Recent Revision)')),
-                TextField(controller: manzilCtrl, decoration: const InputDecoration(labelText: 'Manzil (Retention)')),
+                TextField(
+                  controller: sabaqCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Sabaq (New Lesson)'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: sabqiCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Sabqi (Recent Revision)'),
+                ),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: manzilCtrl,
+                  decoration:
+                      const InputDecoration(labelText: 'Manzil (Retention)'),
+                ),
+                const SizedBox(height: 10),
                 DropdownButtonFormField<String>(
                   value: rating,
                   items: const [
-                    DropdownMenuItem(value: 'Excellent', child: Text('Excellent 🌟')),
-                    DropdownMenuItem(value: 'Very Good', child: Text('Very Good 👍')),
-                    DropdownMenuItem(value: 'Good', child: Text('Good 👌')),
-                    DropdownMenuItem(value: 'Needs Revision', child: Text('Needs Revision ⚠️')),
+                    DropdownMenuItem(
+                        value: 'Excellent', child: Text('Excellent')),
+                    DropdownMenuItem(
+                        value: 'Very Good', child: Text('Very Good')),
+                    DropdownMenuItem(value: 'Good', child: Text('Good')),
+                    DropdownMenuItem(
+                        value: 'Needs Revision', child: Text('Needs Revision')),
                   ],
                   onChanged: (val) => setDialogState(() => rating = val!),
-                  decoration: const InputDecoration(labelText: 'Tajweed Evaluation'),
+                  decoration:
+                      const InputDecoration(labelText: 'Tajweed Evaluation'),
                 ),
-                TextField(controller: remarksCtrl, decoration: const InputDecoration(labelText: 'Ustaz Evaluation Notes')),
+                const SizedBox(height: 10),
+                TextField(
+                  controller: remarksCtrl,
+                  decoration: const InputDecoration(
+                      labelText: 'Ustaz Evaluation Notes'),
+                ),
               ],
             ),
           ),
           actions: [
-            TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
             ElevatedButton(
               onPressed: () async {
                 await StudentService.instance.submitWeeklyReport(
@@ -1904,12 +2193,16 @@ class _StudentsTabState extends State<StudentsTab> {
                 if (ctx.mounted) Navigator.pop(ctx);
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('Weekly report posted! Parent ${student.parentName} notified.')),
+                    SnackBar(
+                      content: Text(
+                        'Weekly report posted. Parent ${student.parentName} notified.',
+                      ),
+                    ),
                   );
                 }
                 setState(() {});
               },
-              child: const Text('Submit & Notify Parent'),
+              child: const Text('Submit & Notify'),
             ),
           ],
         ),
@@ -1917,143 +2210,142 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  // Attendance card widget
-  Widget _buildAttendanceCard(
-    AttendanceRecord att,
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    Color pillColor = AppColors.accentEmerald;
-    if (att.isAbsent) pillColor = const Color(0xFFEF4444);
-    if (att.isLate) pillColor = const Color(0xFFFFA000);
-    if (att.isExcused) pillColor = const Color(0xFF8B5CF6);
+  Widget _buildAttendanceCard(AttendanceRecord att, AppPalette p) {
+    final pillColor = _statusColor(att.status, p);
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: borderColor),
-      ),
-      child: Row(
-        children: [
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-            decoration: BoxDecoration(color: pillColor.withOpacity(0.15), borderRadius: BorderRadius.circular(8)),
-            child: Text(
-              att.status.toUpperCase(),
-              style: TextStyle(color: pillColor, fontWeight: FontWeight.bold, fontSize: 10),
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: ProCard(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
+        borderRadius: 16,
+        child: Row(
+          children: [
+            ProStatusPill(
+              label: att.status.toUpperCase(),
+              color: pillColor,
+              showDot: true,
             ),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    att.teacherRemarks ?? 'Attended circle on time',
+                    style: TextStyle(
+                      color: p.ink,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    att.date.toIso8601String().substring(0, 10),
+                    style: TextStyle(color: p.inkMuted, fontSize: 11),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildWeeklyReportCard(WeeklyReport report, AppPalette p) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: ProCard(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  att.teacherRemarks ?? 'Attended circle on time',
-                  style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.w600),
+                  'Week of ${report.weekStartDate.toIso8601String().substring(0, 10)}',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                    color: p.ink,
+                  ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  att.date.toIso8601String().substring(0, 10),
-                  style: TextStyle(color: subtextColor, fontSize: 10.5),
+                ProStatusPill(
+                  label: report.tajweedRating,
+                  color: p.success,
+                  icon: Icons.verified_rounded,
                 ),
               ],
             ),
-          ),
-        ],
-      ),
-    );
-  }
-
-  // Weekly report item
-  Widget _buildWeeklyReportCard(
-    WeeklyReport report,
-    bool isDark,
-    Color cardBg,
-    Color borderColor,
-    Color textColor,
-    Color subtextColor,
-  ) {
-    return Container(
-      margin: const EdgeInsets.only(bottom: 10),
-      padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        color: cardBg,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: borderColor),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                'Week of ${report.weekStartDate.toIso8601String().substring(0, 10)}',
-                style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: textColor),
+            const SizedBox(height: 12),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: p.surfaceSubtle,
+                borderRadius: BorderRadius.circular(12),
               ),
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                decoration: BoxDecoration(
-                  color: const Color(0xFF10B981).withOpacity(0.15),
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                child: Text(
-                  report.tajweedRating,
-                  style: const TextStyle(color: Color(0xFF10B981), fontWeight: FontWeight.bold, fontSize: 10.5),
+              child: Column(
+                children: [
+                  _buildReportLine(p, 'Sabaq (New)', report.sabaq),
+                  const SizedBox(height: 6),
+                  _buildReportLine(p, 'Sabqi (Revision)', report.sabqi),
+                  const SizedBox(height: 6),
+                  _buildReportLine(p, 'Manzil (Retention)', report.manzil),
+                ],
+              ),
+            ),
+            if (report.teacherRemarks.isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                'Ustaz Notes: "${report.teacherRemarks}"',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontStyle: FontStyle.italic,
+                  color: p.primary,
                 ),
               ),
             ],
-          ),
-          const SizedBox(height: 8),
-          Text('• Sabaq (New): ${report.sabaq}', style: TextStyle(fontSize: 11.5, color: textColor)),
-          Text('• Sabqi (Revision): ${report.sabqi}', style: TextStyle(fontSize: 11.5, color: subtextColor)),
-          Text('• Manzil: ${report.manzil}', style: TextStyle(fontSize: 11.5, color: subtextColor)),
-          const SizedBox(height: 6),
-          Text(
-            'Ustaz Remarks: "${report.teacherRemarks}"',
-            style: const TextStyle(fontSize: 11, fontStyle: FontStyle.italic, color: AppColors.accentTeal),
-          ),
-        ],
-      ),
-    );
-  }
-
-  Widget _buildStatBadge({
-    required String label,
-    required String value,
-    required Color color,
-    required bool isDark,
-  }) {
-    return Expanded(
-      child: Container(
-        padding: const EdgeInsets.symmetric(vertical: 6, horizontal: 8),
-        decoration: BoxDecoration(
-          color: color.withOpacity(isDark ? 0.15 : 0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Column(
-          children: [
-            Text(label, style: TextStyle(fontSize: 10, color: color, fontWeight: FontWeight.bold)),
-            const SizedBox(height: 2),
-            Text(value, style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: color)),
           ],
         ),
       ),
     );
   }
 
-  // Parent Request Absence Excuse Dialog
+  Widget _buildReportLine(AppPalette p, String label, String val) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SizedBox(
+          width: 115,
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11.5,
+              fontWeight: FontWeight.w600,
+              color: p.inkSecondary,
+            ),
+          ),
+        ),
+        Expanded(
+          child: Text(
+            val,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              color: p.ink,
+            ),
+          ),
+        ),
+      ],
+    );
+  }
+
   void _showRequestAbsenceDialog(BuildContext context, Student student) {
+    final p = AppColors.of(context);
     DateTime selectedDate = DateTime.now();
     String selectedReason = 'illness';
-    final notesCtrl = TextEditingController(text: 'Feeling unwell and needs rest at home.');
+    final notesCtrl =
+        TextEditingController(text: 'Feeling unwell and needs rest at home.');
 
     showDialog<void>(
       context: context,
@@ -2061,13 +2353,12 @@ class _StudentsTabState extends State<StudentsTab> {
         return StatefulBuilder(
           builder: (dCtx, setDialogState) {
             return AlertDialog(
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
               title: Row(
                 children: [
-                  const Icon(Icons.edit_calendar_rounded, color: Color(0xFF8B5CF6), size: 22),
+                  Icon(Icons.edit_calendar_rounded, color: p.excused, size: 22),
                   const SizedBox(width: 8),
                   Expanded(
-                    child: Text('Request Excuse: ${student.fullName}', style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold)),
+                    child: Text('Request Excuse: ${student.fullName}'),
                   ),
                 ],
               ),
@@ -2076,60 +2367,80 @@ class _StudentsTabState extends State<StudentsTab> {
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text('Circle: ${student.halaqahName}', style: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppColors.accentTeal)),
+                    Text(
+                      'Circle: ${student.halaqahName}',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w700,
+                        color: p.primary,
+                      ),
+                    ),
                     const SizedBox(height: 12),
                     Row(
                       mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Text('Date: ${selectedDate.toIso8601String().substring(0, 10)}', style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold)),
+                        Text(
+                          'Date: ${selectedDate.toIso8601String().substring(0, 10)}',
+                          style: const TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                         TextButton.icon(
                           onPressed: () async {
                             final picked = await showDatePicker(
                               context: context,
                               initialDate: selectedDate,
-                              firstDate: DateTime.now().subtract(const Duration(days: 2)),
-                              lastDate: DateTime.now().add(const Duration(days: 30)),
+                              firstDate: DateTime.now()
+                                  .subtract(const Duration(days: 2)),
+                              lastDate:
+                                  DateTime.now().add(const Duration(days: 30)),
                             );
                             if (picked != null) {
                               setDialogState(() => selectedDate = picked);
                             }
                           },
-                          icon: const Icon(Icons.calendar_month_rounded, size: 14),
-                          label: const Text('Change Date', style: TextStyle(fontSize: 11.5)),
+                          icon: const Icon(Icons.calendar_month_rounded,
+                              size: 15),
+                          label: const Text('Change'),
                         ),
                       ],
                     ),
                     const SizedBox(height: 10),
-                    const Text('Reason for Absence:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
                     DropdownButtonFormField<String>(
                       value: selectedReason,
                       items: const [
-                        DropdownMenuItem(value: 'illness', child: Text('Medical / Illness 🤒')),
-                        DropdownMenuItem(value: 'family_emergency', child: Text('Family Emergency 🚨')),
-                        DropdownMenuItem(value: 'school_exam', child: Text('School Academic Exam 📚')),
-                        DropdownMenuItem(value: 'travel', child: Text('Travel / Out of Town ✈️')),
-                        DropdownMenuItem(value: 'other', child: Text('Other Personal Reason 📝')),
+                        DropdownMenuItem(
+                            value: 'illness', child: Text('Medical / Illness')),
+                        DropdownMenuItem(
+                            value: 'family_emergency',
+                            child: Text('Family Emergency')),
+                        DropdownMenuItem(
+                            value: 'school_exam',
+                            child: Text('School Academic Exam')),
+                        DropdownMenuItem(
+                            value: 'travel',
+                            child: Text('Travel / Out of Town')),
+                        DropdownMenuItem(
+                            value: 'other',
+                            child: Text('Other Personal Reason')),
                       ],
                       onChanged: (val) {
-                        if (val != null) setDialogState(() => selectedReason = val);
+                        if (val != null) {
+                          setDialogState(() => selectedReason = val);
+                        }
                       },
-                      decoration: InputDecoration(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
+                      decoration: const InputDecoration(
+                        labelText: 'Reason for Absence',
                       ),
                     ),
                     const SizedBox(height: 12),
-                    const Text('Parent Notes / Explanation:', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                    const SizedBox(height: 6),
                     TextField(
                       controller: notesCtrl,
                       maxLines: 2,
-                      style: const TextStyle(fontSize: 12),
-                      decoration: InputDecoration(
+                      decoration: const InputDecoration(
+                        labelText: 'Parent Explanation',
                         hintText: 'Enter reason details for the teacher...',
-                        contentPadding: const EdgeInsets.all(10),
-                        border: OutlineInputBorder(borderRadius: BorderRadius.circular(10)),
                       ),
                     ),
                   ],
@@ -2148,18 +2459,20 @@ class _StudentsTabState extends State<StudentsTab> {
                       reason: selectedReason,
                       notes: notesCtrl.text.trim(),
                     );
-                    Navigator.of(ctx).pop();
+                    if (ctx.mounted) Navigator.of(ctx).pop();
                     if (!mounted) return;
                     setState(() {});
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text('Absence excuse submitted for ${student.fullName}! Ustaz notified.'),
-                        backgroundColor: const Color(0xFF8B5CF6),
+                        content: Text(
+                          'Absence excuse submitted for ${student.fullName}. Ustaz notified.',
+                        ),
+                        backgroundColor: p.excused,
                       ),
                     );
                   },
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: const Color(0xFF8B5CF6),
+                    backgroundColor: p.excused,
                     foregroundColor: Colors.white,
                   ),
                   child: const Text('Submit Excuse'),
@@ -2170,5 +2483,20 @@ class _StudentsTabState extends State<StudentsTab> {
         );
       },
     );
+  }
+
+  String _cleanReasonLabel(String reason) {
+    switch (reason.toLowerCase()) {
+      case 'illness':
+        return 'Medical / Illness';
+      case 'family_emergency':
+        return 'Family Emergency';
+      case 'school_exam':
+        return 'School Academic Exam';
+      case 'travel':
+        return 'Travel / Out of Town';
+      default:
+        return 'Personal Reason';
+    }
   }
 }

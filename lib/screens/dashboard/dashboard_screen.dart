@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
+import '../../core/models/chat_message.dart';
 import '../../core/services/absence_service.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
@@ -16,7 +17,8 @@ import '../../core/services/student_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/announcement_banner.dart';
-import '../../widgets/meniscus_nav_bar.dart';
+import '../../widgets/kheyrukum_nav_bar.dart';
+import '../../widgets/pro_ui_kit.dart';
 import '../announcements/announcements_sheet.dart';
 import '../settings/settings_sheet.dart';
 import 'tabs/home_tab.dart';
@@ -25,8 +27,7 @@ import 'tabs/messages_tab.dart';
 import 'tabs/more_tab.dart';
 import 'tabs/students_tab.dart';
 
-/// Main Dashboard Screen with a calm, spacious layout,
-/// unified electric lime accent color, clean header, and floating Meniscus navigation.
+/// Main Flagship Dashboard Shell for Kheyrukum Islamic Center.
 class DashboardScreen extends StatefulWidget {
   const DashboardScreen({super.key});
 
@@ -38,55 +39,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTabIndex = 0;
   int _unreadAnnouncementsCount = 0;
   int _unreadNotificationsCount = NotificationCenterService.instance.unreadCount;
+  int _unreadMessagesCount = 0;
   Announcement? _activeAlertAnnouncement;
   Timer? _alertDismissTimer;
   StreamSubscription<Announcement>? _alertSub;
   StreamSubscription<List<Announcement>>? _announcementsSub;
   StreamSubscription<List<AppNotification>>? _notifsSub;
   StreamSubscription<Map<String, String>>? _prayerSub;
+  StreamSubscription<List<Conversation>>? _conversationsSub;
 
-  int get _totalUnreadCount => _unreadAnnouncementsCount + _unreadNotificationsCount;
+  int get _totalUnreadCount =>
+      _unreadAnnouncementsCount + _unreadNotificationsCount;
 
   @override
   void initState() {
     super.initState();
 
-    // Bootstrap authenticated session & all live cloud streams
     _bootstrapCloudServices();
+    _recomputeUnreadMessages();
 
     // 1. Listen for immediate popup alerts when a new announcement arrives
-    _alertSub = AnnouncementService.instance.onNewAnnouncementAlert.listen((announcement) {
+    _alertSub = AnnouncementService.instance.onNewAnnouncementAlert
+        .listen((announcement) {
       if (!mounted) return;
       _triggerAlertToast(announcement);
     });
 
     // 2. Stream unread announcements count from Supabase Realtime
-    _announcementsSub = AnnouncementService.instance.streamAnnouncements().listen((list) {
+    _announcementsSub =
+        AnnouncementService.instance.streamAnnouncements().listen((list) {
       if (!mounted) return;
-      final unread = list.where((a) => !AnnouncementService.instance.isRead(a.id)).length;
+      AnnouncementService.instance.registerKnownIds(list.map((a) => a.id));
+      final unread =
+          list.where((a) => !AnnouncementService.instance.isRead(a.id)).length;
       setState(() => _unreadAnnouncementsCount = unread);
     });
 
-    // 3. Stream unread system notifications (attendance, weekly reports, tuition, payments)
+    // 3. Stream unread system notifications
     _notifsSub = NotificationCenterService.instance.stream.listen((list) {
       if (!mounted) return;
-      setState(() => _unreadNotificationsCount = NotificationCenterService.instance.unreadCount);
+      setState(() => _unreadNotificationsCount =
+          NotificationCenterService.instance.unreadCount);
     });
 
-    // 4. Start daily prayer reminder
+    // 4. Stream unread chat messages for the Messages tab badge
+    _conversationsSub =
+        MessagingService.instance.conversationsStream.listen((_) {
+      if (!mounted) return;
+      _recomputeUnreadMessages();
+    });
+
+    // 5. Start daily prayer reminder
     PrayerReminderService.instance.start();
     _prayerSub = PrayerReminderService.instance.onPrayerAlert.listen((alert) {
       if (!mounted) return;
       _triggerAlertToast(Announcement(
         id: 'prayer-${DateTime.now().millisecondsSinceEpoch}',
-        title: alert['title'] ?? 'Don\'t forget to pray 🕌',
-        content: alert['body'] ?? 'Take a peaceful moment to remember Allah.',
+        title: alert['title'] ?? 'Time for Prayer',
+        content:
+            alert['body'] ?? 'Take a peaceful moment to remember Allah.',
         targetAudience: 'all',
         authorName: 'Adhan & Prayer Reminder',
         isPinned: true,
         createdAt: DateTime.now(),
       ));
     });
+  }
+
+  void _recomputeUnreadMessages() {
+    final convos = MessagingService.instance.getConversationsForUser(
+      AuthSessionService.instance.userId,
+      role: AuthSessionService.instance.currentRole,
+    );
+    final total = convos.fold<int>(0, (sum, c) => sum + c.unreadCount);
+    if (mounted) {
+      setState(() => _unreadMessagesCount = total);
+    }
   }
 
   Future<void> _bootstrapCloudServices() async {
@@ -101,6 +129,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       PushNotificationService.instance.registerDeviceToken(),
     ]);
     AnnouncementService.instance.refreshAndSubscribe();
+    _recomputeUnreadMessages();
   }
 
   void _triggerAlertToast(Announcement announcement) {
@@ -119,39 +148,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _announcementsSub?.cancel();
     _notifsSub?.cancel();
     _prayerSub?.cancel();
+    _conversationsSub?.cancel();
     super.dispose();
   }
-
-  // Cohesive Kheyrukum Emerald accent across the app
-  static const Color _limeAccent = AppColors.accentEmerald;
-
-  final List<MeniscusNavItem> _navItems = const [
-    MeniscusNavItem(
-      icon: Icons.home_rounded,
-      label: 'Home',
-      accentColor: _limeAccent,
-    ),
-    MeniscusNavItem(
-      icon: Icons.person_rounded,
-      label: 'Students',
-      accentColor: _limeAccent,
-    ),
-    MeniscusNavItem(
-      icon: Icons.chat_bubble_rounded,
-      label: 'Messages',
-      accentColor: _limeAccent,
-    ),
-    MeniscusNavItem(
-      icon: Icons.menu_book_rounded,
-      label: 'Homework',
-      accentColor: _limeAccent,
-    ),
-    MeniscusNavItem(
-      icon: Icons.grid_view_rounded,
-      label: 'More',
-      accentColor: _limeAccent,
-    ),
-  ];
 
   late final List<Widget> _pages = [
     HomeTab(
@@ -171,68 +170,73 @@ class _DashboardScreenState extends State<DashboardScreen> {
   Widget build(BuildContext context) {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppTheme.themeModeNotifier,
-      builder: (context, themeMode, _) {
-        final isDark = themeMode == ThemeMode.dark;
-        final headerBtnBg = isDark ? AppColors.surfaceCard : Colors.white;
-        final headerBorderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+      builder: (context, _, __) {
+        final p = AppColors.of(context);
+
+        final navItems = [
+          const KheyrukumNavItem(
+            icon: Icons.home_outlined,
+            activeIcon: Icons.home_rounded,
+            label: 'Home',
+          ),
+          const KheyrukumNavItem(
+            icon: Icons.people_outline_rounded,
+            activeIcon: Icons.people_rounded,
+            label: 'Students',
+          ),
+          KheyrukumNavItem(
+            icon: Icons.chat_bubble_outline_rounded,
+            activeIcon: Icons.chat_bubble_rounded,
+            label: 'Messages',
+            badgeCount: _unreadMessagesCount,
+          ),
+          const KheyrukumNavItem(
+            icon: Icons.menu_book_outlined,
+            activeIcon: Icons.menu_book_rounded,
+            label: 'Homework',
+          ),
+          const KheyrukumNavItem(
+            icon: Icons.grid_view_outlined,
+            activeIcon: Icons.grid_view_rounded,
+            label: 'More',
+          ),
+        ];
 
         return Scaffold(
-          backgroundColor: isDark ? AppColors.background : AppColors.backgroundLight,
+          backgroundColor: p.canvas,
           body: Stack(
             children: [
               SafeArea(
+                bottom: false,
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
-                    const SizedBox(height: 6),
-
-                    // Refined App Header: Monogram Avatar + Greeting & Role Pill + Notifications + Settings
+                    // Editorial App Header
                     ValueListenableBuilder<String>(
-                      valueListenable: AuthSessionService.instance.roleNotifier,
+                      valueListenable:
+                          AuthSessionService.instance.roleNotifier,
                       builder: (context, currentRole, _) {
                         final userName = AuthSessionService.instance.userName;
-                        final displayName = userName.isNotEmpty ? userName : 'Administrator';
-                        final avatarInitial = displayName.isNotEmpty ? displayName[0].toUpperCase() : 'A';
+                        final displayName =
+                            userName.isNotEmpty ? userName : 'Administrator';
                         final roleLabel = currentRole == 'admin'
                             ? 'Director'
                             : (currentRole == 'teacher' ? 'Ustaz' : 'Parent');
                         final roleColor = currentRole == 'admin'
-                            ? AppColors.accentAmber
-                            : (currentRole == 'teacher' ? AppColors.accentTealLight : AppColors.accentEmerald);
+                            ? p.gold
+                            : (currentRole == 'teacher' ? p.primary : p.info);
 
                         return Padding(
-                          padding: const EdgeInsets.fromLTRB(20, 8, 20, 10),
+                          padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                           child: Row(
                             children: [
-                              // Monogram Avatar with gradient ring
-                              Container(
-                                width: 44,
-                                height: 44,
-                                padding: const EdgeInsets.all(2),
-                                decoration: const BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: AppColors.journeyGradient,
-                                ),
-                                child: Container(
-                                  decoration: BoxDecoration(
-                                    shape: BoxShape.circle,
-                                    color: isDark ? AppColors.surfaceCard : Colors.white,
-                                  ),
-                                  child: Center(
-                                    child: Text(
-                                      avatarInitial,
-                                      style: TextStyle(
-                                        color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 17,
-                                      ),
-                                    ),
-                                  ),
-                                ),
+                              ProAvatar(
+                                name: displayName,
+                                radius: 22,
+                                color: roleColor,
+                                showGoldRing: currentRole == 'admin',
                               ),
                               const SizedBox(width: 12),
-
-                              // Greeting + User Name + Role Pill
                               Expanded(
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -244,25 +248,31 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           'Assalamu Alaikum',
                                           style: TextStyle(
                                             fontSize: 11.5,
-                                            color: isDark ? AppColors.textSecondary : AppColors.textSecondaryLight,
+                                            color: p.inkSecondary,
                                             fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        const SizedBox(width: 8),
+                                        const SizedBox(width: 7),
                                         Container(
-                                          padding: const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 7,
+                                            vertical: 2,
+                                          ),
                                           decoration: BoxDecoration(
-                                            color: roleColor.withOpacity(0.14),
-                                            borderRadius: BorderRadius.circular(6),
-                                            border: Border.all(color: roleColor.withOpacity(0.3)),
+                                            color: roleColor.withOpacity(0.12),
+                                            borderRadius:
+                                                BorderRadius.circular(6),
+                                            border: Border.all(
+                                              color: roleColor.withOpacity(0.28),
+                                            ),
                                           ),
                                           child: Text(
                                             roleLabel.toUpperCase(),
                                             style: TextStyle(
                                               fontSize: 9,
-                                              fontWeight: FontWeight.w700,
+                                              fontWeight: FontWeight.w800,
                                               color: roleColor,
-                                              letterSpacing: 0.6,
+                                              letterSpacing: 0.5,
                                             ),
                                           ),
                                         ),
@@ -272,9 +282,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     Text(
                                       displayName,
                                       style: TextStyle(
-                                        fontSize: 18,
+                                        fontSize: 17.5,
                                         fontWeight: FontWeight.w700,
-                                        color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                                        color: p.ink,
                                         letterSpacing: -0.3,
                                       ),
                                       maxLines: 1,
@@ -283,84 +293,59 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                   ],
                                 ),
                               ),
-
-                              // Actions: Notification Bell + Settings
-                              Row(
-                                mainAxisSize: MainAxisSize.min,
+                              // Notification Bell
+                              Stack(
+                                clipBehavior: Clip.none,
                                 children: [
-                                  // Notification Bell with Badge
-                                  Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      InkWell(
-                                        onTap: () => _showUnifiedNotificationsSheet(context),
-                                        borderRadius: BorderRadius.circular(14),
-                                        child: Container(
-                                          width: 42,
-                                          height: 42,
-                                          decoration: BoxDecoration(
-                                            color: headerBtnBg,
-                                            borderRadius: BorderRadius.circular(14),
-                                            border: Border.all(color: headerBorderColor),
-                                          ),
-                                          child: Icon(
-                                            Icons.notifications_none_rounded,
-                                            size: 20,
-                                            color: isDark ? Colors.white : AppColors.textPrimaryLight,
-                                          ),
-                                        ),
-                                      ),
-                                      if (_totalUnreadCount > 0)
-                                        Positioned(
-                                          top: -3,
-                                          right: -3,
-                                          child: Container(
-                                            padding: const EdgeInsets.all(4),
-                                            decoration: const BoxDecoration(
-                                              color: AppColors.accentCoral,
-                                              shape: BoxShape.circle,
-                                            ),
-                                            constraints: const BoxConstraints(
-                                              minWidth: 18,
-                                              minHeight: 18,
-                                            ),
-                                            child: Center(
-                                              child: Text(
-                                                _totalUnreadCount > 9 ? '9+' : '$_totalUnreadCount',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.bold,
-                                                ),
-                                              ),
-                                            ),
-                                          ),
-                                        ),
-                                    ],
+                                  _HeaderIconButton(
+                                    icon: Icons.notifications_none_rounded,
+                                    tooltip: 'Activity & Alerts',
+                                    onTap: () =>
+                                        _showUnifiedNotificationsSheet(context),
                                   ),
-
-                                  const SizedBox(width: 10),
-
-                                  // Settings Button
-                                  InkWell(
-                                    onTap: () => SettingsSheet.show(context),
-                                    borderRadius: BorderRadius.circular(14),
-                                    child: Container(
-                                      width: 42,
-                                      height: 42,
-                                      decoration: BoxDecoration(
-                                        color: headerBtnBg,
-                                        borderRadius: BorderRadius.circular(14),
-                                        border: Border.all(color: headerBorderColor),
-                                      ),
-                                      child: Icon(
-                                        Icons.tune_rounded,
-                                        size: 20,
-                                        color: isDark ? Colors.white : AppColors.textPrimaryLight,
+                                  if (_totalUnreadCount > 0)
+                                    Positioned(
+                                      top: -4,
+                                      right: -4,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 5,
+                                          vertical: 2,
+                                        ),
+                                        constraints: const BoxConstraints(
+                                          minWidth: 18,
+                                          minHeight: 18,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: p.danger,
+                                          borderRadius:
+                                              BorderRadius.circular(10),
+                                          border: Border.all(
+                                            color: p.canvas,
+                                            width: 1.5,
+                                          ),
+                                        ),
+                                        child: Center(
+                                          child: Text(
+                                            _totalUnreadCount > 9
+                                                ? '9+'
+                                                : '$_totalUnreadCount',
+                                            style: const TextStyle(
+                                              color: Colors.white,
+                                              fontSize: 9,
+                                              fontWeight: FontWeight.w800,
+                                            ),
+                                          ),
+                                        ),
                                       ),
                                     ),
-                                  ),
                                 ],
+                              ),
+                              const SizedBox(width: 8),
+                              _HeaderIconButton(
+                                icon: Icons.tune_rounded,
+                                tooltip: 'Settings',
+                                onTap: () => SettingsSheet.show(context),
                               ),
                             ],
                           ),
@@ -368,33 +353,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       },
                     ),
 
-                    // Dynamic Page Body driven by tab index
+                    // Preserves tab scroll positions & live streams smoothly
                     Expanded(
-                      child: AnimatedSwitcher(
-                        duration: const Duration(milliseconds: 220),
-                        transitionBuilder: (child, animation) {
-                          return FadeTransition(
-                            opacity: animation,
-                            child: SlideTransition(
-                              position: Tween<Offset>(
-                                begin: const Offset(0.0, 0.02),
-                                end: Offset.zero,
-                              ).animate(CurvedAnimation(parent: animation, curve: Curves.easeOutQuad)),
-                              child: child,
-                            ),
-                          );
-                        },
-                        child: KeyedSubtree(
-                          key: ValueKey<int>(_currentTabIndex),
-                          child: _pages[_currentTabIndex],
-                        ),
+                      child: IndexedStack(
+                        index: _currentTabIndex,
+                        children: _pages,
                       ),
                     ),
                   ],
                 ),
               ),
 
-              // Real-time Incoming Announcement Notification Banner
+              // Real-time Incoming Announcement Banner
               if (_activeAlertAnnouncement != null)
                 Positioned(
                   top: 0,
@@ -412,14 +382,14 @@ class _DashboardScreenState extends State<DashboardScreen> {
                   ),
                 ),
 
-              // Floating Meniscus Bottom Navigation Bar
+              // Floating Frosted-Glass Pill Dock
               Positioned(
-                left: 20,
-                right: 20,
-                bottom: 22,
-                child: MeniscusNavBar(
+                left: 16,
+                right: 16,
+                bottom: MediaQuery.of(context).padding.bottom + 14,
+                child: KheyrukumNavBar(
                   selectedIndex: _currentTabIndex,
-                  items: _navItems,
+                  items: navItems,
                   onTabChanged: (index) {
                     setState(() {
                       _currentTabIndex = index;
@@ -435,13 +405,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
   }
 
   void _showUnifiedNotificationsSheet(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final sheetBg = isDark ? AppColors.surfaceCard : Colors.white;
-    final cardBg = isDark ? AppColors.background : const Color(0xFFF8FAFC);
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
-
+    final p = AppColors.of(context);
+    AnnouncementService.instance.markAllAsRead();
     setState(() => _unreadAnnouncementsCount = 0);
 
     showModalBottomSheet(
@@ -449,203 +414,184 @@ class _DashboardScreenState extends State<DashboardScreen> {
       isScrollControlled: true,
       backgroundColor: Colors.transparent,
       builder: (sheetCtx) {
-        return Container(
-          height: MediaQuery.of(sheetCtx).size.height * 0.78,
-          decoration: BoxDecoration(
-            color: sheetBg,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: borderColor),
+        return ProBottomSheetShell(
+          title: 'Activity & Alerts',
+          subtitle: 'Real-time updates across your account',
+          icon: Icons.notifications_active_rounded,
+          iconColor: p.primary,
+          heightFactor: 0.78,
+          trailingAction: IconButton(
+            icon: Icon(Icons.campaign_outlined, color: p.ink, size: 21),
+            tooltip: 'View All Notices',
+            onPressed: () {
+              Navigator.pop(sheetCtx);
+              AnnouncementsSheet.show(context);
+            },
           ),
           child: Column(
             children: [
-              const SizedBox(height: 12),
-              Container(
-                width: 40,
-                height: 4,
-                decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.35),
-                  borderRadius: BorderRadius.circular(2),
-                ),
-              ),
               Padding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 16, 12),
+                padding: const EdgeInsets.fromLTRB(20, 10, 16, 4),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Activity & Alerts',
-                          style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700, color: textColor),
-                        ),
-                        Text(
-                          'Realtime updates across your account',
-                          style: TextStyle(fontSize: 11.5, color: subtextColor),
-                        ),
-                      ],
+                    Text(
+                      'RECENT ACTIVITY',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        letterSpacing: 0.7,
+                        color: p.inkMuted,
+                      ),
                     ),
-                    Row(
-                      children: [
-                        TextButton(
-                          onPressed: () {
-                            NotificationCenterService.instance.markAllAsRead();
-                          },
-                          child: const Text(
-                            'Mark all read',
-                            style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: AppColors.accentEmerald),
-                          ),
+                    TextButton(
+                      onPressed: () {
+                        NotificationCenterService.instance.markAllAsRead();
+                      },
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
                         ),
-                        IconButton(
-                          icon: Icon(Icons.campaign_outlined, color: textColor, size: 22),
-                          tooltip: 'View All Announcements',
-                          onPressed: () {
-                            Navigator.pop(sheetCtx);
-                            AnnouncementsSheet.show(context);
-                          },
-                        ),
-                      ],
+                        minimumSize: Size.zero,
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                      child: const Text(
+                        'Mark all read',
+                        style: TextStyle(fontSize: 12),
+                      ),
                     ),
                   ],
                 ),
               ),
-              Divider(height: 1, color: borderColor),
               Expanded(
                 child: StreamBuilder<List<AppNotification>>(
                   stream: NotificationCenterService.instance.stream,
-                  initialData: NotificationCenterService.instance.currentNotifications,
+                  initialData:
+                      NotificationCenterService.instance.currentNotifications,
                   builder: (context, snapshot) {
                     final items = snapshot.data ?? [];
                     if (items.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(28),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: 64,
-                                height: 64,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: AppColors.accentEmerald.withOpacity(0.12),
-                                ),
-                                child: const Icon(
-                                  Icons.notifications_none_rounded,
-                                  size: 30,
-                                  color: AppColors.accentEmerald,
-                                ),
-                              ),
-                              const SizedBox(height: 14),
-                              Text(
-                                'No recent alerts',
-                                style: TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: textColor),
-                              ),
-                              const SizedBox(height: 6),
-                              Text(
-                                'Attendance updates, messages, homework tasks, and announcements will appear here.',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 12, color: subtextColor, height: 1.4),
-                              ),
-                              const SizedBox(height: 18),
-                              OutlinedButton.icon(
-                                onPressed: () {
-                                  Navigator.pop(sheetCtx);
-                                  AnnouncementsSheet.show(context);
-                                },
-                                icon: const Icon(Icons.campaign_outlined, size: 16),
-                                label: const Text('Open Announcements'),
-                              ),
-                            ],
-                          ),
+                      return Padding(
+                        padding: const EdgeInsets.all(20),
+                        child: Column(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            ProEmptyState(
+                              icon: Icons.notifications_none_rounded,
+                              title: 'No recent alerts',
+                              message:
+                                  'Attendance updates, messages, homework tasks, and school circulars will appear here.',
+                            ),
+                            const SizedBox(height: 16),
+                            OutlinedButton.icon(
+                              onPressed: () {
+                                Navigator.pop(sheetCtx);
+                                AnnouncementsSheet.show(context);
+                              },
+                              icon: const Icon(Icons.campaign_outlined, size: 17),
+                              label: const Text('View Center Notices'),
+                            ),
+                          ],
                         ),
                       );
                     }
 
                     return ListView.separated(
-                      padding: const EdgeInsets.all(16),
+                      padding: const EdgeInsets.fromLTRB(16, 8, 16, 24),
                       itemCount: items.length,
                       separatorBuilder: (_, __) => const SizedBox(height: 10),
                       itemBuilder: (context, idx) {
                         final notif = items[idx];
                         IconData icon = Icons.notifications_rounded;
-                        Color iconColor = AppColors.accentEmerald;
+                        Color iconColor = p.primary;
                         if (notif.type.contains('message')) {
                           icon = Icons.chat_bubble_rounded;
-                          iconColor = AppColors.accentTealLight;
+                          iconColor = p.info;
                         } else if (notif.type.contains('payment')) {
                           icon = Icons.receipt_long_rounded;
-                          iconColor = AppColors.accentAmber;
+                          iconColor = p.gold;
                         } else if (notif.type.contains('homework')) {
                           icon = Icons.menu_book_rounded;
-                          iconColor = const Color(0xFF8B5CF6);
-                        } else if (notif.type.contains('attendance') || notif.type.contains('absence')) {
+                          iconColor = p.excused;
+                        } else if (notif.type.contains('attendance') ||
+                            notif.type.contains('absence')) {
                           icon = Icons.fact_check_rounded;
-                          iconColor = AppColors.accentEmerald;
+                          iconColor = p.success;
                         }
 
-                        return InkWell(
-                          onTap: () => NotificationCenterService.instance.markAsRead(notif.id),
-                          borderRadius: BorderRadius.circular(16),
-                          child: Container(
-                            padding: const EdgeInsets.all(14),
-                            decoration: BoxDecoration(
-                              color: cardBg,
-                              borderRadius: BorderRadius.circular(16),
-                              border: Border.all(
-                                color: notif.isRead ? borderColor : iconColor.withOpacity(0.45),
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Container(
-                                  width: 38,
-                                  height: 38,
-                                  decoration: BoxDecoration(
-                                    color: iconColor.withOpacity(0.14),
-                                    borderRadius: BorderRadius.circular(10),
-                                  ),
-                                  child: Icon(icon, size: 18, color: iconColor),
+                        return ProCard(
+                          onTap: () => NotificationCenterService.instance
+                              .markAsRead(notif.id),
+                          padding: const EdgeInsets.all(14),
+                          borderColor: notif.isRead
+                              ? p.border
+                              : iconColor.withOpacity(0.45),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                width: 40,
+                                height: 40,
+                                decoration: BoxDecoration(
+                                  color: iconColor.withOpacity(0.12),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Row(
-                                        children: [
-                                          Expanded(
-                                            child: Text(
-                                              notif.title,
-                                              style: TextStyle(
-                                                fontSize: 13.5,
-                                                fontWeight: notif.isRead ? FontWeight.w500 : FontWeight.w700,
-                                                color: textColor,
-                                              ),
+                                child: Icon(icon, size: 19, color: iconColor),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(
+                                          child: Text(
+                                            notif.title,
+                                            style: TextStyle(
+                                              fontSize: 13.5,
+                                              fontWeight: notif.isRead
+                                                  ? FontWeight.w600
+                                                  : FontWeight.w700,
+                                              color: p.ink,
                                             ),
                                           ),
-                                          if (!notif.isRead)
-                                            Container(
-                                              width: 7,
-                                              height: 7,
-                                              decoration: BoxDecoration(
-                                                color: iconColor,
-                                                shape: BoxShape.circle,
-                                              ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          _formatTime(notif.createdAt),
+                                          style: TextStyle(
+                                            fontSize: 10.5,
+                                            color: p.inkMuted,
+                                          ),
+                                        ),
+                                        if (!notif.isRead) ...[
+                                          const SizedBox(width: 6),
+                                          Container(
+                                            width: 7,
+                                            height: 7,
+                                            decoration: BoxDecoration(
+                                              color: iconColor,
+                                              shape: BoxShape.circle,
                                             ),
+                                          ),
                                         ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      notif.body,
+                                      style: TextStyle(
+                                        fontSize: 12,
+                                        color: p.inkSecondary,
+                                        height: 1.4,
                                       ),
-                                      const SizedBox(height: 3),
-                                      Text(
-                                        notif.body,
-                                        style: TextStyle(fontSize: 12, color: subtextColor, height: 1.35),
-                                      ),
-                                    ],
-                                  ),
+                                    ),
+                                  ],
                                 ),
-                              ],
-                            ),
+                              ),
+                            ],
                           ),
                         );
                       },
@@ -657,6 +603,51 @@ class _DashboardScreenState extends State<DashboardScreen> {
           ),
         );
       },
+    );
+  }
+
+  String _formatTime(DateTime dt) {
+    final diff = DateTime.now().difference(dt);
+    if (diff.inMinutes < 1) return 'Now';
+    if (diff.inMinutes < 60) return '${diff.inMinutes}m';
+    if (diff.inHours < 24) return '${diff.inHours}h';
+    return '${dt.month}/${dt.day}';
+  }
+}
+
+class _HeaderIconButton extends StatelessWidget {
+  final IconData icon;
+  final String tooltip;
+  final VoidCallback onTap;
+
+  const _HeaderIconButton({
+    required this.icon,
+    required this.tooltip,
+    required this.onTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    return Tooltip(
+      message: tooltip,
+      child: Material(
+        color: p.surface,
+        borderRadius: BorderRadius.circular(14),
+        child: InkWell(
+          onTap: onTap,
+          borderRadius: BorderRadius.circular(14),
+          child: Container(
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(color: p.border),
+            ),
+            child: Icon(icon, size: 20, color: p.ink),
+          ),
+        ),
+      ),
     );
   }
 }

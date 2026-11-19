@@ -8,8 +8,8 @@ import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 
-/// Redesigned Modern Modal dialog for Admins to compose and broadcast real-time announcements
-/// with genuine native device file picker and Supabase Storage uploads.
+/// Flagship Modal Dialog for Admins to compose and broadcast real-time circulars
+/// with native device image/document pickers and Supabase Storage uploads.
 class PostAnnouncementDialog extends StatefulWidget {
   const PostAnnouncementDialog({super.key});
 
@@ -27,7 +27,6 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   bool _isBroadcasting = false;
   String? _errorMessage;
 
-  // Real device media & storage state
   String? _attachmentName;
   String? _attachmentUrl;
   int? _attachmentSize;
@@ -56,12 +55,20 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
     return '${(bytes / (1024 * 1024)).toStringAsFixed(1)} MB';
   }
 
-  /// Pick file directly from device storage and upload to Supabase Storage
   Future<void> _pickAndUploadAttachment() async {
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
-        allowedExtensions: ['pdf', 'doc', 'docx', 'png', 'jpg', 'jpeg', 'webp', 'txt'],
+        allowedExtensions: [
+          'pdf',
+          'doc',
+          'docx',
+          'png',
+          'jpg',
+          'jpeg',
+          'webp',
+          'txt'
+        ],
         withData: true,
       );
 
@@ -70,10 +77,13 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       final pickedFile = result.files.first;
       final fileName = pickedFile.name;
       final fileBytes = pickedFile.bytes ??
-          (pickedFile.path != null ? await File(pickedFile.path!).readAsBytes() : null);
+          (pickedFile.path != null
+              ? await File(pickedFile.path!).readAsBytes()
+              : null);
 
       if (fileBytes == null) {
-        setState(() => _errorMessage = 'Could not read selected file data from device.');
+        setState(
+            () => _errorMessage = 'Could not read selected file from device.');
         return;
       }
 
@@ -99,28 +109,28 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Attached "$fileName" from device successfully! 📎'),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
+            content: Text('Attached "$fileName" successfully.'),
+            backgroundColor: AppColors.of(context).success,
             duration: const Duration(seconds: 2),
           ),
         );
       } else {
         setState(() {
           _isUploadingAttachment = false;
-          _errorMessage = 'Cloud upload failed. Please check network connection and try again.';
+          _errorMessage =
+              'Cloud upload failed. Please check network connection and try again.';
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploadingAttachment = false;
-        _errorMessage = 'Failed to select file: ${SupabaseService.cleanErrorMessage(e)}';
+        _errorMessage =
+            'Failed to select file: ${SupabaseService.cleanErrorMessage(e)}';
       });
     }
   }
 
-  /// Pick image directly using camera or photo gallery
   Future<void> _pickImageAttachment() async {
     try {
       final picker = ImagePicker();
@@ -155,23 +165,24 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Attached photo "$fileName" successfully! 🖼️'),
-            backgroundColor: const Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
+            content: Text('Attached photo "$fileName" successfully.'),
+            backgroundColor: AppColors.of(context).success,
             duration: const Duration(seconds: 2),
           ),
         );
       } else {
         setState(() {
           _isUploadingAttachment = false;
-          _errorMessage = 'Cloud upload failed. Please check network connection and try again.';
+          _errorMessage =
+              'Cloud upload failed. Please check network connection and try again.';
         });
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _isUploadingAttachment = false;
-        _errorMessage = 'Failed to pick image: ${SupabaseService.cleanErrorMessage(e)}';
+        _errorMessage =
+            'Failed to pick image: ${SupabaseService.cleanErrorMessage(e)}';
       });
     }
   }
@@ -189,7 +200,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
     final content = _contentController.text.trim();
 
     if (title.isEmpty || content.isEmpty) {
-      setState(() => _errorMessage = 'Please provide both title and circular text.');
+      setState(
+          () => _errorMessage = 'Please provide both title and circular text.');
       return;
     }
 
@@ -214,15 +226,18 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       if (res['success'] == true) {
         Navigator.of(context).pop(true);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Announcement broadcasted to all users successfully! 📢'),
-            backgroundColor: Color(0xFF10B981),
-            behavior: SnackBarBehavior.floating,
+          SnackBar(
+            content: const Text(
+              'Announcement broadcasted to all users successfully.',
+            ),
+            backgroundColor: AppColors.of(context).success,
           ),
         );
       } else {
         setState(() {
-          _errorMessage = res['error'] ?? 'Broadcast failed. Please check your connection.';
+          _errorMessage = res['error'] ??
+              res['message'] ??
+              'Broadcast failed. Please check your connection.';
         });
       }
     } catch (e) {
@@ -240,17 +255,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF0F172A) : Colors.white;
-    final fieldBg = isDark ? const Color(0xFF1E293B) : const Color(0xFFF8FAFC);
-    final textColor = isDark ? Colors.white : const Color(0xFF0F172A);
-    final subtextColor = isDark ? const Color(0xFF94A3B8) : const Color(0xFF64748B);
-    final subtleBorder = isDark ? const Color(0xFF334155) : const Color(0xFFE2E8F0);
-    const limeGreen = Color(0xFFC9F24A);
+    final p = AppColors.of(context);
 
     return Dialog(
-      backgroundColor: cardBg,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+      backgroundColor: p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: p.border),
+      ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: ConstrainedBox(
         constraints: const BoxConstraints(maxWidth: 500),
@@ -260,19 +272,19 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Header
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Row(
                     children: [
                       Container(
-                        padding: const EdgeInsets.all(8),
+                        padding: const EdgeInsets.all(9),
                         decoration: BoxDecoration(
-                          color: limeGreen.withOpacity(0.15),
+                          color: p.gold.withOpacity(0.14),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: const Icon(Icons.campaign_rounded, color: limeGreen, size: 22),
+                        child: Icon(Icons.campaign_rounded,
+                            color: p.gold, size: 22),
                       ),
                       const SizedBox(width: 12),
                       Column(
@@ -282,13 +294,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             'Broadcast Circular',
                             style: TextStyle(
                               fontSize: 17,
-                              fontWeight: FontWeight.bold,
-                              color: textColor,
+                              fontWeight: FontWeight.w700,
+                              color: p.ink,
                             ),
                           ),
                           Text(
                             'Push notice to parents & teachers',
-                            style: TextStyle(fontSize: 11.5, color: subtextColor),
+                            style: TextStyle(
+                                fontSize: 11.5, color: p.inkSecondary),
                           ),
                         ],
                       ),
@@ -296,89 +309,95 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   ),
                   IconButton(
                     onPressed: () => Navigator.of(context).pop(),
-                    icon: Icon(Icons.close_rounded, size: 20, color: subtextColor),
-                    padding: EdgeInsets.zero,
-                    constraints: const BoxConstraints(),
+                    icon: Icon(Icons.close_rounded,
+                        size: 20, color: p.inkSecondary),
                   ),
                 ],
               ),
-
               const SizedBox(height: 18),
 
-              // Title Field
               Text(
                 'CIRCULAR TITLE',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.inkMuted,
+                  letterSpacing: 0.6,
+                ),
               ),
               const SizedBox(height: 6),
               TextField(
                 controller: _titleController,
-                style: TextStyle(fontSize: 14.5, fontWeight: FontWeight.bold, color: textColor),
-                decoration: InputDecoration(
+                style: TextStyle(
+                  fontSize: 14.5,
+                  fontWeight: FontWeight.w700,
+                  color: p.ink,
+                ),
+                decoration: const InputDecoration(
                   hintText: 'e.g. Ramadan Recitation Schedule & Timings',
-                  hintStyle: TextStyle(color: subtextColor.withOpacity(0.6), fontSize: 13),
-                  filled: true,
-                  fillColor: fieldBg,
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: limeGreen, width: 1.5)),
                 ),
               ),
-
               const SizedBox(height: 16),
 
-              // Body Content Field
               Text(
                 'MESSAGE CONTENT',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.inkMuted,
+                  letterSpacing: 0.6,
+                ),
               ),
               const SizedBox(height: 6),
               TextField(
                 controller: _contentController,
                 maxLines: 4,
-                style: TextStyle(fontSize: 13.5, color: textColor, height: 1.4),
-                decoration: InputDecoration(
+                style: TextStyle(fontSize: 13.5, color: p.ink, height: 1.4),
+                decoration: const InputDecoration(
                   hintText: 'Write the complete circular text here...',
-                  hintStyle: TextStyle(color: subtextColor.withOpacity(0.6), fontSize: 13),
-                  filled: true,
-                  fillColor: fieldBg,
-                  contentPadding: const EdgeInsets.all(14),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                  enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: BorderSide(color: subtleBorder)),
-                  focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(14), borderSide: const BorderSide(color: limeGreen, width: 1.5)),
                 ),
               ),
-
               const SizedBox(height: 16),
 
-              // Native Device File Upload Section
               Text(
                 'ATTACHMENT',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.inkMuted,
+                  letterSpacing: 0.6,
+                ),
               ),
               const SizedBox(height: 6),
 
               if (_isUploadingAttachment)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
                   decoration: BoxDecoration(
-                    color: fieldBg,
+                    color: p.surfaceSubtle,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: subtleBorder),
+                    border: Border.all(color: p.border),
                   ),
                   child: Row(
                     children: [
-                      const SizedBox(
+                      SizedBox(
                         width: 18,
                         height: 18,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: limeGreen),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: p.primary,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
                           'Uploading attachment to cloud storage...',
-                          style: TextStyle(fontSize: 12.5, color: textColor, fontWeight: FontWeight.w500),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            color: p.ink,
+                            fontWeight: FontWeight.w500,
+                          ),
                         ),
                       ),
                     ],
@@ -386,11 +405,12 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                 )
               else if (_attachmentUrl != null)
                 Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
                   decoration: BoxDecoration(
-                    color: fieldBg,
+                    color: p.surfaceSubtle,
                     borderRadius: BorderRadius.circular(14),
-                    border: Border.all(color: limeGreen.withOpacity(0.5)),
+                    border: Border.all(color: p.primary.withOpacity(0.45)),
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -401,14 +421,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                           Container(
                             padding: const EdgeInsets.all(8),
                             decoration: BoxDecoration(
-                              color: limeGreen.withOpacity(0.15),
+                              color: p.primarySoft,
                               borderRadius: BorderRadius.circular(10),
                             ),
                             child: Icon(
                               _isImage(_attachmentUrl!, _attachmentName)
                                   ? Icons.image_rounded
                                   : Icons.insert_drive_file_rounded,
-                              color: limeGreen,
+                              color: p.primary,
                               size: 20,
                             ),
                           ),
@@ -419,7 +439,11 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                               children: [
                                 Text(
                                   _attachmentName ?? 'Attached File',
-                                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                                  style: TextStyle(
+                                    fontSize: 13,
+                                    fontWeight: FontWeight.w700,
+                                    color: p.ink,
+                                  ),
                                   maxLines: 1,
                                   overflow: TextOverflow.ellipsis,
                                 ),
@@ -429,19 +453,19 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                                     if (_attachmentSize != null) ...[
                                       Text(
                                         _formatFileSize(_attachmentSize!),
-                                        style: TextStyle(fontSize: 11, color: subtextColor),
+                                        style: TextStyle(
+                                          fontSize: 11,
+                                          color: p.inkSecondary,
+                                        ),
                                       ),
                                       const SizedBox(width: 8),
                                     ],
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 1.5),
-                                      decoration: BoxDecoration(
-                                        color: const Color(0xFF10B981).withOpacity(0.15),
-                                        borderRadius: BorderRadius.circular(6),
-                                      ),
-                                      child: const Text(
-                                        'Ready to Broadcast',
-                                        style: TextStyle(fontSize: 9.5, fontWeight: FontWeight.bold, color: Color(0xFF10B981)),
+                                    Text(
+                                      'Ready',
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: p.success,
                                       ),
                                     ),
                                   ],
@@ -450,7 +474,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             ),
                           ),
                           IconButton(
-                            icon: const Icon(Icons.close_rounded, size: 18, color: Color(0xFFEF4444)),
+                            icon: Icon(Icons.close_rounded,
+                                size: 18, color: p.danger),
                             onPressed: _removeAttachment,
                             tooltip: 'Remove Attachment',
                           ),
@@ -463,12 +488,13 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                           child: Container(
                             height: 120,
                             width: double.infinity,
-                            color: isDark ? const Color(0xFF0F172A) : const Color(0xFFE2E8F0),
+                            color: p.canvas,
                             child: Image.network(
                               _attachmentUrl!,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) => const Center(
-                                child: Icon(Icons.image_not_supported_rounded, color: Colors.grey),
+                                child: Icon(Icons.image_not_supported_rounded,
+                                    color: Colors.grey),
                               ),
                             ),
                           ),
@@ -481,54 +507,22 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                 Row(
                   children: [
                     Expanded(
-                      child: InkWell(
-                        onTap: _pickImageAttachment,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: fieldBg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: subtleBorder),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.add_photo_alternate_rounded, size: 20, color: limeGreen),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Attach Photo',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: OutlinedButton.icon(
+                        onPressed: _pickImageAttachment,
+                        icon: Icon(Icons.add_photo_alternate_rounded,
+                            size: 19, color: p.primary),
+                        label: const Text('Attach Photo',
+                            style: TextStyle(fontSize: 12.5)),
                       ),
                     ),
                     const SizedBox(width: 8),
                     Expanded(
-                      child: InkWell(
-                        onTap: _pickAndUploadAttachment,
-                        borderRadius: BorderRadius.circular(14),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-                          decoration: BoxDecoration(
-                            color: fieldBg,
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: subtleBorder),
-                          ),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              const Icon(Icons.attach_file_rounded, size: 20, color: limeGreen),
-                              const SizedBox(width: 6),
-                              Text(
-                                'Attach File',
-                                style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: textColor),
-                              ),
-                            ],
-                          ),
-                        ),
+                      child: OutlinedButton.icon(
+                        onPressed: _pickAndUploadAttachment,
+                        icon: Icon(Icons.attach_file_rounded,
+                            size: 19, color: p.primary),
+                        label: const Text('Attach File',
+                            style: TextStyle(fontSize: 12.5)),
                       ),
                     ),
                   ],
@@ -536,41 +530,54 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
               const SizedBox(height: 16),
 
-              // Target Audience Selector
               Text(
                 'TARGET AUDIENCE',
-                style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: subtextColor, letterSpacing: 0.5),
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.inkMuted,
+                  letterSpacing: 0.6,
+                ),
               ),
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _buildAudienceChip('all', 'Everyone', Icons.groups_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                  _buildAudienceChip(p, 'all', 'Everyone', Icons.groups_rounded),
                   const SizedBox(width: 8),
-                  _buildAudienceChip('parents', 'Parents Only', Icons.family_restroom_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                  _buildAudienceChip(
+                      p, 'parents', 'Parents', Icons.family_restroom_rounded),
                   const SizedBox(width: 8),
-                  _buildAudienceChip('teachers', 'Teachers Only', Icons.school_rounded, limeGreen, textColor, fieldBg, subtleBorder),
+                  _buildAudienceChip(
+                      p, 'teachers', 'Teachers', Icons.school_rounded),
                 ],
               ),
-
               const SizedBox(height: 12),
 
-              // Pin to Top Checkbox
               InkWell(
                 onTap: () => setState(() => _isPinned = !_isPinned),
                 borderRadius: BorderRadius.circular(10),
                 child: Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 4),
+                  padding: const EdgeInsets.symmetric(vertical: 6),
                   child: Row(
                     children: [
                       Icon(
-                        _isPinned ? Icons.push_pin_rounded : Icons.push_pin_outlined,
-                        color: _isPinned ? limeGreen : subtextColor,
+                        _isPinned
+                            ? Icons.push_pin_rounded
+                            : Icons.push_pin_outlined,
+                        color: _isPinned ? p.gold : p.inkMuted,
                         size: 18,
                       ),
                       const SizedBox(width: 8),
-                      Text(
-                        'Pin this circular to the top of Home screen',
-                        style: TextStyle(fontSize: 12.5, color: _isPinned ? textColor : subtextColor),
+                      Expanded(
+                        child: Text(
+                          'Pin this circular to the top of Home screen',
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight:
+                                _isPinned ? FontWeight.w600 : FontWeight.w400,
+                            color: _isPinned ? p.ink : p.inkSecondary,
+                          ),
+                        ),
                       ),
                     ],
                   ),
@@ -579,42 +586,40 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
               if (_errorMessage != null) ...[
                 const SizedBox(height: 10),
-                Text(_errorMessage!, style: const TextStyle(color: Color(0xFFEF4444), fontSize: 12)),
+                Text(
+                  _errorMessage!,
+                  style: TextStyle(color: p.danger, fontSize: 12),
+                ),
               ],
-
               const SizedBox(height: 20),
 
-              // Action Buttons
               Row(
                 children: [
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        side: BorderSide(color: subtleBorder),
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                      ),
-                      child: Text('Cancel', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                      child: const Text('Cancel'),
                     ),
                   ),
                   const SizedBox(width: 12),
                   Expanded(
                     flex: 2,
                     child: ElevatedButton.icon(
-                      onPressed: (_isBroadcasting || _isUploadingAttachment) ? null : _handleBroadcast,
+                      onPressed: (_isBroadcasting || _isUploadingAttachment)
+                          ? null
+                          : _handleBroadcast,
                       icon: _isBroadcasting
-                          ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.black))
-                          : const Icon(Icons.send_rounded, size: 16, color: Colors.black),
+                          ? const SizedBox(
+                              width: 16,
+                              height: 16,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: Colors.white,
+                              ),
+                            )
+                          : const Icon(Icons.send_rounded, size: 16),
                       label: Text(
-                        _isBroadcasting ? 'Broadcasting...' : 'Broadcast Notice',
-                        style: const TextStyle(color: Colors.black, fontWeight: FontWeight.bold, fontSize: 13.5),
-                      ),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: limeGreen,
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                        elevation: 0,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        _isBroadcasting ? 'Broadcasting...' : 'Broadcast',
                       ),
                     ),
                   ),
@@ -628,13 +633,10 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   }
 
   Widget _buildAudienceChip(
+    AppPalette p,
     String id,
     String label,
     IconData icon,
-    Color activeColor,
-    Color textColor,
-    Color fieldBg,
-    Color subtleBorder,
   ) {
     final isSelected = _selectedAudience == id;
     return Expanded(
@@ -642,22 +644,28 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
         onTap: () => setState(() => _selectedAudience = id),
         borderRadius: BorderRadius.circular(12),
         child: Container(
-          padding: const EdgeInsets.symmetric(vertical: 8),
+          padding: const EdgeInsets.symmetric(vertical: 9),
           decoration: BoxDecoration(
-            color: isSelected ? activeColor.withOpacity(0.18) : fieldBg,
+            color: isSelected ? p.primarySoft : p.surfaceSubtle,
             borderRadius: BorderRadius.circular(12),
-            border: Border.all(color: isSelected ? activeColor : subtleBorder),
+            border: Border.all(
+              color: isSelected ? p.primary : p.border,
+            ),
           ),
           child: Column(
             children: [
-              Icon(icon, size: 16, color: isSelected ? activeColor : textColor),
+              Icon(
+                icon,
+                size: 16,
+                color: isSelected ? p.primary : p.inkSecondary,
+              ),
               const SizedBox(height: 4),
               Text(
                 label,
                 style: TextStyle(
-                  fontSize: 10.5,
-                  fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
-                  color: isSelected ? activeColor : textColor,
+                  fontSize: 11,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w500,
+                  color: isSelected ? p.primary : p.ink,
                 ),
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,

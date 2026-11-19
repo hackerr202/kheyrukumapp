@@ -3,15 +3,17 @@ import 'package:flutter/services.dart';
 import '../core/models/invitation_code.dart';
 import '../core/services/supabase_service.dart';
 import '../core/theme/app_colors.dart';
+import 'pro_ui_kit.dart';
 
 /// Modal dialog allowing Administrators to generate realtime invite codes
-/// for Teachers and Parents, and view active codes in real time.
+/// for Teachers and Parents, and inspect active codes in real time.
 class InviteCodeDialog extends StatefulWidget {
   final String initialRole;
 
   const InviteCodeDialog({super.key, this.initialRole = 'teacher'});
 
-  static Future<void> show(BuildContext context, {String initialRole = 'teacher'}) {
+  static Future<void> show(BuildContext context,
+      {String initialRole = 'teacher'}) {
     return showDialog<void>(
       context: context,
       barrierDismissible: true,
@@ -71,27 +73,22 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
     Clipboard.setData(ClipboardData(text: code));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Copied "$code" to clipboard!'),
+        content: Text('Copied "$code" to clipboard.'),
         duration: const Duration(seconds: 2),
-        backgroundColor: AppColors.accentTeal,
-        behavior: SnackBarBehavior.floating,
+        backgroundColor: AppColors.of(context).primary,
       ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    final p = AppColors.of(context);
 
     return Dialog(
-      backgroundColor: cardBg,
+      backgroundColor: p.surface,
       shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(24),
-        side: BorderSide(color: borderColor),
+        side: BorderSide(color: p.border),
       ),
       insetPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 24),
       child: Container(
@@ -101,19 +98,19 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Header Row
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Row(
                   children: [
                     Container(
-                      padding: const EdgeInsets.all(8),
+                      padding: const EdgeInsets.all(9),
                       decoration: BoxDecoration(
-                        color: AppColors.accentTeal.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(10),
+                        color: p.primarySoft,
+                        borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Icon(Icons.vpn_key_rounded, color: AppColors.accentTeal, size: 20),
+                      child:
+                          Icon(Icons.vpn_key_rounded, color: p.primary, size: 20),
                     ),
                     const SizedBox(width: 10),
                     Column(
@@ -123,147 +120,70 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                           'Generate Invite Code',
                           style: TextStyle(
                             fontSize: 17,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
+                            fontWeight: FontWeight.w700,
+                            color: p.ink,
                           ),
                         ),
                         Text(
                           'Realtime Parent & Teacher Signups',
-                          style: TextStyle(
-                            fontSize: 11,
-                            color: subtextColor,
-                          ),
+                          style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
                         ),
                       ],
                     ),
                   ],
                 ),
                 IconButton(
-                  icon: Icon(Icons.close_rounded, color: subtextColor, size: 20),
+                  icon: Icon(Icons.close_rounded,
+                      color: p.inkSecondary, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
                   tooltip: 'Close',
                 ),
               ],
             ),
-
             const SizedBox(height: 16),
 
-            // Role Selector: Teacher vs Parent
             Text(
               'Select Target Role',
-              style: TextStyle(fontSize: 12, fontWeight: FontWeight.w600, color: subtextColor),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: p.inkSecondary,
+              ),
             ),
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             Row(
               children: [
                 Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedRole = 'teacher'),
-                    borderRadius: BorderRadius.circular(12),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _selectedRole == 'teacher'
-                            ? AppColors.accentTeal.withOpacity(0.18)
-                            : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _selectedRole == 'teacher' ? AppColors.accentTeal : borderColor,
-                          width: _selectedRole == 'teacher' ? 1.5 : 1.0,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.school_rounded,
-                            size: 16,
-                            color: _selectedRole == 'teacher' ? AppColors.accentTeal : subtextColor,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Teacher',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: _selectedRole == 'teacher' ? AppColors.accentTeal : textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: _buildRoleTile(
+                    p: p,
+                    role: 'teacher',
+                    label: 'Teacher',
+                    icon: Icons.school_rounded,
+                    color: p.primary,
                   ),
                 ),
-                const SizedBox(width: 8),
+                const SizedBox(width: 10),
                 Expanded(
-                  child: InkWell(
-                    onTap: () => setState(() => _selectedRole = 'parent'),
-                    borderRadius: BorderRadius.circular(12),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _selectedRole == 'parent'
-                            ? AppColors.accentAmber.withOpacity(0.18)
-                            : (isDark ? const Color(0xFF0F172A) : const Color(0xFFF1F5F9)),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color: _selectedRole == 'parent' ? AppColors.accentAmber : borderColor,
-                          width: _selectedRole == 'parent' ? 1.5 : 1.0,
-                        ),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.family_restroom_rounded,
-                            size: 16,
-                            color: _selectedRole == 'parent' ? AppColors.accentAmber : subtextColor,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Parent',
-                            style: TextStyle(
-                              fontSize: 12,
-                              fontWeight: FontWeight.bold,
-                              color: _selectedRole == 'parent' ? AppColors.accentAmber : textColor,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                  child: _buildRoleTile(
+                    p: p,
+                    role: 'parent',
+                    label: 'Parent',
+                    icon: Icons.family_restroom_rounded,
+                    color: p.gold,
                   ),
                 ),
               ],
             ),
-
             const SizedBox(height: 12),
 
-            // Optional Target Email
             TextField(
               controller: _targetEmailController,
               keyboardType: TextInputType.emailAddress,
-              style: TextStyle(color: textColor, fontSize: 13),
-              decoration: InputDecoration(
+              style: TextStyle(color: p.ink, fontSize: 13.5),
+              decoration: const InputDecoration(
                 isDense: true,
                 hintText: 'Pre-assign to Email (Optional)',
-                hintStyle: TextStyle(color: subtextColor, fontSize: 12),
-                prefixIcon: Icon(Icons.email_outlined, color: subtextColor, size: 16),
-                filled: true,
-                fillColor: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: borderColor),
-                ),
-                enabledBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: BorderSide(color: borderColor),
-                ),
-                focusedBorder: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  borderSide: const BorderSide(color: AppColors.accentTeal),
-                ),
+                prefixIcon: Icon(Icons.email_outlined, size: 18),
               ),
             ),
 
@@ -271,13 +191,11 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
               const SizedBox(height: 8),
               Text(
                 _errorMessage!,
-                style: const TextStyle(color: Color(0xFFFF4B72), fontSize: 11),
+                style: TextStyle(color: p.danger, fontSize: 11.5),
               ),
             ],
+            const SizedBox(height: 14),
 
-            const SizedBox(height: 12),
-
-            // Action Button
             SizedBox(
               width: double.infinity,
               child: ElevatedButton.icon(
@@ -286,61 +204,66 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     ? const SizedBox(
                         width: 14,
                         height: 14,
-                        child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: Colors.white,
+                        ),
                       )
-                    : const Icon(Icons.flash_on_rounded, size: 16, color: Colors.black),
+                    : const Icon(Icons.flash_on_rounded, size: 16),
                 label: Text(
                   _isGenerating
-                      ? 'Generating Realtime Code...'
+                      ? 'Generating Code...'
                       : 'Generate ${_selectedRole == 'teacher' ? 'Teacher' : 'Parent'} Code',
-                  style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13, color: Colors.black),
                 ),
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _selectedRole == 'teacher' ? AppColors.accentTeal : AppColors.accentAmber,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  backgroundColor:
+                      _selectedRole == 'teacher' ? p.primary : p.gold,
+                  foregroundColor: Colors.white,
                 ),
               ),
             ),
 
-            // Newly Generated Code Banner
             if (_newlyGeneratedCode != null) ...[
               const SizedBox(height: 14),
               Container(
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: AppColors.accentEmerald.withOpacity(0.12),
+                  color: p.success.withOpacity(0.10),
                   borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppColors.accentEmerald.withOpacity(0.4)),
+                  border: Border.all(color: p.success.withOpacity(0.4)),
                 ),
                 child: Row(
                   children: [
-                    const Icon(Icons.check_circle_rounded, color: AppColors.accentEmerald, size: 20),
+                    Icon(Icons.check_circle_rounded,
+                        color: p.success, size: 20),
                     const SizedBox(width: 10),
                     Expanded(
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          const Text(
-                            'Active Realtime Code Ready:',
-                            style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppColors.accentEmerald),
+                          Text(
+                            'Active Code Ready',
+                            style: TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              color: p.success,
+                            ),
                           ),
                           SelectableText(
                             _newlyGeneratedCode!,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.w800,
                               fontFamily: 'monospace',
                               letterSpacing: 1.2,
-                              color: AppColors.accentEmerald,
+                              color: p.success,
                             ),
                           ),
                         ],
                       ),
                     ),
                     IconButton(
-                      icon: const Icon(Icons.copy_rounded, color: AppColors.accentEmerald, size: 18),
+                      icon: Icon(Icons.copy_rounded, color: p.success, size: 18),
                       onPressed: () => _copyToClipboard(_newlyGeneratedCode!),
                       tooltip: 'Copy Code',
                     ),
@@ -350,51 +273,41 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
             ],
 
             const SizedBox(height: 16),
-            Divider(height: 1, color: borderColor),
+            Divider(height: 1, color: p.border),
             const SizedBox(height: 12),
 
-            // Real-Time Active Codes Feed Header
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   'Live Invitation Codes',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: textColor),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: p.ink,
+                  ),
                 ),
-                Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                  decoration: BoxDecoration(
-                    color: AppColors.accentTeal.withOpacity(0.15),
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: const Row(
-                    children: [
-                      Icon(Icons.sync_rounded, color: AppColors.accentTeal, size: 10),
-                      SizedBox(width: 4),
-                      Text(
-                        'REALTIME',
-                        style: TextStyle(
-                          color: AppColors.accentTeal,
-                          fontSize: 9,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: 0.5,
-                        ),
-                      ),
-                    ],
-                  ),
+                ProStatusPill(
+                  label: 'REALTIME',
+                  icon: Icons.sync_rounded,
+                  color: p.primary,
                 ),
               ],
             ),
+            const SizedBox(height: 10),
 
-            const SizedBox(height: 8),
-
-            // Real-Time Stream List
             Expanded(
               child: StreamBuilder<List<InvitationCode>>(
                 stream: SupabaseService.instance.streamInviteCodes(),
                 builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting && !snapshot.hasData) {
-                    return const Center(child: CircularProgressIndicator(strokeWidth: 2));
+                  if (snapshot.connectionState == ConnectionState.waiting &&
+                      !snapshot.hasData) {
+                    return Center(
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: p.primary,
+                      ),
+                    );
                   }
 
                   final codes = snapshot.data ?? [];
@@ -402,7 +315,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     return Center(
                       child: Text(
                         'No invitation codes generated yet.',
-                        style: TextStyle(fontSize: 12, color: subtextColor),
+                        style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
                       ),
                     );
                   }
@@ -413,34 +326,25 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     itemBuilder: (context, index) {
                       final item = codes[index];
                       final isTeacher = item.role == 'teacher';
+                      final roleColor = isTeacher ? p.primary : p.gold;
 
                       return Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 12, vertical: 9),
                         decoration: BoxDecoration(
-                          color: isDark ? const Color(0xFF0F172A) : const Color(0xFFF8FAFC),
+                          color: p.surfaceSubtle,
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(
                             color: item.isUsed
-                                ? borderColor.withOpacity(0.4)
-                                : (isTeacher ? AppColors.accentTeal.withOpacity(0.3) : AppColors.accentAmber.withOpacity(0.3)),
+                                ? p.border
+                                : roleColor.withOpacity(0.32),
                           ),
                         ),
                         child: Row(
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: (isTeacher ? AppColors.accentTeal : AppColors.accentAmber).withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                isTeacher ? 'TEACHER' : 'PARENT',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: isTeacher ? AppColors.accentTeal : AppColors.accentAmber,
-                                ),
-                              ),
+                            ProStatusPill(
+                              label: isTeacher ? 'TEACHER' : 'PARENT',
+                              color: roleColor,
                             ),
                             const SizedBox(width: 8),
                             Expanded(
@@ -451,40 +355,32 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                                     item.code,
                                     style: TextStyle(
                                       fontFamily: 'monospace',
-                                      fontWeight: FontWeight.bold,
+                                      fontWeight: FontWeight.w800,
                                       fontSize: 13,
-                                      color: item.isUsed ? subtextColor : textColor,
-                                      decoration: item.isUsed ? TextDecoration.lineThrough : null,
+                                      color: item.isUsed ? p.inkMuted : p.ink,
+                                      decoration: item.isUsed
+                                          ? TextDecoration.lineThrough
+                                          : null,
                                     ),
                                   ),
                                   if (item.targetEmail != null)
                                     Text(
                                       item.targetEmail!,
-                                      style: TextStyle(fontSize: 10, color: subtextColor),
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        color: p.inkSecondary,
+                                      ),
                                     ),
                                 ],
                               ),
                             ),
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: item.isUsed
-                                    ? Colors.grey.withOpacity(0.15)
-                                    : AppColors.accentEmerald.withOpacity(0.15),
-                                borderRadius: BorderRadius.circular(6),
-                              ),
-                              child: Text(
-                                item.isUsed ? 'USED' : 'ACTIVE',
-                                style: TextStyle(
-                                  fontSize: 9,
-                                  fontWeight: FontWeight.bold,
-                                  color: item.isUsed ? Colors.grey : AppColors.accentEmerald,
-                                ),
-                              ),
+                            ProStatusPill(
+                              label: item.isUsed ? 'USED' : 'ACTIVE',
+                              color: item.isUsed ? p.inkMuted : p.success,
                             ),
                             IconButton(
                               icon: const Icon(Icons.copy_rounded, size: 16),
-                              color: subtextColor,
+                              color: p.inkSecondary,
                               onPressed: () => _copyToClipboard(item.code),
                               tooltip: 'Copy Code',
                               visualDensity: VisualDensity.compact,
@@ -495,6 +391,47 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     },
                   );
                 },
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildRoleTile({
+    required AppPalette p,
+    required String role,
+    required String label,
+    required IconData icon,
+    required Color color,
+  }) {
+    final isSelected = _selectedRole == role;
+    return InkWell(
+      onTap: () => setState(() => _selectedRole = role),
+      borderRadius: BorderRadius.circular(14),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 180),
+        padding: const EdgeInsets.symmetric(vertical: 11),
+        decoration: BoxDecoration(
+          color: isSelected ? color.withOpacity(0.14) : p.surfaceSubtle,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: isSelected ? color : p.border,
+            width: isSelected ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            Icon(icon, size: 17, color: isSelected ? color : p.inkSecondary),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: isSelected ? color : p.ink,
               ),
             ),
           ],

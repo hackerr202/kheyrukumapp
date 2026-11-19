@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 import 'dart:math';
+import 'dart:ui';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
@@ -15,14 +16,14 @@ import '../../core/services/messaging_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/islamic_pattern_painter.dart';
+import '../../widgets/pro_ui_kit.dart';
 
-/// Telegram-style Chat Screen with:
-/// - Distinct Telegram-like chat bubble layout (received vs sent)
-/// - Genuine native media attachment pickers (Camera, Gallery, Video, Document/PDF)
-/// - Direct cloud upload to Supabase Storage
-/// - Real hardware microphone voice recording using `record` (AAC .m4a format)
-/// - Real streaming voice playback using `audioplayers.AudioPlayer` with interactive progress
-/// - Clickable document bubbles opening files via `url_launcher`
+/// Flagship Direct & Circle Chat Screen:
+/// - Refined sent/received bubbles in Deep Pine & Warm Sanctuary Ivory
+/// - Native media pickers (Camera, Gallery, Video, Document/PDF, Quran Ayah Quote)
+/// - Real microphone voice note recording (AAC .m4a) & streaming playback waveform
+/// - Long-press Copy, Edit, and Delete actions
 class ChatScreen extends StatefulWidget {
   final String conversationId;
   final String conversationTitle;
@@ -39,7 +40,8 @@ class ChatScreen extends StatefulWidget {
   State<ChatScreen> createState() => _ChatScreenState();
 }
 
-class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateMixin {
+class _ChatScreenState extends State<ChatScreen>
+    with SingleTickerProviderStateMixin {
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
@@ -63,7 +65,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   StreamSubscription<Duration>? _playerDurationSub;
   StreamSubscription<void>? _playerCompleteSub;
 
-  // Media uploading state
   bool _isUploadingAttachment = false;
 
   String get _currentUserId => AuthSessionService.instance.userId;
@@ -76,7 +77,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     _audioRecorder = AudioRecorder();
     _audioPlayer = AudioPlayer();
 
-    // Setup audio player event subscriptions
     _playerStateSub = _audioPlayer.onPlayerStateChanged.listen((state) {
       if (!mounted) return;
       setState(() {
@@ -159,7 +159,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
   }
 
-  // --- Real Voice Message Recording ---
+  // --- Voice Recording ---
 
   Future<void> _startVoiceRecording() async {
     try {
@@ -168,8 +168,9 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Microphone permission is required to record voice notes.'),
-              behavior: SnackBarBehavior.floating,
+              content: Text(
+                'Microphone permission is required to record voice notes.',
+              ),
             ),
           );
         }
@@ -178,7 +179,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
       final tempDir = await getTemporaryDirectory();
       final timestamp = DateTime.now().millisecondsSinceEpoch;
-      final filePath = '${tempDir.path}/voice_${widget.conversationId}_$timestamp.m4a';
+      final filePath =
+          '${tempDir.path}/voice_${widget.conversationId}_$timestamp.m4a';
       _currentRecordingPath = filePath;
 
       await _audioRecorder.start(
@@ -204,7 +206,11 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       debugPrint('[ChatScreen] Error starting voice record: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not start recording: ${SupabaseService.cleanErrorMessage(e)}')),
+          SnackBar(
+            content: Text(
+              'Could not start recording: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
         );
       }
     }
@@ -252,7 +258,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       final bytes = await file.readAsBytes();
       final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
 
-      // Upload audio file to Supabase Storage bucket 'voice_messages'
       final audioUrl = await StorageService.uploadVoiceNote(
         fileName: fileName,
         bytes: bytes,
@@ -271,8 +276,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
-              content: Text('Failed to upload voice recording to cloud storage.'),
-              behavior: SnackBarBehavior.floating,
+              content:
+                  Text('Failed to upload voice recording to cloud storage.'),
             ),
           );
         }
@@ -281,7 +286,11 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       debugPrint('[ChatScreen] Error sending voice note: $e');
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
         );
       }
     } finally {
@@ -292,16 +301,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     }
   }
 
-  // --- Real Streaming Voice Playback ---
+  // --- Voice Playback ---
 
   Future<void> _togglePlayVoice(ChatMessage msg) async {
     final url = msg.attachmentUrl;
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Voice audio URL is not available.'),
-          behavior: SnackBarBehavior.floating,
-        ),
+        const SnackBar(content: Text('Voice audio URL is not available.')),
       );
       return;
     }
@@ -342,7 +348,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     return '${m.toString().padLeft(2, '0')}:${s.toString().padLeft(2, '0')}';
   }
 
-  // --- Real Native Device Media Attachment Pickers ---
+  // --- Media Pickers ---
 
   Future<void> _pickAndSendImage({required ImageSource source}) async {
     try {
@@ -376,7 +382,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to upload image to cloud storage.'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -384,10 +389,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to attach image: ${SupabaseService.cleanErrorMessage(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to attach image: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
         );
       }
-      debugPrint('[ChatScreen] Error picking image: $e');
     }
   }
 
@@ -420,7 +428,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to upload video to cloud storage.'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -428,10 +435,13 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to attach video: ${SupabaseService.cleanErrorMessage(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to attach video: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
         );
       }
-      debugPrint('[ChatScreen] Error picking video: $e');
     }
   }
 
@@ -445,7 +455,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
-      final bytes = file.bytes ?? (file.path != null ? await File(file.path!).readAsBytes() : null);
+      final bytes = file.bytes ??
+          (file.path != null ? await File(file.path!).readAsBytes() : null);
       if (bytes == null) return;
 
       setState(() => _isUploadingAttachment = true);
@@ -470,7 +481,6 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to upload document to cloud storage.'),
-            behavior: SnackBarBehavior.floating,
           ),
         );
       }
@@ -478,84 +488,83 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to attach document: ${SupabaseService.cleanErrorMessage(e)}')),
+          SnackBar(
+            content: Text(
+              'Failed to attach document: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
         );
       }
-      debugPrint('[ChatScreen] Error picking document: $e');
     }
   }
 
   void _showAttachmentSheet(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-
+    final p = AppColors.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: cardBg,
-      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      backgroundColor: Colors.transparent,
+      isScrollControlled: true,
       builder: (ctx) {
-        return SafeArea(
+        return ProBottomSheetShell(
+          title: 'Share Attachment',
+          subtitle: 'Photos, videos, files, or Quranic reflection',
+          icon: Icons.attach_file_rounded,
+          iconColor: p.primary,
+          heightFactor: 0.34,
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 22),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 18),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                Text(
-                  'Share Attachment',
-                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: textColor),
+                _buildAttachmentOption(
+                  p: p,
+                  icon: Icons.camera_alt_rounded,
+                  label: 'Camera',
+                  color: p.danger,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSendImage(source: ImageSource.camera);
+                  },
                 ),
-                const SizedBox(height: 18),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildAttachmentOption(
-                      icon: Icons.camera_alt_rounded,
-                      label: 'Camera',
-                      color: const Color(0xFFE11D48),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendImage(source: ImageSource.camera);
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.photo_library_rounded,
-                      label: 'Gallery',
-                      color: const Color(0xFF3B82F6),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendImage(source: ImageSource.gallery);
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.videocam_rounded,
-                      label: 'Video',
-                      color: const Color(0xFF8B5CF6),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendVideo();
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.insert_drive_file_rounded,
-                      label: 'Document',
-                      color: const Color(0xFF10B981),
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _pickAndSendDocument();
-                      },
-                    ),
-                    _buildAttachmentOption(
-                      icon: Icons.auto_stories_rounded,
-                      label: 'Ayah Quote',
-                      color: AppColors.accentEmerald,
-                      onTap: () {
-                        Navigator.pop(ctx);
-                        _sendQuranAyahQuote();
-                      },
-                    ),
-                  ],
+                _buildAttachmentOption(
+                  p: p,
+                  icon: Icons.photo_library_rounded,
+                  label: 'Gallery',
+                  color: p.primary,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSendImage(source: ImageSource.gallery);
+                  },
+                ),
+                _buildAttachmentOption(
+                  p: p,
+                  icon: Icons.videocam_rounded,
+                  label: 'Video',
+                  color: p.excused,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSendVideo();
+                  },
+                ),
+                _buildAttachmentOption(
+                  p: p,
+                  icon: Icons.insert_drive_file_rounded,
+                  label: 'Document',
+                  color: p.success,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _pickAndSendDocument();
+                  },
+                ),
+                _buildAttachmentOption(
+                  p: p,
+                  icon: Icons.auto_stories_rounded,
+                  label: 'Ayah Quote',
+                  color: p.gold,
+                  onTap: () {
+                    Navigator.pop(ctx);
+                    _sendQuranAyahQuote();
+                  },
                 ),
               ],
             ),
@@ -566,6 +575,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   }
 
   Widget _buildAttachmentOption({
+    required AppPalette p,
     required IconData icon,
     required String label,
     required Color color,
@@ -575,20 +585,26 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       onTap: onTap,
       borderRadius: BorderRadius.circular(16),
       child: Column(
+        mainAxisSize: MainAxisSize.min,
         children: [
           Container(
             width: 52,
             height: 52,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.18),
+              color: color.withOpacity(0.14),
               borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: color.withOpacity(0.28)),
             ),
-            child: Icon(icon, color: color, size: 24),
+            child: Icon(icon, color: color, size: 23),
           ),
           const SizedBox(height: 8),
           Text(
             label,
-            style: const TextStyle(fontSize: 11, fontWeight: FontWeight.w600),
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              color: p.ink,
+            ),
           ),
         ],
       ),
@@ -598,7 +614,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   void _sendQuranAyahQuote() {
     _sendMessage(
       type: 'text',
-      contentOverride: '📖 Surah Al-Kahf (18:10): "Our Lord, grant us from Yourself mercy and prepare for us from our affair right guidance."',
+      contentOverride:
+          'Surah Al-Kahf (18:10): "Our Lord, grant us from Yourself mercy and prepare for us from our affair right guidance."',
     );
   }
 
@@ -608,15 +625,17 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         builder: (_) => Scaffold(
           backgroundColor: Colors.black,
           appBar: AppBar(
-            backgroundColor: Colors.black.withOpacity(0.7),
+            backgroundColor: Colors.black.withOpacity(0.75),
             elevation: 0,
             leading: IconButton(
-              icon: const Icon(Icons.arrow_back_ios_new_rounded, color: Colors.white),
+              icon: const Icon(Icons.arrow_back_ios_new_rounded,
+                  color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
             actions: [
               IconButton(
-                icon: const Icon(Icons.open_in_browser_rounded, color: Colors.white),
+                icon:
+                    const Icon(Icons.open_in_browser_rounded, color: Colors.white),
                 tooltip: 'Open in browser',
                 onPressed: () async {
                   final uri = Uri.tryParse(imageUrl);
@@ -639,16 +658,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 loadingBuilder: (ctx, child, progress) {
                   if (progress == null) return child;
                   return const Center(
-                    child: CircularProgressIndicator(color: AppColors.accentEmerald),
+                    child: CircularProgressIndicator(
+                      color: AppColors.goldWarm,
+                    ),
                   );
                 },
                 errorBuilder: (_, __, ___) => const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.broken_image_rounded, size: 64, color: Colors.white54),
+                      Icon(Icons.broken_image_rounded,
+                          size: 64, color: Colors.white54),
                       SizedBox(height: 12),
-                      Text('Failed to load image preview', style: TextStyle(color: Colors.white70)),
+                      Text('Failed to load image preview',
+                          style: TextStyle(color: Colors.white70)),
                     ],
                   ),
                 ),
@@ -658,7 +681,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           bottomNavigationBar: (caption != null && caption.isNotEmpty)
               ? Container(
                   color: Colors.black.withOpacity(0.85),
-                  padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
                   child: SafeArea(
                     child: Text(
                       caption,
@@ -674,15 +698,12 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
   }
 
   void _showMessageOptions(ChatMessage msg, bool isMe) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final cardBg = isDark ? const Color(0xFF1E293B) : Colors.white;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-
+    final p = AppColors.of(context);
     showModalBottomSheet(
       context: context,
-      backgroundColor: cardBg,
+      backgroundColor: p.surface,
       shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
       ),
       builder: (ctx) => SafeArea(
         child: Padding(
@@ -691,33 +712,38 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             mainAxisSize: MainAxisSize.min,
             children: [
               Container(
-                width: 36,
+                width: 38,
                 height: 4,
                 decoration: BoxDecoration(
-                  color: Colors.grey.withOpacity(0.4),
+                  color: p.inkMuted.withOpacity(0.35),
                   borderRadius: BorderRadius.circular(2),
                 ),
               ),
               const SizedBox(height: 12),
               ListTile(
-                leading: const Icon(Icons.copy_rounded, color: AppColors.accentEmerald),
-                title: Text('Copy Message Text', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                leading: Icon(Icons.copy_rounded, color: p.primary),
+                title: Text(
+                  'Copy Message Text',
+                  style: TextStyle(color: p.ink, fontWeight: FontWeight.w600),
+                ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: msg.content));
                   ScaffoldMessenger.of(context).showSnackBar(
                     const SnackBar(
-                      content: Text('Message copied to clipboard! 📋'),
+                      content: Text('Message copied to clipboard.'),
                       duration: Duration(seconds: 2),
-                      behavior: SnackBarBehavior.floating,
                     ),
                   );
                 },
               ),
               if (isMe && (msg.messageType == 'text' || msg.messageType.isEmpty))
                 ListTile(
-                  leading: const Icon(Icons.edit_rounded, color: Color(0xFF0284C7)),
-                  title: Text('Edit Message', style: TextStyle(color: textColor, fontWeight: FontWeight.w600)),
+                  leading: Icon(Icons.edit_rounded, color: p.info),
+                  title: Text(
+                    'Edit Message',
+                    style: TextStyle(color: p.ink, fontWeight: FontWeight.w600),
+                  ),
                   onTap: () {
                     Navigator.pop(ctx);
                     _showEditMessageDialog(msg);
@@ -725,21 +751,35 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 ),
               if (isMe)
                 ListTile(
-                  leading: const Icon(Icons.delete_outline_rounded, color: Color(0xFFEF4444)),
-                  title: const Text('Delete Message', style: TextStyle(color: Color(0xFFEF4444), fontWeight: FontWeight.w600)),
+                  leading: Icon(Icons.delete_outline_rounded, color: p.danger),
+                  title: Text(
+                    'Delete Message',
+                    style: TextStyle(
+                      color: p.danger,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                   onTap: () async {
                     Navigator.pop(ctx);
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (c) => AlertDialog(
                         title: const Text('Delete Message?'),
-                        content: const Text('This will remove the message for everyone in this chat.'),
+                        content: const Text(
+                          'This will remove the message for everyone in this chat.',
+                        ),
                         actions: [
-                          TextButton(onPressed: () => Navigator.pop(c, false), child: const Text('Cancel')),
+                          TextButton(
+                            onPressed: () => Navigator.pop(c, false),
+                            child: const Text('Cancel'),
+                          ),
                           ElevatedButton(
-                            style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFFEF4444)),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: p.danger,
+                              foregroundColor: Colors.white,
+                            ),
                             onPressed: () => Navigator.pop(c, true),
-                            child: const Text('Delete', style: TextStyle(color: Colors.white)),
+                            child: const Text('Delete'),
                           ),
                         ],
                       ),
@@ -764,22 +804,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Edit Message ✏️'),
+        title: const Text('Edit Message'),
         content: TextField(
           controller: editCtrl,
           autofocus: true,
           maxLines: 4,
           minLines: 1,
-          decoration: const InputDecoration(
-            hintText: 'Enter updated message...',
-            border: OutlineInputBorder(),
-          ),
+          decoration: const InputDecoration(hintText: 'Enter updated message...'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx), child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: const Text('Cancel'),
+          ),
           ElevatedButton(
-            style: ElevatedButton.styleFrom(backgroundColor: AppColors.accentEmerald),
             onPressed: () async {
               final newText = editCtrl.text.trim();
               if (newText.isNotEmpty && newText != msg.content) {
@@ -791,7 +829,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 );
               }
             },
-            child: const Text('Save', style: TextStyle(color: Colors.black, fontWeight: FontWeight.bold)),
+            child: const Text('Save'),
           ),
         ],
       ),
@@ -800,44 +838,41 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
 
   @override
   Widget build(BuildContext context) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : AppColors.textPrimaryLight;
-    final subtextColor = isDark ? AppColors.textSecondary : AppColors.textSecondaryLight;
-    final cardBg = isDark ? AppColors.surfaceCard : AppColors.surfaceCardLight;
-    final borderColor = isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight;
+    final p = AppColors.of(context);
 
     final subtitleLabel = widget.targetRole == 'teacher'
         ? 'Ustaz Direct Channel'
         : (widget.targetRole == 'parent'
             ? 'Parent Direct Channel'
-            : (widget.targetRole == 'admin' ? 'Center Administration' : 'Center Channel'));
+            : (widget.targetRole == 'admin'
+                ? 'Center Administration'
+                : 'Center Channel'));
 
     return Scaffold(
-      backgroundColor: isDark ? AppColors.backgroundDark : const Color(0xFFF1F5F9),
+      backgroundColor: p.canvas,
       appBar: AppBar(
         titleSpacing: 0,
-        backgroundColor: cardBg,
+        backgroundColor: p.surface,
         elevation: 0,
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
-          child: Divider(height: 1, color: borderColor),
+          child: Divider(height: 1, color: p.border),
         ),
         leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new_rounded, size: 19),
+          icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
           onPressed: () => Navigator.pop(context),
         ),
         title: Row(
           children: [
-            CircleAvatar(
+            ProAvatar(
+              name: widget.conversationTitle,
               radius: 19,
-              backgroundColor: AppColors.accentEmerald.withOpacity(0.16),
-              child: Icon(
-                widget.targetRole == 'teacher'
-                    ? Icons.menu_book_rounded
-                    : (widget.targetRole == 'parent' ? Icons.person_rounded : Icons.groups_rounded),
-                color: AppColors.accentEmerald,
-                size: 20,
-              ),
+              color: widget.targetRole == 'admin' ? p.gold : p.primary,
+              icon: widget.targetRole == 'teacher'
+                  ? Icons.menu_book_rounded
+                  : (widget.targetRole == 'parent'
+                      ? Icons.person_rounded
+                      : Icons.groups_rounded),
             ),
             const SizedBox(width: 11),
             Expanded(
@@ -846,13 +881,21 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 children: [
                   Text(
                     widget.conversationTitle,
-                    style: TextStyle(fontSize: 15, fontWeight: FontWeight.w700, color: textColor),
+                    style: TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
+                      color: p.ink,
+                    ),
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 1),
                   Text(
                     subtitleLabel,
-                    style: TextStyle(fontSize: 11, color: AppColors.accentEmerald, fontWeight: FontWeight.w500),
+                    style: TextStyle(
+                      fontSize: 11,
+                      color: p.primary,
+                      fontWeight: FontWeight.w600,
+                    ),
                   ),
                 ],
               ),
@@ -860,126 +903,149 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           ],
         ),
       ),
-      body: Column(
+      body: Stack(
         children: [
-          // Stream of messages
-          Expanded(
-            child: StreamBuilder<List<ChatMessage>>(
-              stream: MessagingService.instance.streamMessages(widget.conversationId),
-              initialData: MessagingService.instance.getMessages(widget.conversationId),
-              builder: (context, snapshot) {
-                final messages = snapshot.data ?? [];
-
-                if (messages.isEmpty) {
-                  return Center(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
-                      decoration: BoxDecoration(
-                        color: cardBg.withOpacity(0.8),
-                        borderRadius: BorderRadius.circular(16),
-                      ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Icon(Icons.lock_outline_rounded, size: 24, color: subtextColor),
-                          const SizedBox(height: 6),
-                          Text(
-                            'Messages are end-to-end encrypted & direct.',
-                            style: TextStyle(color: subtextColor, fontSize: 11.5),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            'Send a greeting or voice note to begin.',
-                            style: TextStyle(color: textColor, fontSize: 12, fontWeight: FontWeight.bold),
-                          ),
-                        ],
-                      ),
-                    ),
-                  );
-                }
-
-                return ListView.builder(
-                  controller: _scrollCtrl,
-                  padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-                  itemCount: messages.length,
-                  itemBuilder: (context, index) {
-                    final msg = messages[index];
-                    final isMe = msg.senderId == _currentUserId;
-
-                    return _buildTelegramMessageBubble(
-                      msg: msg,
-                      isMe: isMe,
-                      isDark: isDark,
-                      textColor: textColor,
-                      subtextColor: subtextColor,
-                    );
-                  },
-                );
-              },
-            ),
-          ),
-
-          // Uploading Attachment Progress Bar
-          if (_isUploadingAttachment)
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 6),
-              color: AppColors.accentEmerald.withOpacity(0.12),
-              child: Row(
-                children: [
-                  const SizedBox(
-                    width: 14,
-                    height: 14,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentEmerald),
-                  ),
-                  const SizedBox(width: 10),
-                  Text(
-                    'Uploading attachment to cloud...',
-                    style: TextStyle(fontSize: 12, color: textColor, fontWeight: FontWeight.w500),
-                  ),
-                ],
+          Positioned.fill(
+            child: IgnorePointer(
+              child: IslamicGeometricPattern(
+                color: p.primary,
+                opacity: p.isDark ? 0.03 : 0.035,
+                cellSize: 64,
               ),
             ),
+          ),
+          Column(
+            children: [
+              Expanded(
+                child: StreamBuilder<List<ChatMessage>>(
+                  stream: MessagingService.instance
+                      .streamMessages(widget.conversationId),
+                  initialData: MessagingService.instance
+                      .getMessages(widget.conversationId),
+                  builder: (context, snapshot) {
+                    final messages = snapshot.data ?? [];
 
-          // Bottom Telegram Input Bar or Voice Recording Bar
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            decoration: BoxDecoration(
-              color: cardBg,
-              border: Border(top: BorderSide(color: borderColor, width: 0.8)),
-            ),
-            child: SafeArea(
-              child: _isRecordingVoice
-                  ? _buildVoiceRecordingBar()
-                  : _buildStandardInputBar(textColor, subtextColor, isDark, borderColor),
-            ),
+                    if (messages.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(24),
+                          child: ProCard(
+                            padding: const EdgeInsets.symmetric(
+                                horizontal: 22, vertical: 20),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(Icons.lock_outline_rounded,
+                                    size: 26, color: p.primary),
+                                const SizedBox(height: 10),
+                                Text(
+                                  'Direct School Channel',
+                                  style: TextStyle(
+                                    color: p.ink,
+                                    fontSize: 14,
+                                    fontWeight: FontWeight.w700,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  'Send a message, document, photo, or voice note to begin.',
+                                  textAlign: TextAlign.center,
+                                  style: TextStyle(
+                                      color: p.inkSecondary, fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      );
+                    }
+
+                    return ListView.builder(
+                      controller: _scrollCtrl,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 14, vertical: 14),
+                      itemCount: messages.length,
+                      itemBuilder: (context, index) {
+                        final msg = messages[index];
+                        final isMe = msg.senderId == _currentUserId;
+                        return _buildMessageBubble(msg, isMe, p);
+                      },
+                    );
+                  },
+                ),
+              ),
+
+              if (_isUploadingAttachment)
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  color: p.primarySoft,
+                  child: Row(
+                    children: [
+                      SizedBox(
+                        width: 14,
+                        height: 14,
+                        child: CircularProgressIndicator(
+                          strokeWidth: 2,
+                          color: p.primary,
+                        ),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        'Uploading attachment to cloud...',
+                        style: TextStyle(
+                          fontSize: 12,
+                          color: p.ink,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+              // Composer Bar
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                decoration: BoxDecoration(
+                  color: p.surface,
+                  border: Border(top: BorderSide(color: p.border, width: 1)),
+                ),
+                child: SafeArea(
+                  top: false,
+                  child: _isRecordingVoice
+                      ? _buildVoiceRecordingBar(p)
+                      : _buildStandardInputBar(p),
+                ),
+              ),
+            ],
           ),
         ],
       ),
     );
   }
 
-  Widget _buildStandardInputBar(Color textColor, Color subtextColor, bool isDark, Color borderColor) {
+  Widget _buildStandardInputBar(AppPalette p) {
+    final hasText = _msgCtrl.text.trim().isNotEmpty;
+
     return Row(
       children: [
-        // Attachment button (clip)
         IconButton(
-          icon: const Icon(Icons.attach_file_rounded, size: 22),
-          color: subtextColor,
-          onPressed: _isUploadingAttachment ? null : () => _showAttachmentSheet(context),
+          icon: Icon(Icons.attach_file_rounded, size: 22, color: p.inkSecondary),
+          onPressed:
+              _isUploadingAttachment ? null : () => _showAttachmentSheet(context),
         ),
-
-        // Text input field
         Expanded(
           child: Container(
             padding: const EdgeInsets.symmetric(horizontal: 14),
             decoration: BoxDecoration(
-              color: isDark ? AppColors.background : const Color(0xFFF1F5F9),
+              color: p.surfaceSubtle,
               borderRadius: BorderRadius.circular(24),
-              border: Border.all(color: borderColor, width: 0.8),
+              border: Border.all(color: p.border),
             ),
             child: TextField(
               controller: _msgCtrl,
-              style: TextStyle(color: textColor, fontSize: 13.5),
+              style: TextStyle(color: p.ink, fontSize: 14),
               maxLines: 4,
               minLines: 1,
               textInputAction: TextInputAction.send,
@@ -987,8 +1053,8 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 filled: false,
-                hintText: 'Message...',
-                hintStyle: TextStyle(color: subtextColor, fontSize: 13),
+                hintText: 'Write a message...',
+                hintStyle: TextStyle(color: p.inkMuted, fontSize: 13.5),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
                 focusedBorder: InputBorder.none,
@@ -998,19 +1064,17 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             ),
           ),
         ),
-        const SizedBox(width: 6),
-
-        // Send text button OR Mic button if input is empty
-        if (_msgCtrl.text.trim().isNotEmpty)
+        const SizedBox(width: 8),
+        if (hasText)
           Container(
-            width: 40,
-            height: 40,
-            decoration: const BoxDecoration(
-              color: AppColors.accentEmerald,
+            width: 42,
+            height: 42,
+            decoration: BoxDecoration(
+              color: p.primary,
               shape: BoxShape.circle,
             ),
             child: IconButton(
-              icon: const Icon(Icons.send_rounded, size: 18, color: Colors.black),
+              icon: Icon(Icons.send_rounded, size: 18, color: p.onPrimary),
               onPressed: _isUploadingAttachment ? null : () => _sendMessage(),
             ),
           )
@@ -1020,165 +1084,150 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             onTap: () {
               ScaffoldMessenger.of(context).showSnackBar(
                 const SnackBar(
-                  content: Text('Hold mic button to record voice note, tap arrow to send.'),
+                  content: Text('Hold microphone button to record a voice note.'),
                   duration: Duration(milliseconds: 1600),
-                  behavior: SnackBarBehavior.floating,
                 ),
               );
             },
             child: Container(
-              width: 40,
-              height: 40,
+              width: 42,
+              height: 42,
               decoration: BoxDecoration(
-                color: AppColors.accentEmerald.withOpacity(0.18),
+                color: p.primarySoft,
                 shape: BoxShape.circle,
+                border: Border.all(color: p.primary.withOpacity(0.3)),
               ),
-              child: const Icon(Icons.mic_rounded, size: 22, color: AppColors.accentEmerald),
+              child: Icon(Icons.mic_rounded, size: 21, color: p.primary),
             ),
           ),
       ],
     );
   }
 
-  Widget _buildVoiceRecordingBar() {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
-      child: Row(
-        children: [
-          // Flashing Recording Indicator
-          Container(
-            width: 10,
-            height: 10,
-            decoration: const BoxDecoration(
-              color: Colors.redAccent,
-              shape: BoxShape.circle,
-            ),
+  Widget _buildVoiceRecordingBar(AppPalette p) {
+    return Row(
+      children: [
+        Container(
+          width: 10,
+          height: 10,
+          decoration: BoxDecoration(
+            color: p.danger,
+            shape: BoxShape.circle,
           ),
-          const SizedBox(width: 8),
-          Text(
-            _formatDuration(_recordingSeconds),
-            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: Colors.redAccent),
+        ),
+        const SizedBox(width: 8),
+        Text(
+          _formatDuration(_recordingSeconds),
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            fontSize: 14,
+            color: p.danger,
+            fontFeatures: const [FontFeature.tabularFigures()],
           ),
-          const SizedBox(width: 12),
-          const Expanded(
-            child: Text(
-              'Recording microphone...',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Text(
+            'Recording voice note...',
+            style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
           ),
-          // Cancel Button
-          IconButton(
-            icon: const Icon(Icons.delete_outline_rounded, color: Colors.grey, size: 20),
-            onPressed: _cancelVoiceRecording,
+        ),
+        IconButton(
+          icon: Icon(Icons.delete_outline_rounded, color: p.inkMuted, size: 21),
+          onPressed: _cancelVoiceRecording,
+        ),
+        const SizedBox(width: 4),
+        Container(
+          width: 42,
+          height: 42,
+          decoration: BoxDecoration(
+            color: p.primary,
+            shape: BoxShape.circle,
           ),
-          const SizedBox(width: 4),
-          // Send voice button
-          Container(
-            decoration: const BoxDecoration(
-              color: AppColors.accentEmerald,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: const Icon(Icons.arrow_upward_rounded, color: Colors.black, size: 20),
-              onPressed: _finishAndSendVoiceRecording,
-            ),
+          child: IconButton(
+            icon:
+                Icon(Icons.arrow_upward_rounded, color: p.onPrimary, size: 20),
+            onPressed: _finishAndSendVoiceRecording,
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 
-  Widget _buildTelegramMessageBubble({
-    required ChatMessage msg,
-    required bool isMe,
-    required bool isDark,
-    required Color textColor,
-    required Color subtextColor,
-  }) {
+  Widget _buildMessageBubble(ChatMessage msg, bool isMe, AppPalette p) {
     final bubbleBg = isMe
-        ? (isDark ? const Color(0xFF065F46) : const Color(0xFFD1FAE5))
-        : (isDark ? AppColors.surfaceCard : Colors.white);
+        ? (p.isDark ? const Color(0xFF0F4F4B) : AppColors.pinePrimary)
+        : p.surface;
 
-    final bubbleTextColor = isMe
-        ? (isDark ? Colors.white : const Color(0xFF064E3B))
-        : textColor;
-
-    final timeColor = isMe
-        ? (isDark ? Colors.white70 : const Color(0xFF047857))
-        : subtextColor;
+    final bubbleTextColor = isMe ? Colors.white : p.ink;
+    final timeColor = isMe ? Colors.white.withOpacity(0.75) : p.inkMuted;
 
     return Align(
       alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
       child: GestureDetector(
         onLongPress: () => _showMessageOptions(msg, isMe),
         child: Container(
-          margin: const EdgeInsets.only(bottom: 8),
-          constraints: BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
+          margin: const EdgeInsets.only(bottom: 10),
+          constraints:
+              BoxConstraints(maxWidth: MediaQuery.of(context).size.width * 0.78),
           padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
           decoration: BoxDecoration(
             color: bubbleBg,
-            border: isMe
-                ? null
-                : Border.all(
-                    color: isDark ? AppColors.borderSubtle : AppColors.borderSubtleLight,
-                    width: 0.8,
-                  ),
+            border: isMe ? null : Border.all(color: p.border, width: 1),
             borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(16),
-              topRight: const Radius.circular(16),
-              bottomLeft: Radius.circular(isMe ? 16 : 4),
-              bottomRight: Radius.circular(isMe ? 4 : 16),
+              topLeft: const Radius.circular(18),
+              topRight: const Radius.circular(18),
+              bottomLeft: Radius.circular(isMe ? 18 : 4),
+              bottomRight: Radius.circular(isMe ? 4 : 18),
             ),
             boxShadow: [
               BoxShadow(
-                color: Colors.black.withOpacity(0.06),
-                blurRadius: 3,
-                offset: const Offset(0, 1),
+                color: Colors.black.withOpacity(p.isDark ? 0.22 : 0.05),
+                blurRadius: 6,
+                offset: const Offset(0, 2),
               ),
             ],
           ),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Sender name tag for received group messages
               if (!isMe) ...[
                 Row(
                   mainAxisSize: MainAxisSize.min,
                   children: [
                     Text(
                       msg.senderName,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.bold,
-                        color: AppColors.accentEmerald,
+                      style: TextStyle(
+                        fontSize: 11.5,
+                        fontWeight: FontWeight.w700,
+                        color: p.primary,
                       ),
                     ),
-                    const SizedBox(width: 5),
+                    const SizedBox(width: 6),
                     Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 5, vertical: 1.5),
                       decoration: BoxDecoration(
-                        color: Colors.black.withOpacity(0.12),
-                        borderRadius: BorderRadius.circular(4),
+                        color: p.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
                         msg.senderRole.toUpperCase(),
                         style: TextStyle(
-                          fontSize: 8,
-                          fontWeight: FontWeight.bold,
-                          color: subtextColor,
+                          fontSize: 8.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.inkSecondary,
                         ),
                       ),
                     ),
                   ],
                 ),
-                const SizedBox(height: 4),
+                const SizedBox(height: 5),
               ],
-
-              // Message Body (Voice, Image, Video, Document or Standard Text)
               if (msg.messageType == 'voice' || msg.messageType == 'audio')
-                _buildVoiceBubbleContent(msg, isMe, bubbleTextColor, timeColor)
+                _buildVoiceBubbleContent(msg, isMe, bubbleTextColor, timeColor, p)
               else if (msg.messageType == 'image')
-                _buildImageBubbleContent(msg, isMe, bubbleTextColor)
+                _buildImageBubbleContent(msg, isMe, bubbleTextColor, p)
               else if (msg.messageType == 'video')
                 _buildVideoBubbleContent(msg, isMe, bubbleTextColor)
               else if (msg.messageType == 'document')
@@ -1186,33 +1235,41 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
               else
                 Text(
                   msg.content,
-                  style: TextStyle(fontSize: 13.5, color: bubbleTextColor, height: 1.3),
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    color: bubbleTextColor,
+                    height: 1.38,
+                  ),
                 ),
-
-              const SizedBox(height: 3),
-
-              // Timestamp + edited indicator + Telegram double checkmarks
+              const SizedBox(height: 4),
               Row(
                 mainAxisSize: MainAxisSize.min,
                 mainAxisAlignment: MainAxisAlignment.end,
                 children: [
                   const Spacer(),
-                  if (msg.isEdited) ...[
+                  if (msg.isEdited)
                     Text(
                       'edited ',
-                      style: TextStyle(fontSize: 9, fontStyle: FontStyle.italic, color: timeColor.withOpacity(0.8)),
+                      style: TextStyle(
+                        fontSize: 9.5,
+                        fontStyle: FontStyle.italic,
+                        color: timeColor,
+                      ),
                     ),
-                  ],
                   Text(
                     '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(fontSize: 9.5, color: timeColor),
+                    style: TextStyle(
+                      fontSize: 10,
+                      color: timeColor,
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                   if (isMe) ...[
                     const SizedBox(width: 4),
                     Icon(
                       Icons.done_all_rounded,
-                      size: 13,
-                      color: isDark ? AppColors.accentEmerald : const Color(0xFF059669),
+                      size: 14,
+                      color: AppColors.goldWarm,
                     ),
                   ],
                 ],
@@ -1224,13 +1281,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildVoiceBubbleContent(ChatMessage msg, bool isMe, Color textColor, Color timeColor) {
+  Widget _buildVoiceBubbleContent(
+    ChatMessage msg,
+    bool isMe,
+    Color textColor,
+    Color timeColor,
+    AppPalette p,
+  ) {
     final isCurrentMsg = _currentlyPlayingId == msg.id;
     final isPlaying = isCurrentMsg && _playerState == PlayerState.playing;
     final durationSec = msg.audioDurationSeconds ?? 5;
 
     final progressRatio = isCurrentMsg && _playbackDuration.inMilliseconds > 0
-        ? min(1.0, _playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds)
+        ? min(1.0,
+            _playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds)
         : 0.0;
 
     return Row(
@@ -1239,15 +1303,17 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
         GestureDetector(
           onTap: () => _togglePlayVoice(msg),
           child: Container(
-            width: 38,
-            height: 38,
+            width: 40,
+            height: 40,
             decoration: BoxDecoration(
-              color: isMe ? Colors.white.withOpacity(0.2) : AppColors.accentEmerald.withOpacity(0.2),
+              color: isMe
+                  ? Colors.white.withOpacity(0.20)
+                  : p.primary.withOpacity(0.14),
               shape: BoxShape.circle,
             ),
             child: Icon(
               isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
-              color: isMe ? Colors.white : AppColors.accentEmerald,
+              color: isMe ? Colors.white : p.primary,
               size: 24,
             ),
           ),
@@ -1257,33 +1323,58 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Waveform representation reacting to real playback position
               Row(
                 children: List.generate(20, (index) {
-                  final heights = [10, 16, 6, 14, 22, 12, 18, 20, 8, 14, 18, 10, 22, 14, 8, 16, 12, 8, 14, 6];
+                  const heights = [
+                    10,
+                    16,
+                    7,
+                    14,
+                    22,
+                    12,
+                    18,
+                    20,
+                    8,
+                    14,
+                    18,
+                    10,
+                    22,
+                    14,
+                    8,
+                    16,
+                    12,
+                    8,
+                    14,
+                    7
+                  ];
                   final h = heights[index % heights.length].toDouble();
                   final barThreshold = index / 20.0;
-                  final isBarActive = isCurrentMsg && progressRatio >= barThreshold;
+                  final isBarActive =
+                      isCurrentMsg && progressRatio >= barThreshold;
 
                   return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 1.1),
-                    width: 2.4,
+                    margin: const EdgeInsets.symmetric(horizontal: 1.2),
+                    width: 2.5,
                     height: h,
                     decoration: BoxDecoration(
                       color: isBarActive
-                          ? (isMe ? Colors.white : AppColors.accentEmerald)
-                          : textColor.withOpacity(0.35),
+                          ? (isMe ? AppColors.goldWarm : p.primary)
+                          : textColor.withOpacity(0.32),
                       borderRadius: BorderRadius.circular(2),
                     ),
                   );
                 }),
               ),
-              const SizedBox(height: 4),
+              const SizedBox(height: 5),
               Text(
                 isCurrentMsg
                     ? '${_formatDuration(_playbackPosition.inSeconds)} / ${_formatDuration(_playbackDuration.inSeconds > 0 ? _playbackDuration.inSeconds : durationSec)}'
                     : _formatDuration(durationSec),
-                style: TextStyle(fontSize: 10, color: timeColor),
+                style: TextStyle(
+                  fontSize: 10.5,
+                  color: timeColor,
+                  fontFeatures: const [FontFeature.tabularFigures()],
+                ),
               ),
             ],
           ),
@@ -1292,12 +1383,17 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildImageBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
-    final hasValidUrl = msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http');
+  Widget _buildImageBubbleContent(
+      ChatMessage msg, bool isMe, Color textColor, AppPalette p) {
+    final hasValidUrl =
+        msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http');
     return GestureDetector(
       onTap: () {
         if (hasValidUrl) {
-          _openFullScreenImageViewer(msg.attachmentUrl!, msg.content.isNotEmpty ? msg.content : msg.attachmentName);
+          _openFullScreenImageViewer(
+            msg.attachmentUrl!,
+            msg.content.isNotEmpty ? msg.content : msg.attachmentName,
+          );
         }
       },
       child: Column(
@@ -1306,31 +1402,36 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           Stack(
             children: [
               ClipRRect(
-                borderRadius: BorderRadius.circular(10),
+                borderRadius: BorderRadius.circular(12),
                 child: Container(
-                  height: 180,
+                  height: 185,
                   width: double.infinity,
-                  color: Colors.black26,
+                  color: Colors.black12,
                   child: hasValidUrl
                       ? Image.network(
                           msg.attachmentUrl!,
                           fit: BoxFit.cover,
                           loadingBuilder: (ctx, child, progress) {
                             if (progress == null) return child;
-                            return const Center(
+                            return Center(
                               child: SizedBox(
                                 width: 24,
                                 height: 24,
-                                child: CircularProgressIndicator(strokeWidth: 2, color: AppColors.accentEmerald),
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: isMe ? Colors.white : p.primary,
+                                ),
                               ),
                             );
                           },
                           errorBuilder: (_, __, ___) => const Center(
-                            child: Icon(Icons.broken_image_rounded, size: 36, color: Colors.grey),
+                            child: Icon(Icons.broken_image_rounded,
+                                size: 36, color: Colors.grey),
                           ),
                         )
                       : const Center(
-                          child: Icon(Icons.image_rounded, size: 40, color: Colors.grey),
+                          child:
+                              Icon(Icons.image_rounded, size: 40, color: Colors.grey),
                         ),
                 ),
               ),
@@ -1338,17 +1439,26 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 bottom: 8,
                 right: 8,
                 child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
                   decoration: BoxDecoration(
-                    color: Colors.black.withOpacity(0.55),
-                    borderRadius: BorderRadius.circular(6),
+                    color: Colors.black.withOpacity(0.6),
+                    borderRadius: BorderRadius.circular(8),
                   ),
                   child: const Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.zoom_in_rounded, size: 12, color: Colors.white),
+                      Icon(Icons.zoom_in_rounded,
+                          size: 12, color: Colors.white),
                       SizedBox(width: 3),
-                      Text('View', style: TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold)),
+                      Text(
+                        'View',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -1367,9 +1477,10 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildVideoBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
+  Widget _buildVideoBubbleContent(
+      ChatMessage msg, bool isMe, Color textColor) {
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       onTap: () async {
         final url = msg.attachmentUrl;
         if (url != null && url.isNotEmpty) {
@@ -1382,18 +1493,23 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
       child: Container(
         padding: const EdgeInsets.all(10),
         decoration: BoxDecoration(
-          color: Colors.black.withOpacity(0.15),
-          borderRadius: BorderRadius.circular(10),
+          color: isMe ? Colors.white.withOpacity(0.12) : Colors.black.withOpacity(0.05),
+          borderRadius: BorderRadius.circular(12),
         ),
         child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: const Color(0xFF8B5CF6).withOpacity(0.2),
-                borderRadius: BorderRadius.circular(8),
+                color: (isMe ? Colors.white : AppColors.pinePrimary)
+                    .withOpacity(0.18),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.play_circle_fill_rounded, color: Color(0xFF8B5CF6), size: 24),
+              child: Icon(
+                Icons.play_circle_fill_rounded,
+                color: isMe ? Colors.white : AppColors.pinePrimary,
+                size: 24,
+              ),
             ),
             const SizedBox(width: 10),
             Expanded(
@@ -1402,13 +1518,20 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
                 children: [
                   Text(
                     msg.attachmentName ?? 'Video File',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'Tap to stream / play video',
-                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.7)),
+                    'Tap to play video',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: textColor.withOpacity(0.75),
+                    ),
                   ),
                 ],
               ),
@@ -1419,9 +1542,10 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
     );
   }
 
-  Widget _buildDocumentBubbleContent(ChatMessage msg, bool isMe, Color textColor) {
+  Widget _buildDocumentBubbleContent(
+      ChatMessage msg, bool isMe, Color textColor) {
     return InkWell(
-      borderRadius: BorderRadius.circular(10),
+      borderRadius: BorderRadius.circular(12),
       onTap: () async {
         final url = msg.attachmentUrl;
         if (url != null && url.isNotEmpty) {
@@ -1431,10 +1555,7 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
           } else {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Could not open document URL.'),
-                  behavior: SnackBarBehavior.floating,
-                ),
+                const SnackBar(content: Text('Could not open document URL.')),
               );
             }
           }
@@ -1447,32 +1568,48 @@ class _ChatScreenState extends State<ChatScreen> with SingleTickerProviderStateM
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.white.withOpacity(0.18),
-                borderRadius: BorderRadius.circular(8),
+                color: (isMe ? Colors.white : AppColors.goldPrimary)
+                    .withOpacity(0.18),
+                borderRadius: BorderRadius.circular(10),
               ),
-              child: const Icon(Icons.insert_drive_file_rounded, size: 24, color: Color(0xFFFFA000)),
+              child: Icon(
+                Icons.insert_drive_file_rounded,
+                size: 22,
+                color: isMe ? AppColors.goldWarm : AppColors.goldPrimary,
+              ),
             ),
-            const SizedBox(width: 8),
+            const SizedBox(width: 10),
             Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
                     msg.attachmentName ?? msg.content,
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.bold, color: textColor),
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: textColor,
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'Tap to view / download document',
-                    style: TextStyle(fontSize: 10, color: textColor.withOpacity(0.75)),
+                    'Tap to view / download',
+                    style: TextStyle(
+                      fontSize: 10.5,
+                      color: textColor.withOpacity(0.75),
+                    ),
                     maxLines: 1,
                     overflow: TextOverflow.ellipsis,
                   ),
                 ],
               ),
             ),
-            Icon(Icons.open_in_new_rounded, size: 16, color: textColor.withOpacity(0.7)),
+            Icon(
+              Icons.open_in_new_rounded,
+              size: 16,
+              color: textColor.withOpacity(0.7),
+            ),
           ],
         ),
       ),
