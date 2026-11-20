@@ -65,6 +65,7 @@ class AuthSessionService {
       _userName = 'Center Administrator';
       try {
         await PushNotificationService.instance.registerDeviceToken();
+        await PushNotificationService.instance.syncRoleSubscription('admin');
       } catch (_) {}
       return;
     }
@@ -120,6 +121,8 @@ class AuthSessionService {
       }
       try {
         await PushNotificationService.instance.registerDeviceToken();
+        await PushNotificationService.instance
+            .syncRoleSubscription(roleNotifier.value);
       } catch (_) {}
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');
@@ -148,9 +151,10 @@ class AuthSessionService {
 
     roleNotifier.value = cleanRole;
 
-    // Ensure the device token is registered and linked to this authenticated user in user_device_tokens
+    // Ensure the device token is registered and subscribed to the role topic
     try {
       PushNotificationService.instance.registerDeviceToken();
+      PushNotificationService.instance.syncRoleSubscription(cleanRole);
     } catch (_) {}
   }
 

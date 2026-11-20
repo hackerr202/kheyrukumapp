@@ -99,10 +99,10 @@ CREATE TABLE IF NOT EXISTS public.invitation_codes (
     linked_student_id UUID REFERENCES public.students(id) ON DELETE CASCADE, -- For parents
     target_halaqah_id UUID REFERENCES public.halaqahs(id) ON DELETE SET NULL, -- For teachers
     is_used BOOLEAN DEFAULT FALSE,
-    used_by UUID REFERENCES public.profiles(id),
+    used_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     used_at TIMESTAMPTZ,
     expires_at TIMESTAMPTZ DEFAULT (NOW() + INTERVAL '30 days'),
-    created_by UUID REFERENCES public.profiles(id),
+    created_by UUID REFERENCES public.profiles(id) ON DELETE SET NULL,
     created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -212,9 +212,11 @@ CREATE OR REPLACE FUNCTION public.consume_invitation_code(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
+SET search_path = public
 AS $$
 DECLARE
     v_invite RECORD;
+    v_halaqah_name TEXT;
 BEGIN
     -- 1. Find valid, unexpired, unused code (case-insensitive)
     SELECT * INTO v_invite
@@ -228,13 +230,31 @@ BEGIN
         RETURN jsonb_build_object('success', false, 'message', 'Invalid, expired, or already used invitation code.');
     END IF;
 
+    IF v_invite.role = 'teacher' AND v_invite.target_halaqah_id IS NOT NULL THEN
+        SELECT name INTO v_halaqah_name
+        FROM public.halaqahs
+        WHERE id = v_invite.target_halaqah_id;
+    END IF;
+
     -- 2. Insert or update the public profile with the assigned role
-    INSERT INTO public.profiles (id, role, full_name, email, phone)
-    VALUES (p_user_id, v_invite.role, p_full_name, p_email, p_phone)
+    INSERT INTO public.profiles (id, role, full_name, email, phone, is_suspended, halaqah_id, halaqah_name)
+    VALUES (
+        p_user_id,
+        v_invite.role,
+        p_full_name,
+        p_email,
+        p_phone,
+        FALSE,
+        CASE WHEN v_invite.role = 'teacher' THEN v_invite.target_halaqah_id ELSE NULL END,
+        CASE WHEN v_invite.role = 'teacher' THEN v_halaqah_name ELSE NULL END
+    )
     ON CONFLICT (id) DO UPDATE
     SET role = v_invite.role,
         full_name = EXCLUDED.full_name,
         phone = COALESCE(EXCLUDED.phone, public.profiles.phone),
+        is_suspended = FALSE,
+        halaqah_id = COALESCE(EXCLUDED.halaqah_id, public.profiles.halaqah_id),
+        halaqah_name = COALESCE(EXCLUDED.halaqah_name, public.profiles.halaqah_name),
         updated_at = NOW();
 
     -- 3. Link parent to student if it is a parent code
@@ -266,6 +286,103 @@ BEGIN
 END;
 $$;
 
+-- Recursion-safe admin helper + user management RPCs
+CREATE OR REPLACE FUNCTION public.is_admin()
+RETURNS BOOLEAN
+LANGUAGE sql
+STABLE
+SECURITY DEFINER
+SET search_path = public
+AS $$
+    SELECT EXISTS (
+        SELECT 1 FROM public.profiles
+        WHERE id = auth.uid() AND role = 'admin' AND COALESCE(is_suspended, FALSE) = FALSE
+    );
+$$;
+
+CREATE OR REPLACE FUNCTION public.admin_assign_teacher_halaqah(
+    p_teacher_id UUID,
+    p_halaqah_id UUID DEFAULT NULL
+)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_halaqah_name TEXT;
+    v_prev_teacher_id UUID;
+BEGIN
+    IF NOT public.is_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Only center administrators can assign study circles.');
+    END IF;
+    IF NOT EXISTS (SELECT 1 FROM public.profiles WHERE id = p_teacher_id AND role = 'teacher') THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Teacher profile not found.');
+    END IF;
+
+    UPDATE public.halaqahs SET teacher_id = NULL WHERE teacher_id = p_teacher_id;
+
+    IF p_halaqah_id IS NULL THEN
+        UPDATE public.profiles SET halaqah_id = NULL, halaqah_name = NULL, updated_at = NOW() WHERE id = p_teacher_id;
+        RETURN jsonb_build_object('success', true, 'halaqah_id', NULL, 'halaqah_name', NULL, 'message', 'Teacher unassigned from study circle.');
+    END IF;
+
+    SELECT name, teacher_id INTO v_halaqah_name, v_prev_teacher_id FROM public.halaqahs WHERE id = p_halaqah_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Selected study circle was not found.');
+    END IF;
+
+    IF v_prev_teacher_id IS NOT NULL AND v_prev_teacher_id <> p_teacher_id THEN
+        UPDATE public.profiles SET halaqah_id = NULL, halaqah_name = NULL, updated_at = NOW()
+        WHERE id = v_prev_teacher_id AND halaqah_id = p_halaqah_id;
+    END IF;
+
+    UPDATE public.halaqahs SET teacher_id = p_teacher_id WHERE id = p_halaqah_id;
+    UPDATE public.profiles SET halaqah_id = p_halaqah_id, halaqah_name = v_halaqah_name, updated_at = NOW() WHERE id = p_teacher_id;
+
+    RETURN jsonb_build_object('success', true, 'halaqah_id', p_halaqah_id, 'halaqah_name', v_halaqah_name, 'message', 'Study circle assigned successfully.');
+END;
+$$;
+
+CREATE OR REPLACE FUNCTION public.admin_delete_user(p_user_id UUID)
+RETURNS JSONB
+LANGUAGE plpgsql
+SECURITY DEFINER
+SET search_path = public
+AS $$
+DECLARE
+    v_target RECORD;
+BEGIN
+    IF NOT public.is_admin() THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Only center administrators can remove users.');
+    END IF;
+    IF p_user_id = auth.uid() THEN
+        RETURN jsonb_build_object('success', false, 'message', 'You cannot remove your own active administrator account.');
+    END IF;
+    SELECT id, role, email INTO v_target FROM public.profiles WHERE id = p_user_id;
+    IF NOT FOUND THEN
+        RETURN jsonb_build_object('success', false, 'message', 'User account not found.');
+    END IF;
+    IF LOWER(COALESCE(v_target.email, '')) = 'admin@kheyrukum.com' THEN
+        RETURN jsonb_build_object('success', false, 'message', 'Primary administrator account cannot be removed.');
+    END IF;
+
+    UPDATE public.invitation_codes SET used_by = NULL WHERE used_by = p_user_id;
+    UPDATE public.invitation_codes SET created_by = NULL WHERE created_by = p_user_id;
+    UPDATE public.halaqahs SET teacher_id = NULL WHERE teacher_id = p_user_id;
+    UPDATE public.announcements SET author_id = NULL WHERE author_id = p_user_id;
+    DELETE FROM public.messages WHERE sender_id = p_user_id;
+    DELETE FROM public.hifz_records WHERE teacher_id = p_user_id;
+    DELETE FROM public.homework_assignments WHERE teacher_id = p_user_id;
+    DELETE FROM public.profiles WHERE id = p_user_id;
+    BEGIN
+        DELETE FROM auth.users WHERE id = p_user_id;
+    EXCEPTION WHEN OTHERS THEN NULL;
+    END;
+    RETURN jsonb_build_object('success', true, 'deleted_user_id', p_user_id, 'message', 'User account permanently removed.');
+END;
+$$;
+
 -- ------------------------------------------------------------------------------
 -- 9. ROW LEVEL SECURITY (RLS) POLICIES
 -- ------------------------------------------------------------------------------
@@ -288,10 +405,10 @@ CREATE POLICY "Users can update own profile"
 ON public.profiles FOR UPDATE TO authenticated USING (auth.uid() = id);
 
 DO $$ BEGIN
-    CREATE POLICY "Admins can manage all profiles"
+    CREATE POLICY "Admins manage all profiles"
     ON public.profiles FOR ALL TO authenticated
-    USING (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'))
-    WITH CHECK (EXISTS (SELECT 1 FROM public.profiles WHERE id = auth.uid() AND role = 'admin'));
+    USING (public.is_admin())
+    WITH CHECK (public.is_admin());
 EXCEPTION WHEN duplicate_object THEN NULL; END $$;
 
 -- Halaqahs:
@@ -767,6 +884,7 @@ CREATE TABLE IF NOT EXISTS public.user_device_tokens (
     user_id UUID REFERENCES public.profiles(id) ON DELETE CASCADE,
     device_token TEXT NOT NULL,
     device_type TEXT DEFAULT 'android', -- 'android' or 'ios'
+    provider TEXT DEFAULT 'fcm',
     created_at TIMESTAMPTZ DEFAULT NOW(),
     updated_at TIMESTAMPTZ DEFAULT NOW(),
     UNIQUE(user_id, device_token)

@@ -173,11 +173,16 @@ class AnnouncementService {
       _handledAnnouncementIds.add(announcement.id);
       _incomingAlertController.add(announcement);
 
-      // Trigger off-app background push notifications to all users' devices
+      // Trigger off-app background push notifications to targeted audience devices
       await PushNotificationService.instance.dispatchPushNotificationToAll(
         title: title,
         body: content,
-        data: {'announcement_id': announcement.id},
+        targetAudience: targetAudience,
+        type: 'announcement',
+        data: {
+          'announcement_id': announcement.id,
+          'target_audience': targetAudience,
+        },
       );
 
       return {'success': true, 'data': announcement};

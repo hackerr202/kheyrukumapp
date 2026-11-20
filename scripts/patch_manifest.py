@@ -44,6 +44,8 @@ queries = """
 """
 
 receivers = """
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="kheyrukum_channel"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
@@ -66,9 +68,15 @@ else:
 if '<queries>' not in content:
     content = re.sub(r'(<manifest\b[^>]*>)', r'\1' + queries, content, count=1)
 
-# Insert receivers right after <application ...>
+# Insert Firebase default notification channel/icon & local notification receivers inside <application ...>
 if 'ScheduledNotificationReceiver' not in content:
     content = re.sub(r'(<application\b[^>]*>)', r'\1' + receivers, content, count=1)
+elif 'com.google.firebase.messaging.default_notification_channel_id' not in content:
+    fcm_meta = """
+        <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="kheyrukum_channel"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>
+"""
+    content = re.sub(r'(<application\b[^>]*>)', r'\1' + fcm_meta, content, count=1)
 
 with open(manifest_path, 'w', encoding='utf-8') as f:
     f.write(content)

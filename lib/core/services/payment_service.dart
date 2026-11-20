@@ -175,6 +175,16 @@ class PaymentService {
     _payments.removeWhere((p) => p.id == payment.id);
     _payments.insert(0, payment);
     _emit();
+
+    PushNotificationService.instance.dispatchPushToUsers(
+      userIds: [parentId],
+      title: 'Monthly Tuition Due',
+      body:
+          'A tuition invoice for $month (${amount.toStringAsFixed(0)}) has been issued for $studentName.',
+      type: 'payment_reminder',
+      data: {'payment_id': payment.id, 'student_id': studentId},
+    );
+
     return payment;
   }
 
@@ -213,6 +223,8 @@ class PaymentService {
   }) async {
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
+    final matching = _payments.where((p) => p.id == paymentId);
+    final existing = matching.isNotEmpty ? matching.first : null;
     await client.from('monthly_payments').update({
       'status': 'submitted',
       'receipt_url': receiptUrl,
@@ -223,12 +235,25 @@ class PaymentService {
       'rejection_reason': null,
     }).eq('id', paymentId);
     await refresh();
+
+    PushNotificationService.instance.dispatchPushNotificationToAll(
+      title: 'Payment Receipt Submitted',
+      body: existing != null
+          ? '${existing.parentName} uploaded a tuition receipt for ${existing.month}.'
+          : 'A parent uploaded a tuition receipt for verification.',
+      targetAudience: 'admins',
+      type: 'payment_approval',
+      showLocally: false,
+      data: {'payment_id': paymentId},
+    );
   }
 
   /// Admin approves the payment
   Future<void> approvePayment({required String paymentId, String? adminName}) async {
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
+    final matching = _payments.where((p) => p.id == paymentId);
+    final existing = matching.isNotEmpty ? matching.first : null;
     final reviewerId = AuthSessionService.instance.userId;
     await client.from('monthly_payments').update({
       'status': 'approved',
@@ -237,6 +262,17 @@ class PaymentService {
       'rejection_reason': null,
     }).eq('id', paymentId);
     await refresh();
+
+    if (existing != null && existing.parentId.isNotEmpty) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: [existing.parentId],
+        title: 'Payment Approved',
+        body:
+            'Your tuition payment for ${existing.month} (${existing.studentName}) has been approved.',
+        type: 'payment_approval',
+        data: {'payment_id': paymentId},
+      );
+    }
   }
 
   /// Admin rejects the payment with a mandatory reason (displayed on parent side)
@@ -247,6 +283,8 @@ class PaymentService {
   }) async {
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
+    final matching = _payments.where((p) => p.id == paymentId);
+    final existing = matching.isNotEmpty ? matching.first : null;
     final reviewerId = AuthSessionService.instance.userId;
     await client.from('monthly_payments').update({
       'status': 'rejected',
@@ -255,6 +293,17 @@ class PaymentService {
       'reviewed_by': reviewerId.isEmpty ? null : reviewerId,
     }).eq('id', paymentId);
     await refresh();
+
+    if (existing != null && existing.parentId.isNotEmpty) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: [existing.parentId],
+        title: 'Payment Rejected',
+        body:
+            'Your tuition receipt for ${existing.month} was rejected: $reason',
+        type: 'payment_overdue',
+        data: {'payment_id': paymentId},
+      );
+    }
   }
 
   /// Admin sends a tuition reminder to all parents (as an announcement so it

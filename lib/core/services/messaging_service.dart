@@ -429,6 +429,21 @@ class MessagingService {
           'last_message': displayPreview,
           'last_message_time': msg.timestamp.toUtc().toIso8601String(),
         }).eq('id', conversationId);
+
+        if (idx != -1) {
+          final convo = _conversations[idx];
+          final needsAdmin = senderRole != 'admin' &&
+              (convo.groupType == 'direct_admin' ||
+                  convo.participantIds.contains('admin'));
+          PushNotificationService.instance.dispatchPushToUsers(
+            userIds: convo.participantIds,
+            fallbackAudience: needsAdmin ? 'admins' : null,
+            title: senderName,
+            body: displayPreview,
+            type: 'message',
+            data: {'conversation_id': conversationId},
+          );
+        }
       } catch (e) {
         debugPrint('[MessagingService] Cloud insert fallback: $e');
       }

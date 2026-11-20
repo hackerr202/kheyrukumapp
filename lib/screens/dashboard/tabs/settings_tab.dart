@@ -5,6 +5,7 @@ import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/homework_service.dart';
 import '../../../core/services/messaging_service.dart';
+import '../../../core/services/push_notification_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -24,6 +25,7 @@ class SettingsTab extends StatefulWidget {
 
 class _SettingsTabState extends State<SettingsTab> {
   Future<void> _handleSignOut() async {
+    await PushNotificationService.instance.unregisterOnLogout();
     AuthSessionService.instance.clearSession();
     await Future.wait([
       StudentService.instance.clearOnLogout(),

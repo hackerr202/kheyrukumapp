@@ -591,6 +591,21 @@ class StudentService {
         await client
             .from('student_attendance')
             .upsert(payload, onConflict: 'student_id,session_date');
+
+        if (student.parentId != null && _isValidUuid(student.parentId)) {
+          PushNotificationService.instance.dispatchPushToUsers(
+            userIds: [student.parentId!],
+            title: 'Daily Attendance Update',
+            body:
+                '${student.fullName} was marked ${status.toUpperCase()} ($dateStr).',
+            type: 'attendance',
+            data: {
+              'student_id': student.id,
+              'status': status,
+              'date': dateStr,
+            },
+          );
+        }
       } catch (e) {
         debugPrint('[StudentService] Cloud attendance sync notice: $e');
       }

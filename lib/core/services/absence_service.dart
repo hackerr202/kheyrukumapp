@@ -3,6 +3,7 @@ import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/absence_request.dart';
 import 'auth_session_service.dart';
+import 'halaqah_service.dart';
 import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
@@ -195,6 +196,24 @@ class AbsenceService {
     _requests.insert(0, request);
     _requestsController.add(List.from(_requests));
 
+    final halaqahMatches = HalaqahService.instance.halaqahs.where((h) =>
+        (request.halaqahId.isNotEmpty && h.id == request.halaqahId) ||
+        h.name.toLowerCase() == request.halaqahName.toLowerCase());
+    final teacherIds = halaqahMatches
+        .map((h) => h.teacherId)
+        .whereType<String>()
+        .where((id) => _isValidUuid(id))
+        .toList();
+    PushNotificationService.instance.dispatchPushToUsers(
+      userIds: teacherIds,
+      fallbackAudience: teacherIds.isEmpty ? 'teachers' : null,
+      title: 'Absence Excuse Request',
+      body:
+          '${request.parentName} submitted an excuse for ${request.studentName}.',
+      type: 'absence_request',
+      data: {'student_id': studentId, 'request_id': requestId},
+    );
+
     return request;
   }
 
@@ -244,6 +263,16 @@ class AbsenceService {
       sessionDate: updated.date,
       markedBy: reviewer,
     );
+
+    if (_isValidUuid(existing.parentId)) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: [existing.parentId],
+        title: 'Absence Excuse Approved',
+        body: 'Absence excuse for ${updated.studentName} has been approved.',
+        type: 'absence_approved',
+        data: {'request_id': requestId, 'student_id': updated.studentId},
+      );
+    }
   }
 
   /// Teacher Action: Decline absence request
@@ -282,6 +311,16 @@ class AbsenceService {
       } catch (e) {
         debugPrint('[AbsenceService] Cloud decline notice: $e');
       }
+    }
+
+    if (_isValidUuid(existing.parentId)) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: [existing.parentId],
+        title: 'Absence Request Update',
+        body: 'Absence excuse for ${updated.studentName} was declined.',
+        type: 'absence_declined',
+        data: {'request_id': requestId, 'student_id': updated.studentId},
+      );
     }
   }
 }

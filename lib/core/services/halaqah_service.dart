@@ -193,40 +193,150 @@ class HalaqahService {
     }
   }
 
-  /// Assign teacher to a halaqah
-  Future<void> assignTeacher({
+  /// Assign teacher to a halaqah (or unassign when [halaqahId] is empty)
+  Future<bool> assignTeacher({
     required String halaqahId,
     required String teacherId,
     required String teacherName,
   }) async {
-    final index = _halaqahs.indexWhere((h) => h.id == halaqahId);
-    if (index != -1) {
-      final existing = _halaqahs[index];
-      final updated = existing.copyWith(
-        teacherId: teacherId,
-        teacherName: teacherName,
-      );
-      _halaqahs[index] = updated;
-      halaqahsNotifier.value = List.from(_halaqahs);
+    if (halaqahId.trim().isEmpty) {
+      return unassignTeacher(teacherId);
+    }
 
-      final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-      await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    final targetIdx = _halaqahs.indexWhere((h) => h.id == halaqahId);
+    final String targetName =
+        targetIdx != -1 ? _halaqahs[targetIdx].name : 'Study Circle';
 
-      final client = SupabaseService.instance.client;
-      if (client != null && _isValidUuid(halaqahId) && _isValidUuid(teacherId)) {
-        try {
-          await client.from('halaqahs').update({
-            'teacher_id': teacherId,
-          }).eq('id', halaqahId);
-          await client.from('profiles').update({
-            'halaqah_id': halaqahId,
-            'halaqah_name': existing.name,
-          }).eq('id', teacherId);
-        } catch (e) {
-          debugPrint('[HalaqahService] Assign teacher error: $e');
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(halaqahId) && _isValidUuid(teacherId)) {
+      try {
+        final rpcRes = await client.rpc(
+          'admin_assign_teacher_halaqah',
+          params: {
+            'p_teacher_id': teacherId,
+            'p_halaqah_id': halaqahId,
+          },
+        );
+        if (rpcRes is Map && rpcRes['success'] == false) {
+          throw Exception(
+              rpcRes['message']?.toString() ?? 'Failed to assign study circle.');
         }
+      } catch (e) {
+        final msg = e.toString().toLowerCase();
+        final missingRpc =
+            msg.contains('42883') || msg.contains('pgrst202') || msg.contains('could not find the function');
+        if (!missingRpc) {
+          debugPrint('[HalaqahService] Assign teacher error: $e');
+          rethrow;
+        }
+        // Fallback direct verified updates if RPC is not deployed
+        await client
+            .from('halaqahs')
+            .update({'teacher_id': null}).eq('teacher_id', teacherId);
+        await client
+            .from('halaqahs')
+            .update({'teacher_id': teacherId})
+            .eq('id', halaqahId)
+            .select('id')
+            .single();
+        await client
+            .from('profiles')
+            .update({
+              'halaqah_id': halaqahId,
+              'halaqah_name': targetName,
+            })
+            .eq('id', teacherId)
+            .select('id')
+            .single();
       }
     }
+
+    // Synchronize local cache across all circles
+    for (int i = 0; i < _halaqahs.length; i++) {
+      final existing = _halaqahs[i];
+      if (existing.id == halaqahId) {
+        _halaqahs[i] = existing.copyWith(
+          teacherId: teacherId,
+          teacherName: teacherName,
+        );
+      } else if (existing.teacherId == teacherId) {
+        _halaqahs[i] = Halaqah(
+          id: existing.id,
+          name: existing.name,
+          teacherId: null,
+          teacherName: 'Unassigned',
+          description: existing.description,
+          schedule: existing.schedule,
+          studentCount: existing.studentCount,
+          createdAt: existing.createdAt,
+        );
+      }
+    }
+    halaqahsNotifier.value = List.from(_halaqahs);
+
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await fetchHalaqahs();
+    return true;
+  }
+
+  /// Remove a teacher from their assigned study circle
+  Future<bool> unassignTeacher(String teacherId) async {
+    final client = SupabaseService.instance.client;
+    if (client != null && _isValidUuid(teacherId)) {
+      try {
+        final rpcRes = await client.rpc(
+          'admin_assign_teacher_halaqah',
+          params: {
+            'p_teacher_id': teacherId,
+            'p_halaqah_id': null,
+          },
+        );
+        if (rpcRes is Map && rpcRes['success'] == false) {
+          throw Exception(
+              rpcRes['message']?.toString() ?? 'Failed to unassign teacher.');
+        }
+      } catch (e) {
+        final msg = e.toString().toLowerCase();
+        final missingRpc =
+            msg.contains('42883') || msg.contains('pgrst202') || msg.contains('could not find the function');
+        if (!missingRpc) {
+          debugPrint('[HalaqahService] Unassign teacher error: $e');
+          rethrow;
+        }
+        await client
+            .from('halaqahs')
+            .update({'teacher_id': null}).eq('teacher_id', teacherId);
+        await client
+            .from('profiles')
+            .update({'halaqah_id': null, 'halaqah_name': null})
+            .eq('id', teacherId)
+            .select('id')
+            .single();
+      }
+    }
+
+    for (int i = 0; i < _halaqahs.length; i++) {
+      final existing = _halaqahs[i];
+      if (existing.teacherId == teacherId) {
+        _halaqahs[i] = Halaqah(
+          id: existing.id,
+          name: existing.name,
+          teacherId: null,
+          teacherName: 'Unassigned',
+          description: existing.description,
+          schedule: existing.schedule,
+          studentCount: existing.studentCount,
+          createdAt: existing.createdAt,
+        );
+      }
+    }
+    halaqahsNotifier.value = List.from(_halaqahs);
+
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await fetchHalaqahs();
+    return true;
   }
 
   /// Clear cached halaqahs on sign-out

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/services/halaqah_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -25,6 +26,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   List<Map<String, dynamic>> _parents = [];
   List<Map<String, dynamic>> _inviteCodes = [];
   bool _isLoading = true;
+  String? _loadError;
   String _searchQuery = '';
 
   @override
@@ -42,7 +44,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Future<void> _loadAllUserData() async {
-    setState(() => _isLoading = true);
+    setState(() {
+      _isLoading = true;
+      _loadError = null;
+    });
     final client = SupabaseService.instance.client;
 
     if (client == null) {
@@ -51,6 +56,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           _teachers = [];
           _parents = [];
           _inviteCodes = [];
+          _loadError = 'Unable to connect to center server. Please try again.';
           _isLoading = false;
         });
       }
@@ -79,15 +85,21 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
       if (mounted) {
         setState(() {
-          _teachers = List<Map<String, dynamic>>.from(teachersRes ?? []);
-          _parents = List<Map<String, dynamic>>.from(parentsRes ?? []);
-          _inviteCodes = List<Map<String, dynamic>>.from(codesRes ?? []);
+          _teachers = List<Map<String, dynamic>>.from(teachersRes);
+          _parents = List<Map<String, dynamic>>.from(parentsRes);
+          _inviteCodes = List<Map<String, dynamic>>.from(codesRes);
+          _loadError = null;
           _isLoading = false;
         });
       }
     } catch (e) {
       debugPrint('[UserManagement] Error loading data: $e');
-      if (mounted) setState(() => _isLoading = false);
+      if (mounted) {
+        setState(() {
+          _loadError = SupabaseService.cleanErrorMessage(e);
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -129,27 +141,46 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     });
 
     final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client
-            .from('profiles')
-            .update({'is_suspended': newStatus}).eq('id', user['id']);
-      } catch (e) {
-        if (mounted) {
-          setState(() {
-            user['is_suspended'] = currentStatus;
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}',
-              ),
-              backgroundColor: p.danger,
-            ),
-          );
-        }
-        return;
+    if (client == null) {
+      if (mounted) {
+        setState(() {
+          user['is_suspended'] = currentStatus;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Unable to connect to server.'),
+            backgroundColor: p.danger,
+          ),
+        );
       }
+      return;
+    }
+
+    try {
+      await client
+          .from('profiles')
+          .update({
+            'is_suspended': newStatus,
+            'updated_at': DateTime.now().toUtc().toIso8601String(),
+          })
+          .eq('id', user['id'])
+          .select('id, is_suspended')
+          .single();
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          user['is_suspended'] = currentStatus;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+      return;
     }
 
     if (mounted) {
@@ -206,10 +237,68 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     });
 
     final client = SupabaseService.instance.client;
-    if (client != null) {
-      try {
-        await client.from('profiles').delete().eq('id', user['id']);
-      } catch (e) {
+    if (client == null) {
+      if (mounted) {
+        setState(() {
+          if (listType == 'teacher') {
+            _teachers.add(user);
+          } else {
+            _parents.add(user);
+          }
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: const Text('Unable to connect to server.'),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+      return;
+    }
+
+    try {
+      final rpcRes = await client.rpc(
+        'admin_delete_user',
+        params: {'p_user_id': user['id']},
+      );
+      if (rpcRes is Map && rpcRes['success'] != true) {
+        throw Exception(
+            rpcRes['message']?.toString() ?? 'Failed to remove user.');
+      }
+    } catch (e) {
+      final errMsg = e.toString().toLowerCase();
+      final missingRpc = errMsg.contains('42883') ||
+          errMsg.contains('pgrst202') ||
+          errMsg.contains('could not find the function');
+      if (missingRpc) {
+        try {
+          await client
+              .from('profiles')
+              .delete()
+              .eq('id', user['id'])
+              .select('id')
+              .single();
+        } catch (fallbackErr) {
+          if (mounted) {
+            setState(() {
+              if (listType == 'teacher') {
+                _teachers.add(user);
+              } else {
+                _parents.add(user);
+              }
+            });
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                  'Failed to remove user: ${SupabaseService.cleanErrorMessage(fallbackErr)}',
+                ),
+                backgroundColor: p.danger,
+              ),
+            );
+          }
+          return;
+        }
+      } else {
         if (mounted) {
           setState(() {
             if (listType == 'teacher') {
@@ -232,6 +321,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
 
     if (mounted) {
+      await _loadAllUserData();
+      if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text('Removed ${user['full_name']} from center.'),
@@ -255,10 +346,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       return;
     }
 
-    String selectedId = halaqahs.first.id;
-    String selectedName = halaqahs.first.name;
+    String selectedId = '';
+    String selectedName = 'Unassigned';
     final currentId = teacher['halaqah_id']?.toString();
-    if (currentId != null) {
+    if (currentId != null && currentId.isNotEmpty) {
       final match = halaqahs.where((h) => h.id == currentId);
       if (match.isNotEmpty) {
         selectedId = match.first.id;
@@ -274,11 +365,22 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           content: DropdownButtonFormField<String>(
             value: selectedId,
             isExpanded: true,
-            items: halaqahs
-                .map((h) => DropdownMenuItem(value: h.id, child: Text(h.name)))
-                .toList(),
+            items: [
+              const DropdownMenuItem(
+                value: '',
+                child: Text('Unassigned (Remove from Circle)'),
+              ),
+              ...halaqahs
+                  .map((h) => DropdownMenuItem(value: h.id, child: Text(h.name))),
+            ],
             onChanged: (val) {
-              if (val != null) {
+              if (val == null) return;
+              if (val.isEmpty) {
+                setDialogState(() {
+                  selectedId = '';
+                  selectedName = 'Unassigned';
+                });
+              } else {
                 final h = halaqahs.firstWhere((e) => e.id == val);
                 setDialogState(() {
                   selectedId = h.id;
@@ -295,7 +397,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 child: const Text('Cancel')),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Assign'),
+              child: const Text('Save'),
             ),
           ],
         ),
@@ -304,22 +406,41 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
     if (confirm != true) return;
 
-    await HalaqahService.instance.assignTeacher(
-      halaqahId: selectedId,
-      teacherId: teacher['id'].toString(),
-      teacherName: teacher['full_name']?.toString() ?? 'Teacher',
-    );
-    if (mounted) {
-      setState(() {
-        teacher['halaqah_id'] = selectedId;
-        teacher['halaqah_name'] = selectedName;
-      });
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('${teacher['full_name']} assigned to $selectedName.'),
-          backgroundColor: p.primary,
-        ),
-      );
+    try {
+      final teacherId = teacher['id'].toString();
+      if (selectedId.isEmpty) {
+        await HalaqahService.instance.unassignTeacher(teacherId);
+      } else {
+        await HalaqahService.instance.assignTeacher(
+          halaqahId: selectedId,
+          teacherId: teacherId,
+          teacherName: teacher['full_name']?.toString() ?? 'Teacher',
+        );
+      }
+      await _loadAllUserData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              selectedId.isEmpty
+                  ? '${teacher['full_name']} unassigned from study circle.'
+                  : '${teacher['full_name']} assigned to $selectedName.',
+            ),
+            backgroundColor: p.primary,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to update circle assignment: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
     }
   }
 
@@ -357,7 +478,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           IconButton(
             icon: Icon(Icons.person_add_rounded, color: p.primary),
             tooltip: 'Generate Invite Code',
-            onPressed: () => InviteCodeDialog.show(context),
+            onPressed: () async {
+              await InviteCodeDialog.show(context);
+              if (mounted) await _loadAllUserData();
+            },
           ),
           IconButton(
             icon: Icon(Icons.refresh_rounded, color: p.inkSecondary),
@@ -401,14 +525,25 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           Expanded(
             child: _isLoading
                 ? Center(child: CircularProgressIndicator(color: p.primary))
-                : TabBarView(
-                    controller: _tabController,
-                    children: [
-                      _buildUserList(_teachers, 'teacher', p),
-                      _buildUserList(_parents, 'parent', p),
-                      _buildInviteCodesList(p),
-                    ],
-                  ),
+                : (_loadError != null
+                    ? Center(
+                        child: ProEmptyState(
+                          icon: Icons.cloud_off_rounded,
+                          title: 'Could not load users',
+                          message: _loadError!,
+                          accentColor: p.danger,
+                          actionLabel: 'Retry',
+                          onAction: _loadAllUserData,
+                        ),
+                      )
+                    : TabBarView(
+                        controller: _tabController,
+                        children: [
+                          _buildUserList(_teachers, 'teacher', p),
+                          _buildUserList(_parents, 'parent', p),
+                          _buildInviteCodesList(p),
+                        ],
+                      )),
           ),
         ],
       ),
@@ -620,14 +755,28 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Widget _buildInviteCodesList(AppPalette p) {
-    if (_inviteCodes.isEmpty) {
-      return const Padding(
-        padding: EdgeInsets.all(24),
+    final filtered = _inviteCodes.where((code) {
+      if (_searchQuery.isEmpty) return true;
+      final codeStr = (code['code'] ?? '').toString().toLowerCase();
+      final roleStr = (code['role'] ?? '').toString().toLowerCase();
+      final emailStr = (code['target_email'] ?? '').toString().toLowerCase();
+      return codeStr.contains(_searchQuery) ||
+          roleStr.contains(_searchQuery) ||
+          emailStr.contains(_searchQuery);
+    }).toList();
+
+    if (filtered.isEmpty) {
+      return Padding(
+        padding: const EdgeInsets.all(24),
         child: Center(
           child: ProEmptyState(
             icon: Icons.vpn_key_off_outlined,
-            title: 'No invitation codes active',
-            message: 'Generate an invite code from the top right button.',
+            title: _searchQuery.isNotEmpty
+                ? 'No matching invite codes'
+                : 'No invitation codes active',
+            message: _searchQuery.isNotEmpty
+                ? 'Try clearing or modifying your search query.'
+                : 'Generate an invite code from the top right button.',
           ),
         ),
       );
@@ -638,10 +787,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       onRefresh: _loadAllUserData,
       child: ListView.separated(
         padding: const EdgeInsets.fromLTRB(16, 4, 16, 28),
-        itemCount: _inviteCodes.length,
+        itemCount: filtered.length,
         separatorBuilder: (_, __) => const SizedBox(height: 10),
         itemBuilder: (context, index) {
-          final code = _inviteCodes[index];
+          final code = filtered[index];
+          final codeStr = (code['code'] ?? '').toString();
           final isTeacher = code['role'] == 'teacher';
           final isUsed = code['is_used'] == true;
           final tone = isTeacher ? p.primary : p.gold;
@@ -671,7 +821,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        code['code'] ?? '',
+                        codeStr,
                         style: TextStyle(
                           fontFamily: 'monospace',
                           fontWeight: FontWeight.w800,
@@ -694,13 +844,48 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   label: isUsed ? 'USED' : 'ACTIVE',
                   color: isUsed ? p.inkMuted : p.success,
                 ),
+                if (!isUsed && codeStr.isNotEmpty)
+                  IconButton(
+                    icon: Icon(Icons.copy_rounded, size: 18, color: p.primary),
+                    tooltip: 'Copy Code',
+                    onPressed: () {
+                      Clipboard.setData(ClipboardData(text: codeStr));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Copied "$codeStr" to clipboard.'),
+                        ),
+                      );
+                    },
+                  ),
                 IconButton(
                   icon: Icon(Icons.delete_outline_rounded,
                       size: 19, color: p.danger),
+                  tooltip: 'Delete Invite Code',
                   onPressed: () async {
                     final id = code['id'];
-                    setState(() => _inviteCodes.removeAt(index));
-                    await SupabaseService.instance.deleteInviteCode(id);
+                    if (id == null) return;
+                    final removedItem = code;
+                    final origIdx =
+                        _inviteCodes.indexWhere((item) => item['id'] == id);
+                    setState(() =>
+                        _inviteCodes.removeWhere((item) => item['id'] == id));
+                    final ok = await SupabaseService.instance
+                        .deleteInviteCode(id.toString());
+                    if (!ok && mounted) {
+                      setState(() {
+                        if (origIdx >= 0 && origIdx <= _inviteCodes.length) {
+                          _inviteCodes.insert(origIdx, removedItem);
+                        } else {
+                          _inviteCodes.add(removedItem);
+                        }
+                      });
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: const Text('Failed to delete invite code.'),
+                          backgroundColor: p.danger,
+                        ),
+                      );
+                    }
                   },
                 ),
               ],

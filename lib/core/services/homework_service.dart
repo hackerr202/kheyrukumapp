@@ -308,6 +308,26 @@ class HomeworkService {
     }
     _submissionsController.add(List.from(_submissions));
 
+    final parentIds = classStudents
+        .map((s) => s.parentId)
+        .whereType<String>()
+        .where((id) => _isValidUuid(id))
+        .toSet()
+        .toList();
+    if (parentIds.isNotEmpty) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: parentIds,
+        title: 'New Homework Assigned',
+        body:
+            '${assignment.title} (${assignment.surahName}, Ayah ${assignment.fromAyah}-${assignment.toAyah})',
+        type: 'homework',
+        data: {
+          'assignment_id': assignment.id,
+          'halaqah_id': resolvedHalaqahId,
+        },
+      );
+    }
+
     return assignment;
   }
 
