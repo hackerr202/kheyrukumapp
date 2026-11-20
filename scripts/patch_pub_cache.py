@@ -18,10 +18,12 @@ def patch_pub_cache(pub_dir):
                     with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                         c = f.read()
                     orig = c
-                    c = c.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 35')
-                    c = c.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 35')
-                    c = c.replace('compileSdk = 34', 'compileSdk = 35')
-                    c = c.replace('compileSdkVersion 34', 'compileSdkVersion 35')
+                    c = c.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
+                    c = c.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 36')
+                    c = c.replace('compileSdk = 34', 'compileSdk = 36')
+                    c = c.replace('compileSdkVersion 34', 'compileSdkVersion 36')
+                    c = c.replace('compileSdk = 35', 'compileSdk = 36')
+                    c = c.replace('compileSdkVersion 35', 'compileSdkVersion 36')
                     if c != orig:
                         with open(fpath, 'w', encoding='utf-8') as f:
                             f.write(c)

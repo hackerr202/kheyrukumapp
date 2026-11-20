@@ -45,7 +45,8 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled = true",
                 1,
             )
-        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 35")
+        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
+        content = re.sub(r"compileSdk\s*=\s*3[0-5]\b", "compileSdk = 36", content)
         content = content.replace("targetSdk = flutter.targetSdkVersion", "targetSdk = 35")
         content = content.replace("minSdk = flutter.minSdkVersion", "minSdk = 23")
         content = re.sub(r"minSdk\s*=\s*2[012]\b", "minSdk = 23", content)
@@ -96,7 +97,8 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled true",
                 1,
             )
-        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 35")
+        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
+        gcontent = re.sub(r"compileSdkVersion\s+3[0-5]\b", "compileSdkVersion 36", gcontent)
         gcontent = gcontent.replace("targetSdkVersion flutter.targetSdkVersion", "targetSdkVersion 35")
         gcontent = gcontent.replace("minSdkVersion flutter.minSdkVersion", "minSdkVersion 23")
         if "desugar_jdk_libs" not in gcontent:
