@@ -1,12 +1,25 @@
 #!/usr/bin/env python3
 import os
+import re
 import sys
+
+
+def _replace_if_below_36(replacement_prefix: str):
+    def _repl(match: re.Match) -> str:
+        val = match.group(1)
+        if val.isdigit() and int(val) >= 36:
+            return match.group(0)
+        return f"{replacement_prefix}36"
+    return _repl
+
 
 def patch_pub_cache(pub_dir):
     print(f"[patch_pub_cache] Scanning pub-cache at: {pub_dir}")
     if not os.path.exists(pub_dir):
         print("[patch_pub_cache] pub_dir not found, skipping.")
         return
+
+    val_pat = r'(flutter\.compileSdkVersion|\d+)'
 
     for root, dirs, files in os.walk(pub_dir):
         # 1. Patch Gradle build files
@@ -18,15 +31,26 @@ def patch_pub_cache(pub_dir):
                     with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                         c = f.read()
                     orig = c
-                    c = c.replace('compileSdk = flutter.compileSdkVersion', 'compileSdk = 36')
-                    c = c.replace('compileSdkVersion flutter.compileSdkVersion', 'compileSdkVersion 36')
-                    c = c.replace('compileSdk = 34', 'compileSdk = 36')
-                    c = c.replace('compileSdkVersion 34', 'compileSdkVersion 36')
-                    c = c.replace('compileSdk = 35', 'compileSdk = 36')
-                    c = c.replace('compileSdkVersion 35', 'compileSdkVersion 36')
+                    if fname == 'build.gradle.kts':
+                        c = re.sub(rf'\bcompileSdk\s*=\s*{val_pat}\b', _replace_if_below_36('compileSdk = '), c)
+                        c = re.sub(rf'\bcompileSdk\s*\(\s*{val_pat}\s*\)', _replace_if_below_36('compileSdk = '), c)
+                        c = re.sub(rf'\bcompileSdkVersion\s*\(\s*{val_pat}\s*\)', _replace_if_below_36('compileSdk = '), c)
+                    else:
+                        c = re.sub(rf'\bcompileSdk\s*=\s*{val_pat}\b', _replace_if_below_36('compileSdk = '), c)
+                        c = re.sub(rf'\bcompileSdk\s+{val_pat}\b', _replace_if_below_36('compileSdk '), c)
+                        c = re.sub(rf'\bcompileSdkVersion\s*=\s*{val_pat}\b', _replace_if_below_36('compileSdkVersion = '), c)
+                        c = re.sub(rf'\bcompileSdkVersion\s+{val_pat}\b', _replace_if_below_36('compileSdkVersion '), c)
+                        c = re.sub(rf'\bcompileSdkVersion\s*\(\s*{val_pat}\s*\)', _replace_if_below_36('compileSdkVersion '), c)
+                        c = re.sub(
+                            r'^([^\n]*\bcompileSdk[^\n]*)$',
+                            lambda m: re.sub(r'([?:]\s*)(?:2\d|3[0-5])\b', r'\g<1>36', m.group(1)),
+                            c,
+                            flags=re.M,
+                        )
                     if c != orig:
                         with open(fpath, 'w', encoding='utf-8') as f:
                             f.write(c)
+                        print(f"[patch_pub_cache] Patched compileSdk -> 36: {fpath}")
                 except Exception as e:
                     print(f"[patch_pub_cache] Error patching gradle {fpath}: {e}")
 
@@ -35,7 +59,6 @@ def patch_pub_cache(pub_dir):
                 try:
                     with open(fpath, 'r', encoding='utf-8', errors='ignore') as f:
                         c = f.read()
-                    import re
                     c_new = re.sub(r'package="[a-zA-Z0-9_\.]*"', '', c)
                     if c_new != c:
                         with open(fpath, 'w', encoding='utf-8') as f:
