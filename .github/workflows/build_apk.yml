@@ -103,7 +103,7 @@ jobs:
       - name: Ensure Gradle wrapper is present
         run: |
           if [ ! -f android/gradlew ] || [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
-            (cd android && gradle wrapper --gradle-version 8.10.2)
+            (cd android && gradle wrapper --gradle-version 9.5.0 --distribution-type all)
           fi
           chmod +x android/gradlew
 
