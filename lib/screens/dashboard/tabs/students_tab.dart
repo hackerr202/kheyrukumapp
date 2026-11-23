@@ -1687,6 +1687,7 @@ class _StudentsTabState extends State<StudentsTab> {
   void _showAddStudentDialog(BuildContext context) {
     final p = AppColors.of(context);
     final nameCtrl = TextEditingController();
+    final ageCtrl = TextEditingController(text: '8');
 
     final halaqahs = HalaqahService.instance.halaqahs;
     String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
@@ -1708,7 +1709,11 @@ class _StudentsTabState extends State<StudentsTab> {
           final currentHalaqahs = HalaqahService.instance.halaqahs;
           final currentParents = StudentService.instance.getRegisteredParents();
 
+          final parsedAge = int.tryParse(ageCtrl.text.trim());
+          final bool isAgeValid = parsedAge != null && parsedAge > 0;
+
           final bool canSubmit = nameCtrl.text.trim().isNotEmpty &&
+              isAgeValid &&
               selectedParentId != null &&
               selectedParentId!.isNotEmpty &&
               selectedHalaqahId != null &&
@@ -1739,6 +1744,17 @@ class _StudentsTabState extends State<StudentsTab> {
                       labelText: 'Student Full Name *',
                       hintText: 'e.g. Abdur-Rahman Muhammed',
                       prefixIcon: Icon(Icons.face_rounded, size: 20),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: ageCtrl,
+                    keyboardType: TextInputType.number,
+                    onChanged: (_) => setDialogState(() {}),
+                    decoration: const InputDecoration(
+                      labelText: 'Student Age *',
+                      hintText: 'e.g. 8',
+                      prefixIcon: Icon(Icons.cake_outlined, size: 20),
                     ),
                   ),
                   const SizedBox(height: 14),
@@ -1957,6 +1973,7 @@ class _StudentsTabState extends State<StudentsTab> {
                         Navigator.pop(ctx);
                         await StudentService.instance.addStudent(
                           fullName: nameCtrl.text.trim(),
+                          age: parsedAge ?? 8,
                           halaqahName: selectedHalaqahName,
                           halaqahId: selectedHalaqahId,
                           parentId: foundParent['id']!,

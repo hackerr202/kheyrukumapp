@@ -56,6 +56,8 @@ class KheyrukumApp extends StatelessWidget {
               ],
               localizationsDelegates: const [
                 AppLocalizations.delegate,
+                FallbackMaterialLocalizationsDelegate(),
+                FallbackCupertinoLocalizationsDelegate(),
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
