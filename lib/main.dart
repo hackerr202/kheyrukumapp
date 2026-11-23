@@ -1,3 +1,6 @@
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -11,10 +14,42 @@ import 'core/theme/app_theme.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await LocalStorageService.instance.initialize();
-  await AppTheme.loadSavedTheme();
-  await SupabaseService.initialize();
-  await PushNotificationService.instance.initialize();
+
+  if (!kIsWeb) {
+    try {
+      if (Firebase.apps.isEmpty) {
+        await Firebase.initializeApp();
+      }
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    } catch (e) {
+      debugPrint('[main] Firebase early initialization note: $e');
+    }
+  }
+
+  try {
+    await LocalStorageService.instance.initialize();
+  } catch (e) {
+    debugPrint('[main] LocalStorage initialization note: $e');
+  }
+
+  try {
+    await AppTheme.loadSavedTheme();
+  } catch (e) {
+    debugPrint('[main] Theme load note: $e');
+  }
+
+  try {
+    await SupabaseService.initialize();
+  } catch (e) {
+    debugPrint('[main] Supabase initialization note: $e');
+  }
+
+  try {
+    await PushNotificationService.instance.initialize();
+  } catch (e) {
+    debugPrint('[main] Push notification initialization note: $e');
+  }
+
   runApp(const KheyrukumApp());
 }
 
@@ -43,6 +78,7 @@ class KheyrukumApp extends StatelessWidget {
           valueListenable: LocaleNotifier.instance,
           builder: (context, appLocale, _) {
             return MaterialApp(
+              navigatorKey: AppRoutes.navigatorKey,
               title: 'Kheyrukum - خيركم',
               debugShowCheckedModeBanner: false,
               theme: AppTheme.lightTheme,

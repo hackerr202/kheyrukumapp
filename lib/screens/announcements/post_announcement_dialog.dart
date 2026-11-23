@@ -7,6 +7,7 @@ import '../../core/services/auth_session_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/pro_ui_kit.dart';
 
 /// Flagship Modal Dialog for Admins to compose and broadcast real-time circulars
 /// with native device image/document pickers and Supabase Storage uploads.
@@ -489,10 +490,10 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             height: 120,
                             width: double.infinity,
                             color: p.canvas,
-                            child: Image.network(
-                              _attachmentUrl!,
+                            child: ProSignedImage(
+                              mediaRef: _attachmentUrl!,
                               fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) => const Center(
+                              errorWidget: const Center(
                                 child: Icon(Icons.image_not_supported_rounded,
                                     color: Colors.grey),
                               ),

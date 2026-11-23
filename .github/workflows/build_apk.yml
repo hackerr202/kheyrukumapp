@@ -1,4 +1,4 @@
-name: Build Android APK
+name: Build Signed Android APK
 on:
   push:
     branches: [ main, master ]
@@ -22,26 +22,75 @@ jobs:
           channel: 'stable'
           cache: true
 
-      - name: Generate clean modern Android scaffolding
+      - name: Configure Firebase and Release Signing
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
+          STORE_PASSWORD: ${{ secrets.STORE_PASSWORD }}
+          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
         run: |
-          rm -rf android
-          flutter create . --platforms=android --org=com.kheyrukum.portal
-          
-          # Copy custom launcher icons into Android res folder
-          if [ -d "android_res" ]; then
-            cp -r android_res/* android/app/src/main/res/
-          fi
-          
-          # Inject permissions, receivers & Firebase default notification channel metadata
-          python scripts/patch_manifest.py android/app/src/main/AndroidManifest.xml
+          python3 - <<'PY'
+          import base64
+          import json
+          import os
+          import sys
+          from pathlib import Path
 
-          # Configure Android Gradle (desugaring, minSdk 23, API 35, and optional google-services.json)
-          python scripts/configure_firebase_android.py
+          required = [
+              "GOOGLE_SERVICES_JSON",
+              "ANDROID_KEYSTORE_BASE64",
+              "KEY_ALIAS",
+              "STORE_PASSWORD",
+              "KEY_PASSWORD",
+          ]
+          missing = [k for k in required if not os.environ.get(k, "").strip()]
+          if missing:
+              print(f"ERROR: Missing required release secret(s): {', '.join(missing)}", file=sys.stderr)
+              sys.exit(1)
 
-          echo "=== Configured app build file ==="
-          cat android/app/build.gradle.kts 2>/dev/null || cat android/app/build.gradle 2>/dev/null || true
+          gs_raw = os.environ["GOOGLE_SERVICES_JSON"].strip()
+          gs_text = gs_raw if gs_raw.startswith("{") else base64.b64decode(gs_raw).decode("utf-8")
+          gs_data = json.loads(gs_text)
+          packages = [
+              c.get("client_info", {}).get("android_client_info", {}).get("package_name")
+              for c in gs_data.get("client", [])
+          ]
+          if "com.kheyrukum.portal" not in packages:
+              print(
+                  f"ERROR: google-services.json does not contain package com.kheyrukum.portal (found: {packages})",
+                  file=sys.stderr,
+              )
+              sys.exit(1)
+
+          gs_path = Path("android/app/google-services.json")
+          gs_path.parent.mkdir(parents=True, exist_ok=True)
+          gs_path.write_text(json.dumps(gs_data, indent=2), encoding="utf-8")
+          print("Wrote validated android/app/google-services.json")
+
+          jks_b64 = "".join(os.environ["ANDROID_KEYSTORE_BASE64"].split())
+          jks_bytes = base64.b64decode(jks_b64)
+          if len(jks_bytes) < 64:
+              print("ERROR: Decoded ANDROID_KEYSTORE_BASE64 appears empty or corrupt.", file=sys.stderr)
+              sys.exit(1)
+
+          jks_path = Path("android/app/kheyrukum-release.jks")
+          jks_path.write_bytes(jks_bytes)
+          print(f"Wrote release keystore ({len(jks_bytes)} bytes)")
+
+          key_props = Path("android/key.properties")
+          key_props.write_text(
+              "\n".join([
+                  "storeFile=kheyrukum-release.jks",
+                  f"storePassword={os.environ['STORE_PASSWORD']}",
+                  f"keyAlias={os.environ['KEY_ALIAS']}",
+                  f"keyPassword={os.environ['KEY_PASSWORD']}",
+                  "",
+              ]),
+              encoding="utf-8",
+          )
+          print("Wrote android/key.properties")
+          PY
 
       - name: Install dependencies
         run: flutter pub get
@@ -49,13 +98,27 @@ jobs:
       - name: Patch plugins in pub-cache for Gradle compatibility
         run: |
           PUB_DIR="${PUB_CACHE:-$HOME/.pub-cache}"
-          python scripts/patch_pub_cache.py "$PUB_DIR"
+          python3 scripts/patch_pub_cache.py "$PUB_DIR"
 
-      - name: Build Release APK
+      - name: Ensure Gradle wrapper is present
+        run: |
+          if [ ! -f android/gradlew ] || [ ! -f android/gradle/wrapper/gradle-wrapper.jar ]; then
+            (cd android && gradle wrapper --gradle-version 8.10.2)
+          fi
+          chmod +x android/gradlew
+
+      - name: Run Flutter Analyze Gate
+        run: flutter analyze --no-fatal-infos --no-fatal-warnings
+
+      - name: Build Signed Release APK
         run: |
           flutter build apk --release --verbose
           echo "=== Built APK Artifacts ==="
           ls -lh build/app/outputs/flutter-apk/
+
+      - name: Clean up signing secrets from workspace
+        if: always()
+        run: rm -f android/key.properties android/app/kheyrukum-release.jks android/app/google-services.json
 
       - name: Upload APK Artifacts
         uses: actions/upload-artifact@v4

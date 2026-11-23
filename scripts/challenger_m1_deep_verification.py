@@ -1,12 +1,13 @@
 import json
-import ssl
+import os
 import sys
 import urllib.request
 import urllib.error
 import pg8000.native
+from _db_env import get_db_connection_params, get_supabase_anon_key, get_supabase_url
 
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
 HEADERS = {
     "apikey": ANON_KEY,
     "Authorization": f"Bearer {ANON_KEY}",
@@ -65,20 +66,8 @@ def test_rest_api_buckets():
 
 def test_storage_policies_and_db():
     section("2. Empirical Verification: PostgreSQL Storage & Tables RLS Policies")
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
-    con = pg8000.native.Connection(
-        user="postgres.tjhqpzvjzmpyrridtpsj",
-        host="aws-1-eu-west-3.pooler.supabase.com",
-        port=6543,
-        database="postgres",
-        password="ustazmuhammedyakut",
-        ssl_context=ctx,
-        timeout=15,
-    )
-    print("PostgreSQL connection established via aws-1-eu-west-3:6543")
+    con = pg8000.native.Connection(**get_db_connection_params(), timeout=15)
+    print("PostgreSQL connection established via SUPABASE_DB_URL")
 
     # 1. Storage Buckets rows
     print("\n--- Direct storage.buckets table rows ---")
@@ -223,19 +212,7 @@ def test_student_persistence_lifecycle():
     # 4. Verify what happens on app reinstall (wipe simulated cache, run cloud fetch query)
     # 5. Clean up the test student
 
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
-    con = pg8000.native.Connection(
-        user="postgres.tjhqpzvjzmpyrridtpsj",
-        host="aws-1-eu-west-3.pooler.supabase.com",
-        port=6543,
-        database="postgres",
-        password="ustazmuhammedyakut",
-        ssl_context=ctx,
-        timeout=15,
-    )
+    con = pg8000.native.Connection(**get_db_connection_params(), timeout=15)
 
     test_student_name = "Empirical Test Student - QA Verification"
     

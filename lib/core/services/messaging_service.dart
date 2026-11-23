@@ -158,29 +158,30 @@ class MessagingService {
   }
 
   /// Handle incoming real-time message:
-  /// STRICT RULE: Push notifications are ONLY delivered to the recipient, never to the sender!
-  void _handleIncomingCloudMessage(Map<String, dynamic> json) {
+  /// STRICT RULE: Verify conversation membership from cloud state instead of fabricating participant lists.
+  Future<void> _handleIncomingCloudMessage(Map<String, dynamic> json) async {
     try {
       final msg = ChatMessage.fromJson(json);
       final currentUserId = AuthSessionService.instance.userId;
+      if (currentUserId.isEmpty) return;
 
       // 1. If this device is the sender, ignore notification
       if (msg.senderId == currentUserId) return;
 
-      // 2. Check if current user is a participant in this conversation
-      final convo = _conversations.firstWhere(
-        (c) => c.id == msg.conversationId,
-        orElse: () => Conversation(
-          id: msg.conversationId,
-          title: 'Direct Chat',
-          participantIds: [msg.senderId, currentUserId],
-          participantNames: [msg.senderName, 'User'],
-          lastMessageTime: msg.timestamp,
-        ),
-      );
+      // 2. Refresh conversations if unknown; NEVER fabricate participant lists
+      var idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
+      if (idx == -1) {
+        await fetchConversationsFromCloud();
+        idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
+        if (idx == -1) return; // Caller is not a verified participant of this conversation
+      }
 
+      final convo = _conversations[idx];
       final isParticipant = convo.participantIds.contains(currentUserId) ||
-          (convo.isGroup && AuthSessionService.instance.isParent && convo.groupType == 'parent_group');
+          AuthSessionService.instance.isAdmin ||
+          (convo.isGroup &&
+              AuthSessionService.instance.isParent &&
+              convo.groupType == 'parent_group');
 
       if (!isParticipant) return; // Not for this user!
 
@@ -192,24 +193,21 @@ class MessagingService {
         _saveMessagesToCache(msg.conversationId);
       }
 
-      // Update conversation last message in list
-      final idx = _conversations.indexWhere((c) => c.id == msg.conversationId);
-      if (idx != -1) {
-        final existing = _conversations[idx];
-        _conversations[idx] = Conversation(
-          id: existing.id,
-          title: existing.title,
-          isGroup: existing.isGroup,
-          participantIds: existing.participantIds,
-          participantNames: existing.participantNames,
-          lastMessage: msg.messageType == 'voice' ? '🎤 Voice message' : msg.content,
-          lastMessageTime: msg.timestamp,
-          halaqahId: existing.halaqahId,
-          groupType: existing.groupType,
-          unreadCount: existing.unreadCount + 1,
-        );
-        _conversationsController.add(List.from(_conversations));
-      }
+      // Update conversation last message in list (preserving existing pin state)
+      _conversations[idx] = Conversation(
+        id: convo.id,
+        title: convo.title,
+        isGroup: convo.isGroup,
+        participantIds: convo.participantIds,
+        participantNames: convo.participantNames,
+        lastMessage: msg.messageType == 'voice' ? '🎤 Voice message' : msg.content,
+        lastMessageTime: msg.timestamp,
+        halaqahId: convo.halaqahId,
+        groupType: convo.groupType,
+        unreadCount: convo.unreadCount + 1,
+        isPinned: convo.isPinned,
+      );
+      _conversationsController.add(List.from(_conversations));
 
       // Deliver system push notification strictly to this recipient
       String notifBody = msg.content;
@@ -611,6 +609,45 @@ class MessagingService {
     }
   }
 
+  Future<Conversation?> _createDirectConversationViaRpc({
+    required String otherUserId,
+    required String title,
+    String? halaqahId,
+    String? groupType,
+  }) async {
+    final client = SupabaseService.instance.client;
+    if (client == null || !_isValidUuid(otherUserId)) return null;
+    try {
+      final rpcRes = await client.rpc(
+        'create_direct_conversation',
+        params: {
+          'p_other_user_id': otherUserId,
+          'p_title': title,
+          if (halaqahId != null && _isValidUuid(halaqahId))
+            'p_halaqah_id': halaqahId,
+          if (groupType != null) 'p_group_type': groupType,
+        },
+      );
+      if (rpcRes is Map &&
+          rpcRes['success'] == true &&
+          rpcRes['conversation'] is Map) {
+        return Conversation.fromJson(
+            Map<String, dynamic>.from(rpcRes['conversation'] as Map));
+      }
+      if (rpcRes is Map && rpcRes['success'] == false) {
+        throw Exception(
+            rpcRes['message']?.toString() ?? 'Could not create conversation.');
+      }
+    } catch (e) {
+      final msg = e.toString().toLowerCase();
+      final missingRpc = msg.contains('42883') ||
+          msg.contains('pgrst202') ||
+          msg.contains('could not find the function');
+      if (!missingRpc) rethrow;
+    }
+    return null;
+  }
+
   /// Teacher starts a direct 1-on-1 chat with a parent of his class students
   Future<Conversation> startTeacherChatWithParent({
     required String teacherId,
@@ -642,25 +679,36 @@ class MessagingService {
       return existing;
     }
 
-    final convo = Conversation(
-      id: _generateUuidV4(),
+    final rpcConvo = await _createDirectConversationViaRpc(
+      otherUserId: parentId,
       title: '$parentName ($studentName\'s Parent)',
-      isGroup: false,
-      participantIds: [teacherId, parentId],
-      participantNames: [teacherName, parentName],
-      lastMessage: initialMessage ?? 'Ustaz $teacherName started a conversation regarding $studentName.',
-      lastMessageTime: DateTime.now(),
       halaqahId: halaqahId,
       groupType: 'direct_teacher',
     );
 
+    final convo = rpcConvo ??
+        Conversation(
+          id: _generateUuidV4(),
+          title: '$parentName ($studentName\'s Parent)',
+          isGroup: false,
+          participantIds: [teacherId, parentId],
+          participantNames: [teacherName, parentName],
+          lastMessage: initialMessage ?? 'Ustaz $teacherName started a conversation regarding $studentName.',
+          lastMessageTime: DateTime.now(),
+          halaqahId: halaqahId,
+          groupType: 'direct_teacher',
+        );
+
+    _conversations.removeWhere((c) => c.id == convo.id);
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    await _syncConversationToCloud(convo);
+    if (rpcConvo == null) {
+      await _syncConversationToCloud(convo);
+    }
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(
@@ -682,7 +730,7 @@ class MessagingService {
       final res = await client
           .from('profiles')
           .select('id')
-          .eq('role', 'admin')
+          .inFilter('role', ['superadmin', 'admin'])
           .limit(1)
           .maybeSingle();
       return res?['id']?.toString();
@@ -788,24 +836,34 @@ class MessagingService {
       return _conversations[existingIndex];
     }
 
-    final convo = Conversation(
-      id: _generateUuidV4(),
+    final rpcConvo = await _createDirectConversationViaRpc(
+      otherUserId: parentId,
       title: parentName,
-      isGroup: false,
-      participantIds: [if (adminId.isNotEmpty) adminId, parentId],
-      participantNames: ['Admin Director', parentName],
-      lastMessage: initialMessage ?? 'Conversation started with $parentName.',
-      lastMessageTime: DateTime.now(),
       groupType: 'direct_admin',
     );
 
+    final convo = rpcConvo ??
+        Conversation(
+          id: _generateUuidV4(),
+          title: parentName,
+          isGroup: false,
+          participantIds: [if (adminId.isNotEmpty) adminId, parentId],
+          participantNames: ['Admin Director', parentName],
+          lastMessage: initialMessage ?? 'Conversation started with $parentName.',
+          lastMessageTime: DateTime.now(),
+          groupType: 'direct_admin',
+        );
+
+    _conversations.removeWhere((c) => c.id == convo.id);
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    await _syncConversationToCloud(convo);
+    if (rpcConvo == null) {
+      await _syncConversationToCloud(convo);
+    }
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(
@@ -855,24 +913,36 @@ class MessagingService {
       return _conversations[existingIndex];
     }
 
-    final convo = Conversation(
-      id: _generateUuidV4(),
-      title: title,
-      isGroup: false,
-      participantIds: [parentId, if (resolvedTargetId.isNotEmpty) resolvedTargetId],
-      participantNames: [parentName, targetName],
-      lastMessage: initialMessage ?? 'Conversation initiated.',
-      lastMessageTime: DateTime.now(),
-      groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
-    );
+    final rpcConvo = resolvedTargetId.isNotEmpty
+        ? await _createDirectConversationViaRpc(
+            otherUserId: resolvedTargetId,
+            title: title,
+            groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
+          )
+        : null;
 
+    final convo = rpcConvo ??
+        Conversation(
+          id: _generateUuidV4(),
+          title: title,
+          isGroup: false,
+          participantIds: [parentId, if (resolvedTargetId.isNotEmpty) resolvedTargetId],
+          participantNames: [parentName, targetName],
+          lastMessage: initialMessage ?? 'Conversation initiated.',
+          lastMessageTime: DateTime.now(),
+          groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
+        );
+
+    _conversations.removeWhere((c) => c.id == convo.id);
     _conversations.insert(0, convo);
     _conversationsController.add(List.from(_conversations));
 
     final jsonList = _conversations.map((c) => c.toJson()).toList();
     await LocalStorageService.instance.saveJsonList('cached_conversations', jsonList);
 
-    await _syncConversationToCloud(convo);
+    if (rpcConvo == null) {
+      await _syncConversationToCloud(convo);
+    }
 
     if (initialMessage != null && initialMessage.isNotEmpty) {
       await sendMessage(

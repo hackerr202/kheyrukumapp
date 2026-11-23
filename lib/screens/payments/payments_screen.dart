@@ -7,6 +7,7 @@ import '../../core/models/student.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/messaging_service.dart';
 import '../../core/services/payment_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/services/student_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -26,11 +27,7 @@ class PaymentsScreen extends StatefulWidget {
 class _PaymentsScreenState extends State<PaymentsScreen> {
   String _selectedFilter = 'all';
 
-  bool get _isSuperAdmin {
-    final user = SupabaseService.instance.currentUser;
-    return AuthSessionService.instance.isSuperAdmin ||
-        user?.email?.toLowerCase() == 'admin@kheyrukum.com';
-  }
+  bool get _isSuperAdmin => AuthSessionService.instance.isSuperAdmin;
 
   Future<void> _handleRefresh() async {
     await PaymentService.instance.refresh();
@@ -40,8 +37,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
 
-    // Regular admins (not superadmin, not parent) cannot access payment data or fee registration
-    if (AuthSessionService.instance.currentRole == 'admin' && !_isSuperAdmin) {
+    // Fail-closed: only Superadmins and Parents can access payment data or fee registration
+    if (!AuthSessionService.instance.canAccessPayments) {
       return Scaffold(
         backgroundColor: p.canvas,
         appBar: AppBar(
@@ -1358,8 +1355,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   void _showReceiptInspectorDialog(
       BuildContext context, MonthlyPayment payment) {
     final p = AppColors.of(context);
-    final hasValidUrl = payment.receiptUrl != null &&
-        payment.receiptUrl!.trim().startsWith('http');
+    final hasValidUrl = StorageService.isValidMediaRef(payment.receiptUrl);
 
     showDialog(
       context: context,
@@ -1389,22 +1385,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           constraints: const BoxConstraints(maxHeight: 240),
                           width: double.infinity,
                           color: p.surfaceSubtle,
-                          child: Image.network(
-                            payment.receiptUrl!,
+                          child: ProSignedImage(
+                            mediaRef: payment.receiptUrl!,
                             fit: BoxFit.cover,
-                            loadingBuilder: (_, child, progress) {
-                              if (progress == null) return child;
-                              return SizedBox(
-                                height: 150,
-                                child: Center(
-                                  child: CircularProgressIndicator(
-                                    strokeWidth: 2,
-                                    color: p.primary,
-                                  ),
+                            placeholder: SizedBox(
+                              height: 150,
+                              child: Center(
+                                child: CircularProgressIndicator(
+                                  strokeWidth: 2,
+                                  color: p.primary,
                                 ),
-                              );
-                            },
-                            errorBuilder: (_, __, ___) => Padding(
+                              ),
+                            ),
+                            errorWidget: Padding(
                               padding: const EdgeInsets.all(20),
                               child: Column(
                                 children: [
@@ -1562,7 +1555,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             child: InteractiveViewer(
               minScale: 0.6,
               maxScale: 4.0,
-              child: Image.network(url, fit: BoxFit.contain),
+              child: ProSignedImage(
+                mediaRef: url,
+                fit: BoxFit.contain,
+                placeholder: const Center(
+                  child: CircularProgressIndicator(color: Colors.white),
+                ),
+                errorWidget: const Icon(Icons.broken_image_rounded,
+                    color: Colors.white54, size: 42),
+              ),
             ),
           ),
         ),

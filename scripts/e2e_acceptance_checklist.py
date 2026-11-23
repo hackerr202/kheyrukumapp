@@ -18,7 +18,6 @@ Check 4: Chat Communication Flow:
 
 import os
 import re
-import ssl
 import sys
 import json
 import time
@@ -27,17 +26,13 @@ import urllib.error
 import pg8000.native
 
 sys.path.append(os.path.abspath('scripts'))
+from _db_env import get_supabase_anon_key, get_supabase_url, get_test_password
 from check_syntax import check_brackets
 
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
-EMAIL = "challenger_test_m1@kheyrukum.com"
-PASSWORD = "TestPassword123!"
-
-POOLER_HOST = "aws-1-eu-west-3.pooler.supabase.com"
-DB_USER = "postgres.tjhqpzvjzmpyrridtpsj"
-DB_PASS = "ustazmuhammedyakut"
-DB_NAME = "postgres"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
+EMAIL = os.environ.get("KHEYRUKUM_TEST_EMAIL", "challenger_test_m1@kheyrukum.com")
+PASSWORD = get_test_password()
 
 def get_auth_token():
     if os.path.exists("test_token.txt"):

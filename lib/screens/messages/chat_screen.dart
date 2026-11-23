@@ -313,16 +313,27 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     try {
+      final resolvedUrl = await StorageService.resolveSignedUrl(url);
+      if (resolvedUrl == null || resolvedUrl.isEmpty) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not access voice note audio.')),
+          );
+        }
+        return;
+      }
+
       if (_currentlyPlayingId == msg.id) {
         if (_playerState == PlayerState.playing) {
           await _audioPlayer.pause();
         } else if (_playerState == PlayerState.paused) {
           await _audioPlayer.resume();
         } else {
-          await _audioPlayer.play(UrlSource(url));
+          await _audioPlayer.play(UrlSource(resolvedUrl));
         }
       } else {
         await _audioPlayer.stop();
+        if (!mounted) return;
         setState(() {
           _currentlyPlayingId = msg.id;
           _playbackPosition = Duration.zero;
@@ -330,7 +341,7 @@ class _ChatScreenState extends State<ChatScreen>
             _playbackDuration = Duration(seconds: msg.audioDurationSeconds!);
           }
         });
-        await _audioPlayer.play(UrlSource(url));
+        await _audioPlayer.play(UrlSource(resolvedUrl));
       }
     } catch (e) {
       debugPrint('[ChatScreen] Error playing voice note: $e');
@@ -638,7 +649,9 @@ class _ChatScreenState extends State<ChatScreen>
                     const Icon(Icons.open_in_browser_rounded, color: Colors.white),
                 tooltip: 'Open in browser',
                 onPressed: () async {
-                  final uri = Uri.tryParse(imageUrl);
+                  final resolvedUrl =
+                      await StorageService.resolveSignedUrl(imageUrl) ?? imageUrl;
+                  final uri = Uri.tryParse(resolvedUrl);
                   if (uri != null && await canLaunchUrl(uri)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }
@@ -652,18 +665,15 @@ class _ChatScreenState extends State<ChatScreen>
               boundaryMargin: const EdgeInsets.all(20),
               minScale: 0.5,
               maxScale: 4.0,
-              child: Image.network(
-                imageUrl,
+              child: ProSignedImage(
+                mediaRef: imageUrl,
                 fit: BoxFit.contain,
-                loadingBuilder: (ctx, child, progress) {
-                  if (progress == null) return child;
-                  return const Center(
-                    child: CircularProgressIndicator(
-                      color: AppColors.goldWarm,
-                    ),
-                  );
-                },
-                errorBuilder: (_, __, ___) => const Center(
+                placeholder: const Center(
+                  child: CircularProgressIndicator(
+                    color: AppColors.goldWarm,
+                  ),
+                ),
+                errorWidget: const Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
@@ -1385,8 +1395,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildImageBubbleContent(
       ChatMessage msg, bool isMe, Color textColor, AppPalette p) {
-    final hasValidUrl =
-        msg.attachmentUrl != null && msg.attachmentUrl!.startsWith('http');
+    final hasValidUrl = StorageService.isValidMediaRef(msg.attachmentUrl);
     return GestureDetector(
       onTap: () {
         if (hasValidUrl) {
@@ -1408,23 +1417,20 @@ class _ChatScreenState extends State<ChatScreen>
                   width: double.infinity,
                   color: Colors.black12,
                   child: hasValidUrl
-                      ? Image.network(
-                          msg.attachmentUrl!,
+                      ? ProSignedImage(
+                          mediaRef: msg.attachmentUrl!,
                           fit: BoxFit.cover,
-                          loadingBuilder: (ctx, child, progress) {
-                            if (progress == null) return child;
-                            return Center(
-                              child: SizedBox(
-                                width: 24,
-                                height: 24,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: isMe ? Colors.white : p.primary,
-                                ),
+                          placeholder: Center(
+                            child: SizedBox(
+                              width: 24,
+                              height: 24,
+                              child: CircularProgressIndicator(
+                                strokeWidth: 2,
+                                color: isMe ? Colors.white : p.primary,
                               ),
-                            );
-                          },
-                          errorBuilder: (_, __, ___) => const Center(
+                            ),
+                          ),
+                          errorWidget: const Center(
                             child: Icon(Icons.broken_image_rounded,
                                 size: 36, color: Colors.grey),
                           ),
@@ -1484,7 +1490,8 @@ class _ChatScreenState extends State<ChatScreen>
       onTap: () async {
         final url = msg.attachmentUrl;
         if (url != null && url.isNotEmpty) {
-          final uri = Uri.tryParse(url);
+          final resolved = await StorageService.resolveSignedUrl(url) ?? url;
+          final uri = Uri.tryParse(resolved);
           if (uri != null && await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           }
@@ -1549,7 +1556,8 @@ class _ChatScreenState extends State<ChatScreen>
       onTap: () async {
         final url = msg.attachmentUrl;
         if (url != null && url.isNotEmpty) {
-          final uri = Uri.tryParse(url);
+          final resolved = await StorageService.resolveSignedUrl(url) ?? url;
+          final uri = Uri.tryParse(resolved);
           if (uri != null && await canLaunchUrl(uri)) {
             await launchUrl(uri, mode: LaunchMode.externalApplication);
           } else {

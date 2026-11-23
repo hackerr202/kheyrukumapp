@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'push_notification_service.dart';
+import 'storage_service.dart';
 import 'supabase_service.dart';
 
 /// Centralized session service managing user identity, role, and assigned class/halaqah.
@@ -45,10 +46,6 @@ class AuthSessionService {
     if (user != null) {
       _userId = user.id;
       _userEmail = user.email ?? '';
-      if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
-        roleNotifier.value = 'superadmin';
-        _userName = 'Center Administrator';
-      }
       syncFromSupabaseProfile();
     }
   }
@@ -80,8 +77,8 @@ class AuthSessionService {
         final role = (profile['role'] ?? 'parent').toString().toLowerCase();
         if (['superadmin', 'admin', 'teacher', 'parent'].contains(role)) {
           roleNotifier.value = role;
-        } else if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
-          roleNotifier.value = 'superadmin';
+        } else {
+          roleNotifier.value = 'parent';
         }
         if (profile['halaqah_id'] != null) {
           _assignedHalaqahId = profile['halaqah_id'].toString();
@@ -115,9 +112,8 @@ class AuthSessionService {
           }
         }
         roleNotifier.notifyListeners();
-      } else if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
-        roleNotifier.value = 'superadmin';
-        _userName = 'Center Administrator';
+      } else {
+        debugPrint('[AuthSessionService] No Supabase profile row found for $_userId');
       }
       try {
         await PushNotificationService.instance.registerDeviceToken();
@@ -170,6 +166,7 @@ class AuthSessionService {
     _assignedHalaqahId = '';
     _assignedHalaqahName = '';
     roleNotifier.value = 'parent';
+    StorageService.clearSignedUrlCache();
   }
 
   /// Update user details

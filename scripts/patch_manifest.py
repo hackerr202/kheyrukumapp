@@ -15,7 +15,7 @@ with open(manifest_path, 'r', encoding='utf-8') as f:
 permissions = """
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECORD_AUDIO"/>
-    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE"/>
+    <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32"/>
     <uses-permission android:name="android.permission.READ_MEDIA_IMAGES"/>
     <uses-permission android:name="android.permission.READ_MEDIA_VIDEO"/>
     <uses-permission android:name="android.permission.READ_MEDIA_AUDIO"/>
@@ -24,12 +24,14 @@ permissions = """
     <uses-permission android:name="android.permission.VIBRATE"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
-    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
 """
 
 queries = """
     <queries>
+        <intent>
+            <action android:name="android.intent.action.PROCESS_TEXT" />
+            <data android:mimeType="text/plain" />
+        </intent>
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <data android:scheme="https" />
@@ -45,7 +47,7 @@ queries = """
 
 receivers = """
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="kheyrukum_channel"/>
-        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_kheyrukum"/>
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />
         <receiver android:exported="false" android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationBootReceiver">
             <intent-filter>
@@ -54,6 +56,9 @@ receivers = """
             </intent-filter>
         </receiver>
 """
+
+# Strip deprecated exact-alarm permissions so Play Store policy stays compliant
+content = re.sub(r'\s*<uses-permission android:name="android\.permission\.(?:USE|SCHEDULE)_EXACT_ALARM"\s*/>', '', content)
 
 # Insert permissions right after <manifest ...>
 if '<uses-permission' not in content:
@@ -64,7 +69,7 @@ else:
         if perm_line and perm_line not in content:
             content = re.sub(r'(<manifest\b[^>]*>)', r'\1\n    ' + perm_line, content, count=1)
 
-# Insert queries right after permissions or after <manifest ...>
+# Insert queries right after <manifest ...>
 if '<queries>' not in content:
     content = re.sub(r'(<manifest\b[^>]*>)', r'\1' + queries, content, count=1)
 
@@ -74,7 +79,7 @@ if 'ScheduledNotificationReceiver' not in content:
 elif 'com.google.firebase.messaging.default_notification_channel_id' not in content:
     fcm_meta = """
         <meta-data android:name="com.google.firebase.messaging.default_notification_channel_id" android:value="kheyrukum_channel"/>
-        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@mipmap/ic_launcher"/>
+        <meta-data android:name="com.google.firebase.messaging.default_notification_icon" android:resource="@drawable/ic_stat_kheyrukum"/>
 """
     content = re.sub(r'(<application\b[^>]*>)', r'\1' + fcm_meta, content, count=1)
 

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../core/models/announcement.dart';
 import '../core/theme/app_colors.dart';
+import 'pro_ui_kit.dart';
 
 /// Animated In-App Notification Toast Banner that drops down from the top
 /// whenever a new announcement or prayer reminder arrives.
@@ -146,13 +147,11 @@ class AnnouncementBanner extends StatelessWidget {
                             const SizedBox(height: 8),
                             ClipRRect(
                               borderRadius: BorderRadius.circular(10),
-                              child: Image.network(
-                                announcement.attachmentUrl!,
+                              child: ProSignedImage(
+                                mediaRef: announcement.attachmentUrl!,
                                 height: 64,
                                 width: double.infinity,
                                 fit: BoxFit.cover,
-                                errorBuilder: (_, __, ___) =>
-                                    const SizedBox.shrink(),
                               ),
                             ),
                           ],

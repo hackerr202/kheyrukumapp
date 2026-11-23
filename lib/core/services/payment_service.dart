@@ -22,9 +22,9 @@ class PaymentService {
 
   static final PaymentService instance = PaymentService._();
 
-  /// Storage bucket used for receipt screenshots (public bucket, already
-  /// covered by authenticated upload/read policies in supabase_schema.sql).
-  static const String receiptsBucket = StorageService.chatAttachmentsBucket;
+  /// Storage bucket used for receipt screenshots (private bucket restricted
+  /// strictly to Superadmins and the owning parent).
+  static const String receiptsBucket = StorageService.paymentReceiptsBucket;
 
   static const String _selectColumns =
       '*, student:students!student_id(full_name), parent:profiles!parent_id(full_name, email)';
@@ -232,16 +232,19 @@ class PaymentService {
     }).toList();
   }
 
-  /// Upload a receipt image and return its public URL (null on failure).
+  /// Upload a receipt image to private `payment_receipts` under `<parentId>/<paymentId>/...`.
   Future<String?> uploadReceipt({
     required String paymentId,
     required String fileName,
     required List<int> bytes,
   }) async {
     final cleanName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final ownerId = SupabaseService.instance.currentUser?.id ??
+        AuthSessionService.instance.userId;
+    final cleanOwner = ownerId.isNotEmpty ? ownerId : 'unknown';
     return StorageService.uploadFile(
       bucket: receiptsBucket,
-      path: 'receipts/$paymentId/${DateTime.now().millisecondsSinceEpoch}_$cleanName',
+      path: '$cleanOwner/$paymentId/${DateTime.now().millisecondsSinceEpoch}_$cleanName',
       bytes: bytes,
     );
   }

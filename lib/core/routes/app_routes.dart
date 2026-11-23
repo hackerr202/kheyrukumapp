@@ -6,6 +6,9 @@ import '../../screens/splash/splash_screen.dart';
 class AppRoutes {
   AppRoutes._();
 
+  static final GlobalKey<NavigatorState> navigatorKey =
+      GlobalKey<NavigatorState>();
+
   static const String splash = '/splash';
   static const String auth = '/auth';
   static const String dashboard = '/dashboard';

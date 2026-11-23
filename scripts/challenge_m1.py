@@ -1,11 +1,11 @@
 import os
 import sys
-import ssl
 import json
 import uuid
 import urllib.request
 import urllib.error
 import pg8000.native
+from _db_env import get_db_connection_params, get_supabase_anon_key, get_supabase_url
 
 if sys.stdout.encoding != 'utf-8':
     try:
@@ -13,8 +13,8 @@ if sys.stdout.encoding != 'utf-8':
     except Exception:
         pass
 
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
 
 # Read authenticated token if available
 TOKEN_FILE = os.path.join(os.path.dirname(__file__), "..", "test_token.txt")
@@ -23,26 +23,8 @@ if os.path.exists(TOKEN_FILE):
     with open(TOKEN_FILE, "r") as f:
         AUTH_TOKEN = f.read().strip()
 
-POOLER_HOST = "aws-1-eu-west-3.pooler.supabase.com"
-POOLER_PORT = 5432  # Session mode pooler supports prepared statements
-DB_USER = "postgres.tjhqpzvjzmpyrridtpsj"
-DB_PASS = "ustazmuhammedyakut"
-DB_NAME = "postgres"
-
 def get_db_connection():
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    conn = pg8000.native.Connection(
-        user=DB_USER,
-        host=POOLER_HOST,
-        port=POOLER_PORT,
-        database=DB_NAME,
-        password=DB_PASS,
-        ssl_context=ctx,
-        timeout=15
-    )
-    return conn
+    return pg8000.native.Connection(**get_db_connection_params(), timeout=15)
 
 def http_request(path, method="GET", data=None, token=None, extra_headers=None):
     url = f"{BASE_URL}{path}"
@@ -95,7 +77,7 @@ def run_adversarial_challenges():
         return False
 
     db = get_db_connection()
-    print(f"[INIT] Direct PostgreSQL connection established via {POOLER_HOST}:{POOLER_PORT}")
+    print("[INIT] Direct PostgreSQL connection established via SUPABASE_DB_URL")
     print(f"[INIT] Authenticated JWT token loaded ({len(AUTH_TOKEN)} chars)\n")
 
     results = {}

@@ -1,13 +1,19 @@
-import ssl
+import os
 import json
 import urllib.request
 import urllib.error
 import pg8000.native
+from _db_env import (
+    get_db_connection_params,
+    get_supabase_anon_key,
+    get_supabase_url,
+    get_test_password,
+)
 
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
-EMAIL = "test_challenger_m1@kheyrukum.com"
-PASSWORD = "TestPassword123!"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
+EMAIL = os.environ.get("KHEYRUKUM_TEST_EMAIL", "test_challenger_m1@kheyrukum.com")
+PASSWORD = get_test_password()
 
 def main():
     print("=" * 60)
@@ -15,17 +21,7 @@ def main():
     print("=" * 60)
 
     # 1. Connect to PostgreSQL and confirm user and grant admin/teacher profile
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-    con = pg8000.native.Connection(
-        user="postgres.tjhqpzvjzmpyrridtpsj",
-        host="aws-1-eu-west-3.pooler.supabase.com",
-        port=6543,
-        database="postgres",
-        password="ustazmuhammedyakut",
-        ssl_context=ctx,
-    )
+    con = pg8000.native.Connection(**get_db_connection_params())
 
     user_rows = con.run("SELECT id, email FROM auth.users WHERE email = :email;", email=EMAIL)
     if not user_rows:
@@ -161,14 +157,7 @@ def main():
         print(f"  Cleaned up test student: Status {resp.status} OK")
 
     # 7. Clean up test user in DB
-    con = pg8000.native.Connection(
-        user="postgres.tjhqpzvjzmpyrridtpsj",
-        host="aws-1-eu-west-3.pooler.supabase.com",
-        port=6543,
-        database="postgres",
-        password="ustazmuhammedyakut",
-        ssl_context=ctx,
-    )
+    con = pg8000.native.Connection(**get_db_connection_params())
     con.run("DELETE FROM public.profiles WHERE id = :uid;", uid=user_id)
     con.run("DELETE FROM auth.users WHERE id = :uid;", uid=user_id)
     con.close()

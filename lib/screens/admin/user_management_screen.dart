@@ -245,6 +245,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     setState(() {
       if (listType == 'teacher') {
         _teachers.removeWhere((t) => t['id'] == user['id']);
+      } else if (listType == 'admin') {
+        _admins.removeWhere((a) => a['id'] == user['id']);
       } else {
         _parents.removeWhere((par) => par['id'] == user['id']);
       }
@@ -256,6 +258,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         setState(() {
           if (listType == 'teacher') {
             _teachers.add(user);
+          } else if (listType == 'admin') {
+            _admins.add(user);
           } else {
             _parents.add(user);
           }
@@ -297,6 +301,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
             setState(() {
               if (listType == 'teacher') {
                 _teachers.add(user);
+              } else if (listType == 'admin') {
+                _admins.add(user);
               } else {
                 _parents.add(user);
               }
@@ -317,6 +323,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           setState(() {
             if (listType == 'teacher') {
               _teachers.add(user);
+            } else if (listType == 'admin') {
+              _admins.add(user);
             } else {
               _parents.add(user);
             }
@@ -516,13 +524,15 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Future<void> _showChangeRoleDialog(Map<String, dynamic> user) async {
+    if (!AuthSessionService.instance.isSuperAdmin) return;
     final p = AppColors.of(context);
     final String currentRole =
         (user['role'] ?? 'parent').toString().toLowerCase();
     String selectedRole = currentRole;
-    final String userEmail = user['email']?.toString() ?? '';
-    final bool isPrimaryAdmin =
-        userEmail.toLowerCase() == 'admin@kheyrukum.com';
+    final String targetUserId = user['id']?.toString() ?? '';
+    final bool isSelfSuperadmin =
+        currentRole == 'superadmin' &&
+        targetUserId == AuthSessionService.instance.userId;
 
     await showDialog(
       context: context,
@@ -575,7 +585,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 value: 'admin',
                 groupValue: selectedRole,
                 activeColor: p.primary,
-                onChanged: isPrimaryAdmin
+                onChanged: isSelfSuperadmin
                     ? null
                     : (v) => setDialogState(() => selectedRole = v!),
               ),
@@ -589,7 +599,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 value: 'teacher',
                 groupValue: selectedRole,
                 activeColor: p.primary,
-                onChanged: isPrimaryAdmin
+                onChanged: isSelfSuperadmin
                     ? null
                     : (v) => setDialogState(() => selectedRole = v!),
               ),
@@ -603,15 +613,15 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 value: 'parent',
                 groupValue: selectedRole,
                 activeColor: p.info,
-                onChanged: isPrimaryAdmin
+                onChanged: isSelfSuperadmin
                     ? null
                     : (v) => setDialogState(() => selectedRole = v!),
               ),
-              if (isPrimaryAdmin)
+              if (isSelfSuperadmin)
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Note: The primary center director account must remain a Superadmin.',
+                    'Note: You cannot demote your own active Superadmin account.',
                     style: TextStyle(
                         fontSize: 11,
                         color: p.warning,
@@ -676,6 +686,31 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+
+    if (!AuthSessionService.instance.isAdmin) {
+      return Scaffold(
+        backgroundColor: p.canvas,
+        appBar: AppBar(
+          backgroundColor: p.surface,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('User Management'),
+        ),
+        body: const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: ProEmptyState(
+              icon: Icons.lock_outline_rounded,
+              title: 'Access Restricted',
+              message: 'Only center administrators can manage user accounts.',
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: p.canvas,
@@ -931,7 +966,16 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                       _removeUser(user, listType);
                     }
                   },
-                  itemBuilder: (context) => [
+                  itemBuilder: (context) {
+                    final targetRoleStr =
+                        (user['role'] ?? 'parent').toString().toLowerCase();
+                    final isSelf = user['id']?.toString() ==
+                        AuthSessionService.instance.userId;
+                    final canManageTarget = !isSelf &&
+                        targetRoleStr != 'superadmin' &&
+                        (targetRoleStr != 'admin' ||
+                            AuthSessionService.instance.isSuperAdmin);
+                    return [
                     if (AuthSessionService.instance.isSuperAdmin) ...[
                       PopupMenuItem(
                         value: 'promote',
@@ -989,6 +1033,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           ],
                         ),
                       ),
+                    if (canManageTarget) ...[
                     PopupMenuItem(
                       value: 'suspend',
                       child: Row(
@@ -1032,7 +1077,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         ],
                       ),
                     ),
-                  ],
+                    ],
+                  ];
+                  },
                 ),
               ],
             ),

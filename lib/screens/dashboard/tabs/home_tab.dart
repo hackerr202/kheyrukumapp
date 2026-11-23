@@ -1143,23 +1143,19 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         borderRadius: BorderRadius.circular(14),
                         border: Border.all(color: p.border),
                       ),
-                      child: Image.network(
-                        item.attachmentUrl!,
+                      child: ProSignedImage(
+                        mediaRef: item.attachmentUrl!,
                         fit: BoxFit.contain,
                         width: double.infinity,
-                        loadingBuilder: (context, child, progress) {
-                          if (progress == null) return child;
-                          return SizedBox(
-                            height: 130,
-                            child: Center(
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: p.primary,
-                              ),
+                        placeholder: SizedBox(
+                          height: 130,
+                          child: Center(
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: p.primary,
                             ),
-                          );
-                        },
-                        errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                          ),
+                        ),
                       ),
                     ),
                   ),

@@ -63,9 +63,20 @@ class _StudentsTabState extends State<StudentsTab> {
                 parentEmail: AuthSessionService.instance.userEmail,
               );
               return _buildParentView(context, children, p);
+            } else if (currentRole == 'admin' || currentRole == 'superadmin') {
+              return _buildAdminView(context, students, p);
             }
 
-            return _buildAdminView(context, students, p);
+            return const Center(
+              child: Padding(
+                padding: EdgeInsets.all(24),
+                child: ProEmptyState(
+                  icon: Icons.lock_outline_rounded,
+                  title: 'Access Restricted',
+                  message: 'Your session permissions could not be verified.',
+                ),
+              ),
+            );
           },
         );
       },

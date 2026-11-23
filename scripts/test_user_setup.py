@@ -1,22 +1,16 @@
-import ssl
 import json
+import os
 import urllib.request
 import urllib.error
 import pg8000.native
-
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
-conn = pg8000.native.Connection(
-    user='postgres.tjhqpzvjzmpyrridtpsj',
-    host='aws-1-eu-west-3.pooler.supabase.com',
-    port=5432,
-    database='postgres',
-    password='ustazmuhammedyakut',
-    ssl_context=ctx,
-    timeout=15
+from _db_env import (
+    get_db_connection_params,
+    get_supabase_anon_key,
+    get_supabase_url,
+    get_test_password,
 )
+
+conn = pg8000.native.Connection(**get_db_connection_params(), timeout=15)
 
 conn.run("""
     UPDATE auth.users
@@ -34,14 +28,14 @@ conn.run("""
 conn.close()
 
 # Now test login
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
 
 login_url = f"{BASE_URL}/auth/v1/token?grant_type=password"
 req_login = urllib.request.Request(
     login_url,
     headers={"apikey": ANON_KEY, "Content-Type": "application/json"},
-    data=json.dumps({"email": "challenger_teacher_m4@kheyrukum.com", "password": "TestPassword123!"}).encode()
+    data=json.dumps({"email": "challenger_teacher_m4@kheyrukum.com", "password": get_test_password()}).encode()
 )
 try:
     with urllib.request.urlopen(req_login, timeout=15) as resp:

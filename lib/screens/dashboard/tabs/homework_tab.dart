@@ -38,8 +38,19 @@ class _HomeworkTabState extends State<HomeworkTab> {
           return _buildTeacherView(context, p);
         } else if (currentRole == 'parent') {
           return _buildParentView(context, p);
+        } else if (currentRole == 'admin' || currentRole == 'superadmin') {
+          return _buildAdminView(context, p);
         }
-        return _buildAdminView(context, p);
+        return const Center(
+          child: Padding(
+            padding: EdgeInsets.all(24),
+            child: ProEmptyState(
+              icon: Icons.lock_outline_rounded,
+              title: 'Access Restricted',
+              message: 'Your session permissions could not be verified.',
+            ),
+          ),
+        );
       },
     );
   }

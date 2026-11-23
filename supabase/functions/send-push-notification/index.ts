@@ -1,7 +1,9 @@
 // Kheyrukum Free-Tier (Firebase Spark Plan) Push Notification Dispatcher
-// Sends push alerts via Firebase Cloud Messaging HTTP v1 API with zero paid tiers.
+// Sends closed-app push alerts via Firebase Cloud Messaging HTTP v1 API.
+//
 // Required Supabase Edge Function Secrets:
-//   - FIREBASE_SERVICE_ACCOUNT_JSON : JSON (or base64 JSON) of your Firebase Service Account key
+//   - FIREBASE_SERVICE_ACCOUNT_JSON : JSON (or base64 JSON) of Firebase Service Account key
+//   - PUSH_WEBHOOK_SECRET           : Random shared secret for DB Webhooks / pg_cron callers
 // Automatically injected by Supabase Runtime:
 //   - SUPABASE_URL
 //   - SUPABASE_SERVICE_ROLE_KEY
@@ -9,17 +11,58 @@
 const FCM_SCOPE = "https://www.googleapis.com/auth/firebase.messaging";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const DEFAULT_CHANNEL_ID = "kheyrukum_channel";
+const DEFAULT_ANDROID_ICON = "ic_stat_kheyrukum";
+const PAGE_SIZE = 1000;
+const RPC_BATCH_SIZE = 500;
+const FCM_CONCURRENCY = 20;
+const MAX_NON_ADMIN_RECIPIENTS = 50;
+const UUID_RE =
+  /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type",
+    "authorization, x-client-info, apikey, content-type, x-webhook-secret",
 };
 
 interface ServiceAccount {
   project_id: string;
   client_email: string;
   private_key: string;
+}
+
+interface TokenRow {
+  user_id: string;
+  device_token: string;
+  device_type?: string;
+}
+
+// Module-scoped OAuth2 token cache reused across warm Edge Function invocations
+let cachedAccessToken: string | null = null;
+let cachedTokenExpiryMs = 0;
+let cachedTokenProjectId: string | null = null;
+
+function jsonResponse(
+  body: Record<string, unknown>,
+  status = 200,
+): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { ...corsHeaders, "Content-Type": "application/json" },
+  });
+}
+
+function timingSafeEqualStrings(a: string, b: string): boolean {
+  const aBytes = new TextEncoder().encode(a);
+  const bBytes = new TextEncoder().encode(b);
+  if (aBytes.length !== bBytes.length) {
+    return false;
+  }
+  let diff = 0;
+  for (let i = 0; i < aBytes.length; i++) {
+    diff |= aBytes[i] ^ bBytes[i];
+  }
+  return diff === 0;
 }
 
 function base64UrlEncode(input: Uint8Array | string): string {
@@ -36,7 +79,8 @@ function base64UrlEncode(input: Uint8Array | string): string {
 }
 
 function pemToArrayBuffer(pem: string): ArrayBuffer {
-  const clean = pem
+  const normalized = pem.replace(/\\r\\n/g, "\n").replace(/\\n/g, "\n");
+  const clean = normalized
     .replace(/-----BEGIN PRIVATE KEY-----/g, "")
     .replace(/-----END PRIVATE KEY-----/g, "")
     .replace(/\s+/g, "");
@@ -59,7 +103,16 @@ function parseServiceAccount(raw: string): ServiceAccount {
 }
 
 async function getGoogleAccessToken(sa: ServiceAccount): Promise<string> {
-  const now = Math.floor(Date.now() / 1000);
+  const nowMs = Date.now();
+  if (
+    cachedAccessToken &&
+    cachedTokenProjectId === sa.project_id &&
+    nowMs + 60_000 < cachedTokenExpiryMs
+  ) {
+    return cachedAccessToken;
+  }
+
+  const now = Math.floor(nowMs / 1000);
   const header = base64UrlEncode(JSON.stringify({ alg: "RS256", typ: "JWT" }));
   const claim = base64UrlEncode(
     JSON.stringify({
@@ -104,7 +157,12 @@ async function getGoogleAccessToken(sa: ServiceAccount): Promise<string> {
   }
 
   const tokenData = await tokenResp.json();
-  return tokenData.access_token as string;
+  const accessToken = tokenData.access_token as string;
+  const expiresInSec = Number(tokenData.expires_in ?? 3600);
+  cachedAccessToken = accessToken;
+  cachedTokenExpiryMs = Date.now() + expiresInSec * 1000;
+  cachedTokenProjectId = sa.project_id;
+  return accessToken;
 }
 
 function stringifyDataMap(
@@ -133,20 +191,21 @@ Deno.serve(async (req: Request) => {
     return new Response("ok", { headers: corsHeaders });
   }
 
+  if (req.method !== "POST") {
+    return jsonResponse({ success: false, message: "Method not allowed." }, 405);
+  }
+
   try {
     const saRaw = Deno.env.get("FIREBASE_SERVICE_ACCOUNT_JSON");
     if (!saRaw || saRaw.trim() === "") {
-      return new Response(
-        JSON.stringify({
+      return jsonResponse(
+        {
           success: false,
           configured: false,
           message:
             "FIREBASE_SERVICE_ACCOUNT_JSON secret is not configured in Supabase Edge Function secrets.",
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
         },
+        500,
       );
     }
 
@@ -156,60 +215,243 @@ Deno.serve(async (req: Request) => {
       throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY.");
     }
 
-    const payload = await req.json();
-    const title = String(payload.title ?? "Kheyrukum Islamic Center").trim();
-    const body = String(payload.body ?? "").trim();
-    const type = String(payload.type ?? "general").trim();
-    const targetAudience = String(payload.target_audience ?? "").trim();
-    const excludeUserId = payload.exclude_user_id
-      ? String(payload.exclude_user_id).trim()
-      : null;
-    const requestedUserIds: string[] = Array.isArray(payload.user_ids)
-      ? payload.user_ids.map((u: unknown) => String(u).trim()).filter(Boolean)
-      : [];
-
-    if (!title && !body) {
-      return new Response(
-        JSON.stringify({ success: false, message: "Missing title or body." }),
-        {
-          status: 400,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
     const sbHeaders = {
       apikey: serviceRoleKey,
       Authorization: `Bearer ${serviceRoleKey}`,
       "Content-Type": "application/json",
     };
 
-    // Resolve recipient user IDs
+    // -------------------------------------------------------------------------
+    // 1. Authenticate caller: Webhook Secret OR verified active Supabase JWT
+    // -------------------------------------------------------------------------
+    let authMode: "webhook" | "jwt" | null = null;
+    let callerId: string | null = null;
+    let callerRole = "";
+
+    const configuredWebhookSecret = (Deno.env.get("PUSH_WEBHOOK_SECRET") ?? "").trim();
+    const incomingWebhookSecret = (req.headers.get("x-webhook-secret") ?? "").trim();
+
+    if (
+      configuredWebhookSecret.length > 0 &&
+      incomingWebhookSecret.length > 0 &&
+      timingSafeEqualStrings(configuredWebhookSecret, incomingWebhookSecret)
+    ) {
+      authMode = "webhook";
+    } else {
+      const authHeader = req.headers.get("authorization") ?? "";
+      const match = authHeader.match(/^Bearer\s+(.+)$/i);
+      const jwt = match?.[1]?.trim() ?? "";
+
+      if (!jwt) {
+        return jsonResponse(
+          { success: false, message: "Unauthorized: missing credentials." },
+          401,
+        );
+      }
+
+      const authRes = await fetch(`${supabaseUrl}/auth/v1/user`, {
+        headers: {
+          apikey: serviceRoleKey,
+          Authorization: `Bearer ${jwt}`,
+        },
+      });
+      if (!authRes.ok) {
+        return jsonResponse(
+          { success: false, message: "Unauthorized: invalid or expired token." },
+          401,
+        );
+      }
+
+      const authUser = (await authRes.json()) as { id?: string };
+      if (!authUser?.id || !UUID_RE.test(authUser.id)) {
+        return jsonResponse(
+          { success: false, message: "Unauthorized: user identity unavailable." },
+          401,
+        );
+      }
+
+      const profRes = await fetch(
+        `${supabaseUrl}/rest/v1/profiles?select=id,role,is_suspended&id=eq.${encodeURIComponent(
+          authUser.id,
+        )}`,
+        { headers: sbHeaders },
+      );
+      if (!profRes.ok) {
+        throw new Error("Failed to verify caller profile.");
+      }
+
+      const profRows = (await profRes.json()) as Array<{
+        id: string;
+        role?: string;
+        is_suspended?: boolean;
+      }>;
+      const callerProfile = profRows[0];
+      if (!callerProfile || callerProfile.is_suspended === true) {
+        return jsonResponse(
+          { success: false, message: "Forbidden: account suspended or inactive." },
+          403,
+        );
+      }
+
+      authMode = "jwt";
+      callerId = callerProfile.id;
+      callerRole = String(callerProfile.role ?? "").toLowerCase().trim();
+    }
+
+    // -------------------------------------------------------------------------
+    // 2. Parse & normalize direct or Supabase Database Webhook payload
+    // -------------------------------------------------------------------------
+    const rawPayload = (await req.json()) as Record<string, unknown>;
+    const isDbWebhookRecord =
+      authMode === "webhook" &&
+      rawPayload.table === "notifications" &&
+      rawPayload.type === "INSERT" &&
+      rawPayload.record !== null &&
+      typeof rawPayload.record === "object";
+
+    const sourceObj = isDbWebhookRecord
+      ? (rawPayload.record as Record<string, unknown>)
+      : rawPayload;
+
+    const title = String(sourceObj.title ?? "Kheyrukum Islamic Center").trim();
+    const body = String(sourceObj.body ?? "").trim();
+    const type = String(sourceObj.type ?? "general").trim() || "general";
+    const dataObj =
+      sourceObj.data && typeof sourceObj.data === "object"
+        ? (sourceObj.data as Record<string, unknown>)
+        : undefined;
+
+    if (!body) {
+      return jsonResponse(
+        { success: false, message: "Notification body is required." },
+        400,
+      );
+    }
+
+    let targetAudience = String(
+      sourceObj.target_audience ??
+        (isDbWebhookRecord
+          ? sourceObj.user_id
+            ? ""
+            : (dataObj?.target_audience ?? "all")
+          : ""),
+    )
+      .trim()
+      .toLowerCase();
+
+    const rawUserIds: unknown[] = isDbWebhookRecord
+      ? sourceObj.user_id
+        ? [sourceObj.user_id]
+        : []
+      : Array.isArray(rawPayload.user_ids)
+      ? rawPayload.user_ids
+      : [];
+
+    const requestedUserIds = Array.from(
+      new Set(
+        rawUserIds
+          .map((u) => String(u ?? "").trim())
+          .filter((u) => UUID_RE.test(u)),
+      ),
+    );
+
+    const excludeUserId =
+      authMode === "jwt"
+        ? callerId
+        : rawPayload.exclude_user_id &&
+            UUID_RE.test(String(rawPayload.exclude_user_id).trim())
+        ? String(rawPayload.exclude_user_id).trim()
+        : null;
+
+    // -------------------------------------------------------------------------
+    // 3. Enforce role-based authorization on broadcast vs targeted delivery
+    // -------------------------------------------------------------------------
+    const isAdminCaller = callerRole === "admin" || callerRole === "superadmin";
+
+    if (targetAudience) {
+      if (!["all", "parents", "teachers", "admins"].includes(targetAudience)) {
+        return jsonResponse(
+          { success: false, message: `Invalid target_audience: ${targetAudience}` },
+          400,
+        );
+      }
+      if (authMode === "jwt" && !isAdminCaller) {
+        return jsonResponse(
+          {
+            success: false,
+            message:
+              "Forbidden: only active administrators may broadcast by target_audience.",
+          },
+          403,
+        );
+      }
+    } else if (requestedUserIds.length === 0) {
+      return jsonResponse(
+        {
+          success: false,
+          message: "Either valid user_ids or an admin target_audience is required.",
+        },
+        400,
+      );
+    }
+
+    if (
+      authMode === "jwt" &&
+      !isAdminCaller &&
+      requestedUserIds.length > MAX_NON_ADMIN_RECIPIENTS
+    ) {
+      return jsonResponse(
+        {
+          success: false,
+          message: `Forbidden: non-admin direct push is limited to ${MAX_NON_ADMIN_RECIPIENTS} recipients.`,
+        },
+        403,
+      );
+    }
+
+    // -------------------------------------------------------------------------
+    // 4. Resolve eligible recipient user IDs (with full pagination >1000 rows)
+    // -------------------------------------------------------------------------
     const recipientIds = new Set<string>(requestedUserIds);
 
-    const resolveRoleUsers = async (roleFilter?: string) => {
-      let url =
-        `${supabaseUrl}/rest/v1/profiles?select=id,is_suspended&or=(is_suspended.is.null,is_suspended.eq.false)`;
-      if (roleFilter) {
-        url += `&role=eq.${encodeURIComponent(roleFilter)}`;
+    const resolveAudienceUsers = async (audience: string) => {
+      let baseUrl =
+        `${supabaseUrl}/rest/v1/profiles?select=id&or=(is_suspended.is.null,is_suspended.eq.false)`;
+      if (audience === "admins") {
+        baseUrl += "&role=in.(admin,superadmin)";
+      } else if (audience === "parents") {
+        baseUrl += "&role=eq.parent";
+      } else if (audience === "teachers") {
+        baseUrl += "&role=eq.teacher";
       }
-      const res = await fetch(url, { headers: sbHeaders });
-      if (res.ok) {
+
+      let offset = 0;
+      while (true) {
+        const res = await fetch(baseUrl, {
+          headers: {
+            ...sbHeaders,
+            Range: `${offset}-${offset + PAGE_SIZE - 1}`,
+          },
+        });
+        if (!res.ok) {
+          const txt = await res.text();
+          throw new Error(`Failed to resolve audience profiles: ${txt}`);
+        }
         const rows = (await res.json()) as Array<{ id: string }>;
         for (const r of rows) {
-          if (r.id) recipientIds.add(r.id);
+          if (r.id && UUID_RE.test(r.id)) {
+            recipientIds.add(r.id);
+          }
         }
+        if (rows.length < PAGE_SIZE) {
+          break;
+        }
+        offset += PAGE_SIZE;
       }
     };
 
-    if (targetAudience === "admins") {
-      await resolveRoleUsers("admin");
-    } else if (targetAudience === "parents") {
-      await resolveRoleUsers("parent");
-    } else if (targetAudience === "teachers") {
-      await resolveRoleUsers("teacher");
-    } else if (targetAudience === "all" && recipientIds.size === 0) {
-      await resolveRoleUsers();
+    if (targetAudience && (targetAudience !== "all" || recipientIds.size === 0)) {
+      await resolveAudienceUsers(targetAudience);
     }
 
     if (excludeUserId) {
@@ -217,157 +459,171 @@ Deno.serve(async (req: Request) => {
     }
 
     if (recipientIds.size === 0) {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          sent: 0,
-          message: "No eligible recipients found.",
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const idList = Array.from(recipientIds);
-    const inClause = idList.map((id) => encodeURIComponent(id)).join(",");
-    const tokensUrl =
-      `${supabaseUrl}/rest/v1/user_device_tokens?select=device_token,user_id,provider` +
-      `&user_id=in.(${inClause})` +
-      `&provider=eq.fcm`;
-
-    const tokensResp = await fetch(tokensUrl, { headers: sbHeaders });
-    if (!tokensResp.ok) {
-      const txt = await tokensResp.text();
-      throw new Error(`Failed to fetch device tokens: ${txt}`);
-    }
-
-    const tokenRows = (await tokensResp.json()) as Array<{
-      device_token: string;
-      user_id: string;
-      provider?: string;
-    }>;
-
-    const uniqueTokens = Array.from(
-      new Set(
-        tokenRows
-          .map((r) => r.device_token)
-          .filter((t) => Boolean(t) && !t.startsWith("dev_")),
-      ),
-    );
-
-    if (uniqueTokens.length === 0) {
-      return new Response(
-        JSON.stringify({
-          success: true,
-          sent: 0,
-          message: "No active FCM device tokens registered for target users.",
-        }),
-        {
-          status: 200,
-          headers: { ...corsHeaders, "Content-Type": "application/json" },
-        },
-      );
-    }
-
-    const serviceAccount = parseServiceAccount(saRaw);
-    const accessToken = await getGoogleAccessToken(serviceAccount);
-    const fcmEndpoint = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
-    const stringData = stringifyDataMap(payload.data, title, body, type);
-
-    let sentCount = 0;
-    const staleTokens: string[] = [];
-    const errors: string[] = [];
-
-    for (const token of uniqueTokens) {
-      const messageBody = {
-        message: {
-          token,
-          notification: {
-            title,
-            body,
-          },
-          data: stringData,
-          android: {
-            priority: "HIGH",
-            notification: {
-              channel_id: DEFAULT_CHANNEL_ID,
-              sound: "default",
-              default_sound: true,
-              default_vibrate_timings: true,
-            },
-          },
-          apns: {
-            payload: {
-              aps: {
-                sound: "default",
-              },
-            },
-          },
-        },
-      };
-
-      const fcmRes = await fetch(fcmEndpoint, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(messageBody),
+      return jsonResponse({
+        success: true,
+        sent: 0,
+        message: "No eligible recipients found.",
       });
+    }
 
-      if (fcmRes.ok) {
-        sentCount++;
-      } else {
-        const errBody = await fcmRes.text();
-        errors.push(errBody.slice(0, 200));
-        if (
-          fcmRes.status === 404 ||
-          errBody.includes("UNREGISTERED") ||
-          errBody.includes("registration-token-not-registered")
-        ) {
-          staleTokens.push(token);
+    // -------------------------------------------------------------------------
+    // 5. Fetch active FCM tokens via POST RPC (chunked to prevent URL overflow)
+    // -------------------------------------------------------------------------
+    const idList = Array.from(recipientIds);
+    const uniqueTokensSet = new Set<string>();
+
+    for (let i = 0; i < idList.length; i += RPC_BATCH_SIZE) {
+      const batch = idList.slice(i, i + RPC_BATCH_SIZE);
+      const rpcResp = await fetch(
+        `${supabaseUrl}/rest/v1/rpc/get_fcm_tokens_for_users`,
+        {
+          method: "POST",
+          headers: sbHeaders,
+          body: JSON.stringify({ p_user_ids: batch }),
+        },
+      );
+      if (!rpcResp.ok) {
+        const txt = await rpcResp.text();
+        throw new Error(`Failed to fetch device tokens via RPC: ${txt}`);
+      }
+      const rows = (await rpcResp.json()) as TokenRow[];
+      for (const row of rows) {
+        const token = row.device_token?.trim();
+        if (token && !token.startsWith("dev_")) {
+          uniqueTokensSet.add(token);
         }
       }
     }
 
-    // Automatically prune unregistered / uninstalled FCM tokens
-    for (const badToken of staleTokens) {
-      await fetch(
-        `${supabaseUrl}/rest/v1/user_device_tokens?device_token=eq.${encodeURIComponent(
-          badToken,
-        )}`,
-        {
-          method: "DELETE",
-          headers: sbHeaders,
-        },
+    const uniqueTokens = Array.from(uniqueTokensSet);
+    if (uniqueTokens.length === 0) {
+      return jsonResponse({
+        success: true,
+        sent: 0,
+        message: "No active FCM device tokens registered for target users.",
+      });
+    }
+
+    // -------------------------------------------------------------------------
+    // 6. Dispatch via FCM HTTP v1 in bounded parallel batches + prune stale tokens
+    // -------------------------------------------------------------------------
+    const serviceAccount = parseServiceAccount(saRaw);
+    const accessToken = await getGoogleAccessToken(serviceAccount);
+    const fcmEndpoint = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
+    const stringData = stringifyDataMap(dataObj, title, body, type);
+
+    let sentCount = 0;
+    const staleTokens = new Set<string>();
+    const errors: string[] = [];
+
+    for (let i = 0; i < uniqueTokens.length; i += FCM_CONCURRENCY) {
+      const batch = uniqueTokens.slice(i, i + FCM_CONCURRENCY);
+      const results = await Promise.allSettled(
+        batch.map(async (token) => {
+          const messageBody = {
+            message: {
+              token,
+              notification: {
+                title,
+                body,
+              },
+              data: stringData,
+              android: {
+                priority: "HIGH",
+                notification: {
+                  channel_id: DEFAULT_CHANNEL_ID,
+                  icon: DEFAULT_ANDROID_ICON,
+                  sound: "default",
+                  default_sound: true,
+                  default_vibrate_timings: true,
+                },
+              },
+              apns: {
+                payload: {
+                  aps: {
+                    sound: "default",
+                  },
+                },
+              },
+            },
+          };
+
+          const fcmRes = await fetch(fcmEndpoint, {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${accessToken}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify(messageBody),
+          });
+
+          if (fcmRes.ok) {
+            return { ok: true as const, token };
+          }
+          const errBody = await fcmRes.text();
+          return {
+            ok: false as const,
+            token,
+            status: fcmRes.status,
+            errBody,
+          };
+        }),
+      );
+
+      for (const result of results) {
+        if (result.status === "fulfilled") {
+          const val = result.value;
+          if (val.ok) {
+            sentCount++;
+          } else {
+            errors.push(val.errBody.slice(0, 200));
+            if (
+              val.status === 404 ||
+              val.errBody.includes("UNREGISTERED") ||
+              val.errBody.includes("INVALID_ARGUMENT") ||
+              val.errBody.includes("registration-token-not-registered")
+            ) {
+              staleTokens.add(val.token);
+            }
+          }
+        } else {
+          errors.push(String(result.reason).slice(0, 200));
+        }
+      }
+    }
+
+    const staleList = Array.from(staleTokens);
+    for (let i = 0; i < staleList.length; i += FCM_CONCURRENCY) {
+      const pruneBatch = staleList.slice(i, i + FCM_CONCURRENCY);
+      await Promise.allSettled(
+        pruneBatch.map((badToken) =>
+          fetch(
+            `${supabaseUrl}/rest/v1/user_device_tokens?device_token=eq.${encodeURIComponent(
+              badToken,
+            )}`,
+            {
+              method: "DELETE",
+              headers: sbHeaders,
+            },
+          ),
+        ),
       );
     }
 
-    return new Response(
-      JSON.stringify({
-        success: true,
-        sent: sentCount,
-        total_tokens: uniqueTokens.length,
-        pruned_tokens: staleTokens.length,
-        errors: errors.slice(0, 5),
-      }),
-      {
-        status: 200,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
-      },
-    );
+    return jsonResponse({
+      success: true,
+      sent: sentCount,
+      total_tokens: uniqueTokens.length,
+      pruned_tokens: staleList.length,
+      errors: errors.slice(0, 5),
+    });
   } catch (err) {
-    return new Response(
-      JSON.stringify({
+    return jsonResponse(
+      {
         success: false,
         message: err instanceof Error ? err.message : String(err),
-      }),
-      {
-        status: 500,
-        headers: { ...corsHeaders, "Content-Type": "application/json" },
       },
+      500,
     );
   }
 });

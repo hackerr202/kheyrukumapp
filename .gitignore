@@ -46,6 +46,10 @@ default.profraw
 **/android/gradlew.bat
 **/android/local.properties
 **/android/**/GeneratedPluginRegistrant.java
+android/key.properties
+android/app/*.jks
+android/app/*.keystore
+android/app/google-services.json
 
 # iOS/macOS related
 **/ios/**/*.mode1v3
@@ -80,5 +84,6 @@ default.profraw
 !/packages/flutter_tools/test/data/dart_dependencies_test/**/.packages
 
 test_token.txt
+AUDIT_REPORT.md
 .agents/
 

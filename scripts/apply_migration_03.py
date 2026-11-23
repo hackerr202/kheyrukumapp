@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 import os
-import ssl
 import sys
 import pg8000.native
+from _db_env import get_db_connection_params
 
 
 def run_migration() -> bool:
@@ -17,37 +17,10 @@ def run_migration() -> bool:
     with open(sql_path, "r", encoding="utf-8") as f:
         sql_content = f.read()
 
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
-    targets = [
-        ("aws-1-eu-west-3.pooler.supabase.com", 5432, "postgres.tjhqpzvjzmpyrridtpsj"),
-        ("aws-1-eu-west-3.pooler.supabase.com", 6543, "postgres.tjhqpzvjzmpyrridtpsj"),
-        ("db.tjhqpzvjzmpyrridtpsj.supabase.co", 5432, "postgres"),
-    ]
-
-    conn = None
-    for host, port, user in targets:
-        try:
-            print(f"Connecting to {host}:{port}...", end=" ", flush=True)
-            conn = pg8000.native.Connection(
-                user=user,
-                host=host,
-                port=port,
-                database="postgres",
-                password="ustazmuhammedyakut",
-                ssl_context=ctx,
-                timeout=15,
-            )
-            print("CONNECTED")
-            break
-        except Exception as e:
-            print(f"failed ({e})")
-
-    if conn is None:
-        print("Error: Could not connect to Supabase PostgreSQL.")
-        return False
+    db_params = get_db_connection_params()
+    print(f"Connecting to {db_params['host']}:{db_params['port']}...", end=" ", flush=True)
+    conn = pg8000.native.Connection(**db_params, timeout=15)
+    print("CONNECTED")
 
     try:
         conn.run(sql_content)
@@ -63,15 +36,6 @@ def run_migration() -> bool:
         """):
             print(" ", row)
 
-        print("\n=== Verifying public.profiles RLS policies ===")
-        for row in conn.run("""
-            SELECT policyname, cmd, qual
-            FROM pg_policies
-            WHERE schemaname = 'public' AND tablename = 'profiles'
-            ORDER BY policyname
-        """):
-            print(" ", row)
-
         print("\n=== Verifying RPC functions ===")
         for row in conn.run("""
             SELECT routine_name
@@ -79,23 +43,6 @@ def run_migration() -> bool:
             WHERE routine_schema = 'public'
               AND routine_name IN ('is_admin', 'consume_invitation_code', 'admin_assign_teacher_halaqah', 'admin_delete_user')
             ORDER BY routine_name
-        """):
-            print(" ", row)
-
-        print("\n=== Verifying teacher profiles + halaqah linkage ===")
-        for row in conn.run("""
-            SELECT left(id::text, 8), full_name, is_suspended, left(coalesce(halaqah_id::text,'none'), 8), halaqah_name
-            FROM public.profiles
-            WHERE role = 'teacher'
-            ORDER BY created_at DESC
-        """):
-            print(" ", row)
-
-        print("\n=== Verifying user_device_tokens provider counts ===")
-        for row in conn.run("""
-            SELECT coalesce(provider, 'null'), COUNT(*)
-            FROM public.user_device_tokens
-            GROUP BY 1
         """):
             print(" ", row)
 

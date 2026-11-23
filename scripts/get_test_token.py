@@ -1,26 +1,14 @@
-import ssl
 import json
 import urllib.request
 import pg8000.native
-
-POOLER_HOST = "aws-1-eu-west-3.pooler.supabase.com"
-DB_USER = "postgres.tjhqpzvjzmpyrridtpsj"
-DB_PASS = "ustazmuhammedyakut"
-DB_NAME = "postgres"
-
-ctx = ssl.create_default_context()
-ctx.check_hostname = False
-ctx.verify_mode = ssl.CERT_NONE
-
-conn = pg8000.native.Connection(
-    user=DB_USER,
-    host=POOLER_HOST,
-    port=5432,
-    database=DB_NAME,
-    password=DB_PASS,
-    ssl_context=ctx,
-    timeout=15
+from _db_env import (
+    get_db_connection_params,
+    get_supabase_anon_key,
+    get_supabase_url,
+    get_test_password,
 )
+
+conn = pg8000.native.Connection(**get_db_connection_params(), timeout=15)
 
 # Confirm challenger email and ensure profile exists
 conn.run("UPDATE auth.users SET email_confirmed_at = NOW() WHERE email = 'challenger_test_m1@kheyrukum.com'")
@@ -37,15 +25,19 @@ conn.run(
 conn.close()
 
 # Sign in to get access token
+supabase_url = get_supabase_url()
+anon_key = get_supabase_anon_key()
+test_password = get_test_password()
+
 req = urllib.request.Request(
-    'https://tjhqpzvjzmpyrridtpsj.supabase.co/auth/v1/token?grant_type=password',
+    f'{supabase_url}/auth/v1/token?grant_type=password',
     headers={
-        'apikey': 'sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g',
+        'apikey': anon_key,
         'Content-Type': 'application/json'
     },
     data=json.dumps({
         'email': 'challenger_test_m1@kheyrukum.com',
-        'password': 'TestPassword123!'
+        'password': test_password
     }).encode()
 )
 

@@ -78,7 +78,7 @@ class SupabaseService {
     }
   }
 
-  /// 1. Validate Admin-Generated Invitation Code before signup
+  /// 1. Validate Admin-Generated Invitation Code before signup (safe RPC — no table dump)
   Future<Map<String, dynamic>> checkInviteCode(String code) async {
     final clean = code.trim().toUpperCase();
     if (clean.isEmpty) {
@@ -90,23 +90,23 @@ class SupabaseService {
     }
 
     try {
-      final response = await client!
-          .from('invitation_codes')
-          .select('id, code, role, is_used, expires_at, target_email')
-          .ilike('code', clean)
-          .eq('is_used', false)
-          .gt('expires_at', DateTime.now().toUtc().toIso8601String())
-          .maybeSingle();
+      final response = await client!.rpc(
+        'validate_invitation_code',
+        params: {'p_code': clean},
+      );
 
-      if (response == null) {
-        return {'valid': false, 'message': 'Invite code is invalid, expired, or already used.'};
+      if (response is Map && response['valid'] == true) {
+        final role = response['target_role']?.toString() ?? '';
+        return {
+          'valid': true,
+          'role': role,
+          'message': 'Code verified for $role role.',
+        };
       }
 
       return {
-        'valid': true,
-        'role': response['role'],
-        'target_email': response['target_email'],
-        'message': 'Code verified for ${response['role']} role.',
+        'valid': false,
+        'message': 'Invite code is invalid, expired, or already used.',
       };
     } catch (e) {
       return {'valid': false, 'message': 'Invalid code or server error: ${cleanErrorMessage(e)}'};
@@ -265,7 +265,7 @@ class SupabaseService {
   }
 
   /// 2. Register new Parent or Teacher using an Invitation Code + Email + Password
-  /// Enforces Email Verification requirement
+  /// Pre-validates invite code BEFORE creating auth.users account and binds via authenticated RPC.
   Future<Map<String, dynamic>> registerWithInviteCode({
     required String code,
     required String fullName,
@@ -277,11 +277,25 @@ class SupabaseService {
       return {'success': false, 'message': 'Unable to connect to Supabase: ${_initializationError ?? "offline"}'};
     }
 
+    final cleanCode = code.trim().toUpperCase();
+    final check = await checkInviteCode(cleanCode);
+    if (check['valid'] != true) {
+      return {
+        'success': false,
+        'message': check['message'] ?? 'Invite code is invalid, expired, or already used.',
+      };
+    }
+
     try {
-      // Step A: Create user in Supabase Auth
+      // Step A: Create user in Supabase Auth (save pending invite metadata for confirmed-email flow)
       final authResponse = await client!.auth.signUp(
         email: email.trim(),
         password: password,
+        data: {
+          'full_name': fullName.trim(),
+          'invite_code': cleanCode,
+          if (phone != null && phone.trim().isNotEmpty) 'phone': phone.trim(),
+        },
       );
 
       final user = authResponse.user;
@@ -289,25 +303,41 @@ class SupabaseService {
         return {'success': false, 'message': 'Failed to create auth account.'};
       }
 
-      // Step B: Atomically consume invitation code and link profile
+      // If Supabase requires email confirmation before issuing a JWT session,
+      // consume_invitation_code (which requires authenticated auth.uid()) will run on first signIn().
+      if (authResponse.session == null || user.emailConfirmedAt == null) {
+        return {
+          'success': true,
+          'requiresEmailVerification': true,
+          'role': check['role'],
+          'email': email.trim(),
+          'message': 'Account created! Please check your email inbox to verify your account before logging in.',
+        };
+      }
+
+      // Step B: Atomically consume invitation code using authenticated session
       final result = await client!.rpc('consume_invitation_code', params: {
-        'p_code': code.trim().toUpperCase(),
+        'p_code': cleanCode,
         'p_user_id': user.id,
         'p_full_name': fullName.trim(),
         'p_email': email.trim(),
         'p_phone': phone?.trim(),
       });
 
-      final bool isConfirmed = user.emailConfirmedAt != null;
+      if (result is Map && result['success'] == false) {
+        await client?.auth.signOut();
+        return {
+          'success': false,
+          'message': result['message']?.toString() ?? 'Could not consume invitation code.',
+        };
+      }
 
       return {
-        'success': result['success'] ?? true,
-        'requiresEmailVerification': !isConfirmed,
-        'role': result['role'],
+        'success': result is Map ? (result['success'] ?? true) : true,
+        'requiresEmailVerification': false,
+        'role': result is Map ? (result['role'] ?? check['role']) : check['role'],
         'email': email.trim(),
-        'message': !isConfirmed
-            ? 'Account created! Please check your email inbox to verify your account before logging in.'
-            : 'Registration complete. You can now log in.',
+        'message': 'Registration complete. You can now log in.',
       };
     } catch (e) {
       return {'success': false, 'message': cleanErrorMessage(e)};
@@ -331,9 +361,8 @@ class SupabaseService {
 
       final user = response.user;
       if (user != null) {
-        // Enforce email verification check for non-admin accounts
         final isConfirmed = user.emailConfirmedAt != null;
-        if (!isConfirmed && email.trim().toLowerCase() != 'admin@kheyrukum.com') {
+        if (!isConfirmed) {
           await client?.auth.signOut();
           return {
             'success': false,
@@ -342,6 +371,27 @@ class SupabaseService {
             'message': 'Please verify your email before signing in. Check your inbox for the confirmation link.',
           };
         }
+
+        // Finish consuming pending invitation code after first verified email login
+        final existingProfile = await getUserProfile();
+        final pendingInvite = user.userMetadata?['invite_code']?.toString().trim();
+        if (existingProfile == null && pendingInvite != null && pendingInvite.isNotEmpty) {
+          final res = await client!.rpc('consume_invitation_code', params: {
+            'p_code': pendingInvite,
+            'p_user_id': user.id,
+            'p_full_name': user.userMetadata?['full_name']?.toString() ?? 'User',
+            'p_email': user.email ?? email.trim(),
+            'p_phone': user.userMetadata?['phone']?.toString(),
+          });
+          if (res is Map && res['success'] == false) {
+            await client?.auth.signOut();
+            return {
+              'success': false,
+              'message': res['message']?.toString() ?? 'Invitation code could not be redeemed.',
+            };
+          }
+        }
+
         return {'success': true, 'user': user};
       }
       return {'success': false, 'message': 'Invalid email or password.'};

@@ -4,6 +4,7 @@ import '../../core/localization/app_localizations.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/models/chat_message.dart';
+import '../../core/routes/app_routes.dart';
 import '../../core/services/absence_service.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
@@ -48,6 +49,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<List<AppNotification>>? _notifsSub;
   StreamSubscription<Map<String, String>>? _prayerSub;
   StreamSubscription<List<Conversation>>? _conversationsSub;
+  StreamSubscription<Map<String, dynamic>>? _notifTapSub;
 
   int get _totalUnreadCount =>
       _unreadAnnouncementsCount + _unreadNotificationsCount;
@@ -58,6 +60,17 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
     _bootstrapCloudServices();
     _recomputeUnreadMessages();
+    PushNotificationService.instance.requestNotificationPermissions();
+
+    _notifTapSub = PushNotificationService.instance.onNotificationTap
+        .listen(_handleNotificationTap);
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final pending =
+          PushNotificationService.instance.consumePendingNavigationIntent();
+      if (pending != null && mounted) {
+        _handleNotificationTap(pending);
+      }
+    });
 
     // 1. Listen for immediate popup alerts when a new announcement arrives
     _alertSub = AnnouncementService.instance.onNewAnnouncementAlert
@@ -142,6 +155,33 @@ class _DashboardScreenState extends State<DashboardScreen> {
     });
   }
 
+  void _handleNotificationTap(Map<String, dynamic> data) {
+    if (!mounted) return;
+    final type = (data['type'] ?? '').toString().toLowerCase().trim();
+    final hasConversation =
+        data['conversation_id']?.toString().isNotEmpty == true;
+    int targetTab = _currentTabIndex;
+    if (type == 'message' || hasConversation) {
+      targetTab = 2;
+    } else if (type.startsWith('homework')) {
+      targetTab = 3;
+    } else if (type == 'attendance' || type.startsWith('absence')) {
+      targetTab = 1;
+    } else if (type.startsWith('payment')) {
+      targetTab = 4;
+    } else if (type == 'announcement' || type == 'broadcast') {
+      targetTab = 0;
+    }
+
+    final nav = AppRoutes.navigatorKey.currentState;
+    nav?.popUntil((route) =>
+        route.settings.name == AppRoutes.dashboard || route.isFirst);
+
+    if (targetTab != _currentTabIndex && mounted) {
+      setState(() => _currentTabIndex = targetTab);
+    }
+  }
+
   @override
   void dispose() {
     _alertDismissTimer?.cancel();
@@ -150,6 +190,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _notifsSub?.cancel();
     _prayerSub?.cancel();
     _conversationsSub?.cancel();
+    _notifTapSub?.cancel();
     super.dispose();
   }
 

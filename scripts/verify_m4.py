@@ -15,7 +15,6 @@ Verifies:
 
 import os
 import re
-import ssl
 import sys
 import json
 import urllib.request
@@ -23,23 +22,19 @@ import urllib.error
 import pg8000.native
 
 sys.path.append(os.path.abspath('scripts'))
+from _db_env import get_db_connection_params, get_supabase_anon_key, get_supabase_url
 from check_syntax import check_brackets
 
-BASE_URL = "https://tjhqpzvjzmpyrridtpsj.supabase.co"
-ANON_KEY = "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
-
-POOLER_HOST = "aws-1-eu-west-3.pooler.supabase.com"
-DB_USER = "postgres.tjhqpzvjzmpyrridtpsj"
-DB_PASS = "ustazmuhammedyakut"
-DB_NAME = "postgres"
+BASE_URL = get_supabase_url() if os.environ.get("SUPABASE_URL") else "https://tjhqpzvjzmpyrridtpsj.supabase.co"
+ANON_KEY = get_supabase_anon_key() if os.environ.get("SUPABASE_ANON_KEY") else "sb_publishable_zTV0p7ofXzpZ_sWbUwcCgg_2NpvA_3g"
 
 def check_secret_leakage():
     print("\n--- 1. Security Audit: Scanning Client Code for Leaked Secrets ---")
     sensitive_patterns = [
         r'service_role',
         r'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+', # standard Supabase service JWT pattern
-        r'postgres:\/\/postgres:',
-        r'ustazmuhammedyakut',
+        r'postgres(?:ql)?:\/\/[^:\s]+:[^@\s]+@',
+        r'db\.[a-z0-9]+\.supabase\.co',
     ]
 
     scanned_extensions = ['.dart', '.yaml', '.xml', '.plist', '.json']
@@ -64,22 +59,10 @@ def check_secret_leakage():
 
 def check_database_rls():
     print("\n--- 2. Database Audit: PostgreSQL Row Level Security (RLS) Status ---")
-    ctx = ssl.create_default_context()
-    ctx.check_hostname = False
-    ctx.verify_mode = ssl.CERT_NONE
-
     try:
-        conn = pg8000.native.Connection(
-            user=DB_USER,
-            host=POOLER_HOST,
-            port=5432,
-            database=DB_NAME,
-            password=DB_PASS,
-            ssl_context=ctx,
-            timeout=15
-        )
+        conn = pg8000.native.Connection(**get_db_connection_params(), timeout=15)
     except Exception as e:
-        return False, f"Failed to connect to pooler: {e}"
+        return False, f"Failed to connect to database: {e}"
 
     required_tables = [
         'students',

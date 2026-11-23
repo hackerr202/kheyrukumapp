@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/services/storage_service.dart';
 import '../core/theme/app_colors.dart';
 import 'islamic_pattern_painter.dart';
 
@@ -249,7 +250,7 @@ class ProStatusPill extends StatelessWidget {
   }
 }
 
-/// Crisp circular monogram avatar with subtle ring.
+/// Crisp circular monogram avatar with subtle ring & signed-URL resolution.
 class ProAvatar extends StatelessWidget {
   final String name;
   final double radius;
@@ -268,12 +269,29 @@ class ProAvatar extends StatelessWidget {
     this.imageUrl,
   });
 
+  Widget _buildFallback(Color tone, String initial) {
+    return Center(
+      child: icon != null
+          ? Icon(icon, size: radius * 0.95, color: tone)
+          : Text(
+              initial,
+              style: TextStyle(
+                fontSize: radius * 0.78,
+                fontWeight: FontWeight.w700,
+                color: tone,
+              ),
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
     final tone = color ?? p.primary;
-    final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'K';
-    final hasValidImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
+    final trimmedName = name.trim();
+    final initial =
+        trimmedName.isNotEmpty ? trimmedName.characters.first.toUpperCase() : 'K';
+    final hasValidImage = StorageService.isValidMediaRef(imageUrl);
 
     return Container(
       width: radius * 2,
@@ -288,37 +306,74 @@ class ProAvatar extends StatelessWidget {
       ),
       child: ClipOval(
         child: hasValidImage
-            ? Image.network(
-                imageUrl!,
+            ? ProSignedImage(
+                mediaRef: imageUrl!,
                 width: radius * 2,
                 height: radius * 2,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) => Center(
-                  child: icon != null
-                      ? Icon(icon, size: radius * 0.95, color: tone)
-                      : Text(
-                          initial,
-                          style: TextStyle(
-                            fontSize: radius * 0.78,
-                            fontWeight: FontWeight.w700,
-                            color: tone,
-                          ),
-                        ),
-                ),
+                placeholder: _buildFallback(tone, initial),
+                errorWidget: _buildFallback(tone, initial),
               )
-            : Center(
-                child: icon != null
-                    ? Icon(icon, size: radius * 0.95, color: tone)
-                    : Text(
-                        initial,
-                        style: TextStyle(
-                          fontSize: radius * 0.78,
-                          fontWeight: FontWeight.w700,
-                          color: tone,
-                        ),
-                      ),
-              ),
+            : _buildFallback(tone, initial),
       ),
+    );
+  }
+}
+
+/// Resolves private Supabase `storage://` refs (or legacy storage URLs) into
+/// short-lived signed URLs via [StorageService] with synchronous cache lookup.
+class ProSignedImage extends StatelessWidget {
+  final String mediaRef;
+  final double? width;
+  final double? height;
+  final BoxFit fit;
+  final Widget? placeholder;
+  final Widget? errorWidget;
+
+  const ProSignedImage({
+    super.key,
+    required this.mediaRef,
+    this.width,
+    this.height,
+    this.fit = BoxFit.cover,
+    this.placeholder,
+    this.errorWidget,
+  });
+
+  Widget _buildNetworkImage(String resolvedUrl) {
+    return Image.network(
+      resolvedUrl,
+      width: width,
+      height: height,
+      fit: fit,
+      loadingBuilder: (_, child, progress) {
+        if (progress == null) return child;
+        return placeholder ?? const SizedBox.shrink();
+      },
+      errorBuilder: (_, __, ___) =>
+          errorWidget ?? const SizedBox.shrink(),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final cachedUrl = StorageService.getCachedSignedUrl(mediaRef);
+    if (cachedUrl != null) {
+      return _buildNetworkImage(cachedUrl);
+    }
+
+    return FutureBuilder<String?>(
+      future: StorageService.resolveSignedUrl(mediaRef),
+      builder: (context, snapshot) {
+        final resolved = snapshot.data;
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return placeholder ?? const SizedBox.shrink();
+        }
+        if (resolved == null || resolved.isEmpty) {
+          return errorWidget ?? const SizedBox.shrink();
+        }
+        return _buildNetworkImage(resolved);
+      },
     );
   }
 }

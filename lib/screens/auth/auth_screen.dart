@@ -87,8 +87,6 @@ class _AuthScreenState extends State<AuthScreen> {
           halaqahId: profile['halaqah_id'],
           halaqahName: profile['halaqah_name'],
         );
-      } else if (email.trim().toLowerCase() == 'admin@kheyrukum.com') {
-        AuthSessionService.instance.setRole('admin');
       }
       await AuthSessionService.instance.syncFromSupabaseProfile();
       if (mounted) {

@@ -6,6 +6,7 @@ import '../core/services/student_service.dart';
 import '../core/services/supabase_service.dart';
 import '../core/theme/app_colors.dart';
 import '../screens/admin/halaqah_management_sheet.dart';
+import 'pro_ui_kit.dart';
 
 /// Flagship Dialog for Enrolling Students:
 /// - Clean step-by-step layout in Deep Pine & Warm Gold
@@ -139,12 +140,6 @@ class AddStudentDialog {
                                     color: p.gold.withOpacity(0.4),
                                     width: 2,
                                   ),
-                                  image: avatarUrl != null && avatarUrl!.isNotEmpty
-                                      ? DecorationImage(
-                                          image: NetworkImage(avatarUrl!),
-                                          fit: BoxFit.cover,
-                                        )
-                                      : null,
                                 ),
                                 child: isUploadingAvatar
                                     ? Center(
@@ -157,13 +152,26 @@ class AddStudentDialog {
                                           ),
                                         ),
                                       )
-                                    : (avatarUrl == null || avatarUrl!.isEmpty)
-                                        ? Icon(
+                                    : (avatarUrl != null &&
+                                            avatarUrl!.isNotEmpty)
+                                        ? ClipOval(
+                                            child: ProSignedImage(
+                                              mediaRef: avatarUrl!,
+                                              width: 72,
+                                              height: 72,
+                                              fit: BoxFit.cover,
+                                              errorWidget: Icon(
+                                                Icons.person_rounded,
+                                                size: 38,
+                                                color: p.primary,
+                                              ),
+                                            ),
+                                          )
+                                        : Icon(
                                             Icons.person_rounded,
                                             size: 38,
                                             color: p.primary,
-                                          )
-                                        : null,
+                                          ),
                               ),
                               Positioned(
                                 bottom: 0,

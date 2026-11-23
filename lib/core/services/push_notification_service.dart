@@ -1,8 +1,11 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
+import 'dart:ui';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
@@ -11,19 +14,22 @@ import 'notification_center_service.dart';
 import 'supabase_service.dart';
 
 /// Top-level background handler invoked by Firebase Cloud Messaging when a
-/// notification/data message arrives while the app is terminated or in background.
+/// push message arrives while the app is terminated or in background.
 @pragma('vm:entry-point')
 Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
+  WidgetsFlutterBinding.ensureInitialized();
+  DartPluginRegistrant.ensureInitialized();
+
   try {
-    if (Firebase.apps.isEmpty) {
+    if (!kIsWeb && Firebase.apps.isEmpty) {
       await Firebase.initializeApp();
     }
   } catch (e) {
     debugPrint('[FCM Background] Firebase init note: $e');
   }
 
-  // If FCM delivered a notification payload, Android/iOS renders it natively in system tray.
-  // If it is a data-only payload, render a native heads-up notification manually.
+  // Messages carrying a `notification` block are displayed natively by the OS tray.
+  // Only render locally in background for pure data-only payloads so users never see duplicates.
   if (message.notification == null && message.data.isNotEmpty) {
     final title =
         message.data['title']?.toString() ?? 'Kheyrukum Islamic Center';
@@ -32,13 +38,17 @@ Future<void> firebaseMessagingBackgroundHandler(RemoteMessage message) async {
       await PushNotificationService.showBackgroundNotification(
         title: title,
         body: body,
-        payload: message.data['type']?.toString(),
+        payload: jsonEncode({
+          'type': message.data['type']?.toString() ?? 'general',
+          if (message.data['conversation_id'] != null)
+            'conversation_id': message.data['conversation_id']?.toString(),
+        }),
       );
     }
   }
 }
 
-/// Service managing Firebase Cloud Messaging (free Spark plan) + native Android/iOS
+/// Service managing Firebase Cloud Messaging (free Spark plan), native Android/iOS
 /// system notifications, background schedules, and Supabase token synchronization.
 class PushNotificationService {
   PushNotificationService._();
@@ -47,20 +57,33 @@ class PushNotificationService {
   final FlutterLocalNotificationsPlugin _notificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
+  final StreamController<Map<String, dynamic>> _notificationTapController =
+      StreamController<Map<String, dynamic>>.broadcast();
+
   bool _isInitialized = false;
   bool _firebaseReady = false;
+  bool _permissionsRequested = false;
   String? _cachedDeviceToken;
+  String? _pendingRefreshToken;
+  Map<String, dynamic>? _pendingNavigationIntent;
+
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundMsgSub;
   StreamSubscription<RemoteMessage>? _openedAppSub;
 
   String? get deviceToken => _cachedDeviceToken;
   bool get isFirebaseReady => _firebaseReady;
+  Stream<Map<String, dynamic>> get onNotificationTap =>
+      _notificationTapController.stream;
 
   static const String channelId = 'kheyrukum_channel';
   static const String channelName = 'Kheyrukum Center Notifications';
   static const String channelDescription =
       'Real-time alerts for messages, attendance, homework, announcements, and tuition';
+  static const String _androidSmallIcon = '@drawable/ic_stat_kheyrukum';
+  static const String _tokenStorageKey = 'persistent_device_token';
+  static const String _tokenProviderKey = 'persistent_token_provider';
+  static const String _cachedRoleKey = 'cached_push_role';
 
   /// Notification ID reservations
   static const int idDailyPrayer = 1001;
@@ -70,6 +93,68 @@ class PushNotificationService {
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
   );
 
+  /// Consume and clear a pending notification tap intent captured from a cold start.
+  Map<String, dynamic>? consumePendingNavigationIntent() {
+    final intent = _pendingNavigationIntent;
+    _pendingNavigationIntent = null;
+    return intent;
+  }
+
+  /// Configure tz.local using the device's current UTC offset (defaulting to Africa/Addis_Ababa).
+  void _configureLocalTimeZone() {
+    tz.initializeTimeZones();
+    final targetOffset = DateTime.now().timeZoneOffset;
+    try {
+      final preferred = tz.getLocation('Africa/Addis_Ababa');
+      if (tz.TZDateTime.now(preferred).timeZoneOffset == targetOffset) {
+        tz.setLocalLocation(preferred);
+        return;
+      }
+      for (final loc in tz.timeZoneDatabase.locations.values) {
+        if (!loc.name.startsWith('Etc/') &&
+            tz.TZDateTime.now(loc).timeZoneOffset == targetOffset) {
+          tz.setLocalLocation(loc);
+          return;
+        }
+      }
+      for (final loc in tz.timeZoneDatabase.locations.values) {
+        if (tz.TZDateTime.now(loc).timeZoneOffset == targetOffset) {
+          tz.setLocalLocation(loc);
+          return;
+        }
+      }
+      tz.setLocalLocation(preferred);
+    } catch (e) {
+      debugPrint('[PushNotificationService] Timezone fallback note: $e');
+    }
+  }
+
+  void _recordNotificationTap(Map<String, dynamic> data) {
+    if (data.isEmpty) return;
+    final copy = Map<String, dynamic>.from(data);
+    _pendingNavigationIntent = copy;
+    if (!_notificationTapController.isClosed) {
+      _notificationTapController.add(copy);
+    }
+  }
+
+  Map<String, dynamic> _parseLocalPayload(String? payload) {
+    if (payload == null || payload.trim().isEmpty) return {};
+    final trimmed = payload.trim();
+    if (trimmed.startsWith('{')) {
+      try {
+        final decoded = jsonDecode(trimmed);
+        if (decoded is Map) {
+          return Map<String, dynamic>.from(decoded);
+        }
+      } catch (_) {}
+    }
+    if (_uuidRegex.hasMatch(trimmed)) {
+      return {'type': 'message', 'conversation_id': trimmed};
+    }
+    return {'type': trimmed};
+  }
+
   /// Helper used exclusively inside a background isolate when a data-only FCM
   /// push wakes the app without the main UI isolate running.
   static Future<void> showBackgroundNotification({
@@ -78,9 +163,14 @@ class PushNotificationService {
     String? payload,
   }) async {
     try {
+      DartPluginRegistrant.ensureInitialized();
       final plugin = FlutterLocalNotificationsPlugin();
-      const androidInit = AndroidInitializationSettings('@mipmap/ic_launcher');
-      const iosInit = DarwinInitializationSettings();
+      const androidInit = AndroidInitializationSettings(_androidSmallIcon);
+      const iosInit = DarwinInitializationSettings(
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
+      );
       await plugin.initialize(
         const InitializationSettings(android: androidInit, iOS: iosInit),
       );
@@ -106,7 +196,7 @@ class PushNotificationService {
         DateTime.now().millisecondsSinceEpoch.remainder(100000),
         title,
         body,
-        const NotificationDetails(
+        NotificationDetails(
           android: AndroidNotificationDetails(
             channelId,
             channelName,
@@ -116,10 +206,10 @@ class PushNotificationService {
             visibility: NotificationVisibility.public,
             playSound: true,
             enableVibration: true,
-            icon: '@mipmap/ic_launcher',
-            styleInformation: BigTextStyleInformation(''),
+            icon: _androidSmallIcon,
+            styleInformation: BigTextStyleInformation(body),
           ),
-          iOS: DarwinNotificationDetails(
+          iOS: const DarwinNotificationDetails(
             presentAlert: true,
             presentBadge: true,
             presentSound: true,
@@ -132,22 +222,22 @@ class PushNotificationService {
     }
   }
 
-  /// Initialize native notification channels, permissions, recurring schedules, and Firebase FCM.
+  /// Initialize native notification channels and Firebase listeners (no OS permission prompts on boot).
   Future<void> initialize() async {
     if (_isInitialized) return;
 
     try {
       debugPrint('[PushNotificationService] Initializing notifications & FCM...');
-      tz.initializeTimeZones();
+      _configureLocalTimeZone();
 
       const AndroidInitializationSettings androidSettings =
-          AndroidInitializationSettings('@mipmap/ic_launcher');
+          AndroidInitializationSettings(_androidSmallIcon);
 
       const DarwinInitializationSettings iosSettings =
           DarwinInitializationSettings(
-        requestAlertPermission: true,
-        requestBadgePermission: true,
-        requestSoundPermission: true,
+        requestAlertPermission: false,
+        requestBadgePermission: false,
+        requestSoundPermission: false,
       );
 
       const InitializationSettings initSettings = InitializationSettings(
@@ -158,10 +248,22 @@ class PushNotificationService {
       await _notificationsPlugin.initialize(
         initSettings,
         onDidReceiveNotificationResponse: (NotificationResponse details) {
-          debugPrint(
-              '[PushNotificationService] Notification tapped: ${details.payload}');
+          final parsed = _parseLocalPayload(details.payload);
+          if (parsed.isNotEmpty) {
+            _recordNotificationTap(parsed);
+          }
         },
       );
+
+      final launchDetails =
+          await _notificationsPlugin.getNotificationAppLaunchDetails();
+      if (launchDetails?.didNotificationLaunchApp == true) {
+        final parsed =
+            _parseLocalPayload(launchDetails?.notificationResponse?.payload);
+        if (parsed.isNotEmpty) {
+          _pendingNavigationIntent = parsed;
+        }
+      }
 
       final androidImplementation =
           _notificationsPlugin.resolvePlatformSpecificImplementation<
@@ -181,17 +283,12 @@ class PushNotificationService {
         );
 
         await androidImplementation.createNotificationChannel(alertChannel);
-        await androidImplementation.requestNotificationsPermission();
-
-        try {
-          await androidImplementation.requestExactAlarmsPermission();
-        } catch (e) {
-          debugPrint('[PushNotificationService] Exact alarm request note: $e');
-        }
       }
 
       _isInitialized = true;
-      await scheduleMajorBackgroundNotifications();
+      final cachedRole =
+          await LocalStorageService.instance.getString(_cachedRoleKey);
+      await scheduleMajorBackgroundNotifications(role: cachedRole);
       await _initializeFirebaseMessaging();
       await registerDeviceToken();
     } catch (e) {
@@ -199,8 +296,35 @@ class PushNotificationService {
     }
   }
 
-  /// Initialize Firebase Cloud Messaging safely (gracefully degrades if google-services.json
-  /// is not yet bundled in the APK).
+  /// Request OS-level notification permissions cleanly after the user enters Dashboard.
+  Future<void> requestNotificationPermissions() async {
+    if (kIsWeb || _permissionsRequested) return;
+    _permissionsRequested = true;
+
+    try {
+      final androidImplementation =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImplementation != null) {
+        await androidImplementation.requestNotificationsPermission();
+      }
+
+      if (_firebaseReady) {
+        await FirebaseMessaging.instance.requestPermission(
+          alert: true,
+          badge: true,
+          sound: true,
+          provisional: false,
+        );
+      }
+
+      await registerDeviceToken();
+    } catch (e) {
+      debugPrint('[PushNotificationService] Permission request note: $e');
+    }
+  }
+
+  /// Initialize Firebase Cloud Messaging without falling back to synthetic dummy tokens.
   Future<void> _initializeFirebaseMessaging() async {
     if (kIsWeb) return;
     try {
@@ -212,13 +336,6 @@ class PushNotificationService {
       FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
 
       final messaging = FirebaseMessaging.instance;
-      await messaging.requestPermission(
-        alert: true,
-        badge: true,
-        sound: true,
-        provisional: false,
-      );
-
       await messaging.setForegroundNotificationPresentationOptions(
         alert: true,
         badge: true,
@@ -233,26 +350,55 @@ class PushNotificationService {
 
       try {
         final fcmToken = await messaging.getToken();
-        if (fcmToken != null && fcmToken.isNotEmpty) {
+        if (fcmToken != null &&
+            fcmToken.isNotEmpty &&
+            !fcmToken.startsWith('dev_')) {
           _cachedDeviceToken = fcmToken;
           await LocalStorageService.instance
-              .saveString('persistent_device_token', fcmToken);
+              .saveString(_tokenStorageKey, fcmToken);
           await LocalStorageService.instance
-              .saveString('persistent_token_provider', 'fcm');
+              .saveString(_tokenProviderKey, 'fcm');
         }
       } catch (e) {
-        debugPrint('[PushNotificationService] FCM getToken note: $e');
+        debugPrint('[PushNotificationService] FCM getToken error: $e');
       }
 
       await _tokenRefreshSub?.cancel();
       _tokenRefreshSub = messaging.onTokenRefresh.listen((newToken) async {
         debugPrint('[PushNotificationService] FCM token refreshed.');
+        final oldToken = _cachedDeviceToken;
         _cachedDeviceToken = newToken;
+        await LocalStorageService.instance
+            .saveString(_tokenStorageKey, newToken);
+        await LocalStorageService.instance.saveString(_tokenProviderKey, 'fcm');
+
+        final client = SupabaseService.instance.client;
+        final user = SupabaseService.instance.currentUser;
+        if (client == null || user == null) {
+          _pendingRefreshToken = newToken;
+          return;
+        }
+
+        if (oldToken != null &&
+            oldToken.isNotEmpty &&
+            oldToken != newToken) {
+          try {
+            await client
+                .from('user_device_tokens')
+                .delete()
+                .eq('user_id', user.id)
+                .eq('device_token', oldToken);
+          } catch (e) {
+            debugPrint(
+                '[PushNotificationService] Stale token delete note: $e');
+          }
+        }
         await registerDeviceToken(newToken);
       });
 
       await _foregroundMsgSub?.cancel();
-      _foregroundMsgSub = FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
+      _foregroundMsgSub =
+          FirebaseMessaging.onMessage.listen((RemoteMessage msg) {
         final title = msg.notification?.title ??
             msg.data['title']?.toString() ??
             'Kheyrukum Islamic Center';
@@ -260,14 +406,32 @@ class PushNotificationService {
             msg.data['body']?.toString() ??
             '';
         final type = msg.data['type']?.toString() ?? 'general';
-        if (title.isNotEmpty || body.isNotEmpty) {
-          showNotification(
+        if (title.isEmpty && body.isEmpty) return;
+
+        final isIosForegroundNotification =
+            !kIsWeb && Platform.isIOS && msg.notification != null;
+        if (isIosForegroundNotification) {
+          NotificationCenterService.instance.addNotification(
             title: title,
             body: body,
-            payload: msg.data['conversation_id']?.toString() ?? type,
             type: type,
+            data: msg.data,
           );
+          return;
         }
+
+        final payloadMap = {
+          'type': type,
+          if (msg.data['conversation_id'] != null)
+            'conversation_id': msg.data['conversation_id']?.toString(),
+        };
+        showNotification(
+          title: title,
+          body: body,
+          payload: jsonEncode(payloadMap),
+          type: type,
+          data: msg.data,
+        );
       });
 
       await _openedAppSub?.cancel();
@@ -287,6 +451,10 @@ class PushNotificationService {
             data: msg.data,
           );
         }
+        _recordNotificationTap({
+          ...msg.data,
+          'type': type,
+        });
       });
 
       final initialMsg = await messaging.getInitialMessage();
@@ -306,27 +474,50 @@ class PushNotificationService {
             data: initialMsg.data,
           );
         }
+        _recordNotificationTap({
+          ...initialMsg.data,
+          'type': type,
+        });
       }
 
       debugPrint('[PushNotificationService] Firebase Cloud Messaging active.');
-    } catch (e) {
+    } catch (e, st) {
       _firebaseReady = false;
       debugPrint(
-          '[PushNotificationService] Firebase config not active yet (local alerts remain active): $e');
+          '[PushNotificationService] CRITICAL: Firebase initialization failed: $e\n$st');
     }
   }
 
-  /// Subscribe to the current user role topic for free Spark-plan group broadcasts.
+  /// Subscribe to the current user role topics and align recurring parent schedules.
   Future<void> syncRoleSubscription(String role) async {
-    if (!_firebaseReady) return;
     final cleanRole = role.toLowerCase().trim();
-    if (!['admin', 'teacher', 'parent'].contains(cleanRole)) return;
+    if (!['superadmin', 'admin', 'teacher', 'parent'].contains(cleanRole)) {
+      return;
+    }
+
+    await LocalStorageService.instance.saveString(_cachedRoleKey, cleanRole);
+    await scheduleMajorBackgroundNotifications(role: cleanRole);
+
+    if (kIsWeb || !_firebaseReady) return;
 
     try {
       final messaging = FirebaseMessaging.instance;
-      for (final candidate in ['admin', 'teacher', 'parent']) {
-        final topic = 'role_$candidate';
-        if (candidate == cleanRole) {
+      await messaging.subscribeToTopic('all_users');
+
+      final desiredTopics = <String>{
+        'role_$cleanRole',
+        if (cleanRole == 'superadmin') ...['role_admin', 'admins'],
+        if (cleanRole == 'admin') 'admins',
+      };
+      const allRoleTopics = [
+        'role_superadmin',
+        'role_admin',
+        'admins',
+        'role_teacher',
+        'role_parent',
+      ];
+      for (final topic in allRoleTopics) {
+        if (desiredTopics.contains(topic)) {
           await messaging.subscribeToTopic(topic);
         } else {
           await messaging.unsubscribeFromTopic(topic);
@@ -337,55 +528,66 @@ class PushNotificationService {
     }
   }
 
-  /// Unlink current device token and role topics on sign-out so signed-out phones
-  /// do not receive private notifications for the prior account.
+  /// Unlink current device token, topics, and parent schedules on sign-out.
   Future<void> unregisterOnLogout() async {
     final client = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
+    final tokenToDelete = _cachedDeviceToken ??
+        await LocalStorageService.instance.getString(_tokenStorageKey);
+
     if (client != null &&
         user != null &&
-        _cachedDeviceToken != null &&
-        _cachedDeviceToken!.isNotEmpty) {
+        tokenToDelete != null &&
+        tokenToDelete.isNotEmpty) {
       try {
         await client
             .from('user_device_tokens')
             .delete()
             .eq('user_id', user.id)
-            .eq('device_token', _cachedDeviceToken!);
+            .eq('device_token', tokenToDelete);
       } catch (e) {
         debugPrint('[PushNotificationService] Logout token cleanup note: $e');
       }
     }
 
-    if (_firebaseReady) {
+    if (!kIsWeb && _firebaseReady) {
       try {
         final messaging = FirebaseMessaging.instance;
-        for (final candidate in ['admin', 'teacher', 'parent']) {
-          await messaging.unsubscribeFromTopic('role_$candidate');
+        const topicsToClear = [
+          'all_users',
+          'admins',
+          'role_superadmin',
+          'role_admin',
+          'role_teacher',
+          'role_parent',
+        ];
+        for (final topic in topicsToClear) {
+          await messaging.unsubscribeFromTopic(topic);
         }
       } catch (_) {}
     }
+
+    try {
+      await _notificationsPlugin.cancel(idMonthlyFee);
+    } catch (_) {}
+
+    _cachedDeviceToken = null;
+    _pendingRefreshToken = null;
+    _pendingNavigationIntent = null;
+    await LocalStorageService.instance.remove(_tokenStorageKey);
+    await LocalStorageService.instance.remove(_tokenProviderKey);
+    await LocalStorageService.instance.remove(_cachedRoleKey);
   }
 
-  /// Schedule background recurring notifications (Daily Prayer & Monthly Fee)
-  Future<void> scheduleMajorBackgroundNotifications() async {
+  /// Schedule background recurring notifications (Daily Prayer for all, Monthly Fee for parents only).
+  Future<void> scheduleMajorBackgroundNotifications({String? role}) async {
     try {
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
-        channelId,
-        channelName,
-        channelDescription: channelDescription,
-        importance: Importance.max,
-        priority: Priority.max,
-        visibility: NotificationVisibility.public,
-        category: AndroidNotificationCategory.reminder,
-        playSound: true,
-        enableVibration: true,
-        enableLights: true,
-        channelShowBadge: true,
-        icon: '@mipmap/ic_launcher',
-        styleInformation: BigTextStyleInformation(''),
-      );
+      const prayerTitle = 'Daily Prayer Reminder 🕌';
+      const prayerBody =
+          'Don\'t forget to pray. Take a peaceful moment to remember Allah (حَيَّ عَلَى الصَّلَاةِ).';
+      const feeTitle = 'Monthly Tuition Fee Reminder 💳';
+      const feeBody =
+          'Monthly Quran memorization fee is due. Please submit payment and upload receipt proof.';
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -393,8 +595,22 @@ class PushNotificationService {
         presentSound: true,
       );
 
-      const NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails,
+      final prayerPlatformDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: channelDescription,
+          importance: Importance.max,
+          priority: Priority.max,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.reminder,
+          playSound: true,
+          enableVibration: true,
+          enableLights: true,
+          channelShowBadge: true,
+          icon: _androidSmallIcon,
+          styleInformation: BigTextStyleInformation(prayerBody),
+        ),
         iOS: iosDetails,
       );
 
@@ -407,34 +623,58 @@ class PushNotificationService {
 
       await _notificationsPlugin.zonedSchedule(
         idDailyPrayer,
-        'Daily Prayer Reminder 🕌',
-        'Don\'t forget to pray. Take a peaceful moment to remember Allah (حَيَّ عَلَى الصَّلَاةِ).',
+        prayerTitle,
+        prayerBody,
         prayerTime,
-        platformDetails,
+        prayerPlatformDetails,
         androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
         uiLocalNotificationDateInterpretation:
             UILocalNotificationDateInterpretation.absoluteTime,
         matchDateTimeComponents: DateTimeComponents.time,
       );
 
-      var feeTime = tz.TZDateTime(tz.local, now.year, now.month, 1, 9, 0);
-      if (feeTime.isBefore(now)) {
-        feeTime = (now.month == 12)
-            ? tz.TZDateTime(tz.local, now.year + 1, 1, 1, 9, 0)
-            : tz.TZDateTime(tz.local, now.year, now.month + 1, 1, 9, 0);
-      }
+      final normalizedRole = role?.toLowerCase().trim() ?? '';
+      if (normalizedRole == 'parent') {
+        final feePlatformDetails = NotificationDetails(
+          android: AndroidNotificationDetails(
+            channelId,
+            channelName,
+            channelDescription: channelDescription,
+            importance: Importance.max,
+            priority: Priority.max,
+            visibility: NotificationVisibility.public,
+            category: AndroidNotificationCategory.reminder,
+            playSound: true,
+            enableVibration: true,
+            enableLights: true,
+            channelShowBadge: true,
+            icon: _androidSmallIcon,
+            styleInformation: BigTextStyleInformation(feeBody),
+          ),
+          iOS: iosDetails,
+        );
 
-      await _notificationsPlugin.zonedSchedule(
-        idMonthlyFee,
-        'Monthly Tuition Fee Reminder 💳',
-        'Monthly Quran memorization fee is due. Please submit payment and upload receipt proof.',
-        feeTime,
-        platformDetails,
-        androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
-        uiLocalNotificationDateInterpretation:
-            UILocalNotificationDateInterpretation.absoluteTime,
-        matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
-      );
+        var feeTime = tz.TZDateTime(tz.local, now.year, now.month, 1, 9, 0);
+        if (feeTime.isBefore(now)) {
+          feeTime = (now.month == 12)
+              ? tz.TZDateTime(tz.local, now.year + 1, 1, 1, 9, 0)
+              : tz.TZDateTime(tz.local, now.year, now.month + 1, 1, 9, 0);
+        }
+
+        await _notificationsPlugin.zonedSchedule(
+          idMonthlyFee,
+          feeTitle,
+          feeBody,
+          feeTime,
+          feePlatformDetails,
+          androidScheduleMode: AndroidScheduleMode.inexactAllowWhileIdle,
+          uiLocalNotificationDateInterpretation:
+              UILocalNotificationDateInterpretation.absoluteTime,
+          matchDateTimeComponents: DateTimeComponents.dayOfMonthAndTime,
+        );
+      } else {
+        await _notificationsPlugin.cancel(idMonthlyFee);
+      }
     } catch (e) {
       debugPrint('[PushNotificationService] Note: background scheduling: $e');
     }
@@ -447,37 +687,33 @@ class PushNotificationService {
     required String body,
     String? payload,
     String type = 'broadcast',
+    Map<String, dynamic>? data,
   }) async {
     try {
       final notifId =
           id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
 
-      const AndroidNotificationDetails androidDetails =
-          AndroidNotificationDetails(
-        channelId,
-        channelName,
-        channelDescription: channelDescription,
-        importance: Importance.max,
-        priority: Priority.max,
-        visibility: NotificationVisibility.public,
-        category: AndroidNotificationCategory.message,
-        playSound: true,
-        enableVibration: true,
-        enableLights: true,
-        channelShowBadge: true,
-        icon: '@mipmap/ic_launcher',
-        styleInformation: BigTextStyleInformation(''),
-      );
-
-      const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
-        presentAlert: true,
-        presentBadge: true,
-        presentSound: true,
-      );
-
-      const NotificationDetails platformDetails = NotificationDetails(
-        android: androidDetails,
-        iOS: iosDetails,
+      final NotificationDetails platformDetails = NotificationDetails(
+        android: AndroidNotificationDetails(
+          channelId,
+          channelName,
+          channelDescription: channelDescription,
+          importance: Importance.max,
+          priority: Priority.max,
+          visibility: NotificationVisibility.public,
+          category: AndroidNotificationCategory.message,
+          playSound: true,
+          enableVibration: true,
+          enableLights: true,
+          channelShowBadge: true,
+          icon: _androidSmallIcon,
+          styleInformation: BigTextStyleInformation(body),
+        ),
+        iOS: const DarwinNotificationDetails(
+          presentAlert: true,
+          presentBadge: true,
+          presentSound: true,
+        ),
       );
 
       await _notificationsPlugin.show(
@@ -485,13 +721,14 @@ class PushNotificationService {
         title,
         body,
         platformDetails,
-        payload: payload,
+        payload: payload ?? jsonEncode({'type': type}),
       );
 
       NotificationCenterService.instance.addNotification(
         title: title,
         body: body,
         type: type,
+        data: data,
       );
     } catch (e) {
       debugPrint(
@@ -499,81 +736,88 @@ class PushNotificationService {
     }
   }
 
-  /// Register or update the user's persistent FCM device token in Supabase.
+  /// Register or update the user's real FCM device token in Supabase.
   Future<void> registerDeviceToken([String? token]) async {
+    if (kIsWeb) return;
     final client = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
-    if (client == null || user == null) return;
+    if (client == null || user == null) {
+      if (token != null && token.isNotEmpty && !token.startsWith('dev_')) {
+        _pendingRefreshToken = token;
+      }
+      return;
+    }
 
-    String? tokenToSave = token;
-    if ((tokenToSave == null || tokenToSave.isEmpty) && _firebaseReady) {
+    if (!_firebaseReady) {
+      debugPrint(
+          '[PushNotificationService] Cannot register FCM token: Firebase is not initialized.');
+      return;
+    }
+
+    String? tokenToSave = token ?? _pendingRefreshToken;
+    if (tokenToSave == null ||
+        tokenToSave.isEmpty ||
+        tokenToSave.startsWith('dev_')) {
       try {
         tokenToSave = await FirebaseMessaging.instance.getToken();
-      } catch (_) {}
-    }
-
-    if (tokenToSave == null || tokenToSave.isEmpty) {
-      if (_cachedDeviceToken != null &&
-          _cachedDeviceToken!.isNotEmpty &&
-          (!_firebaseReady || !_cachedDeviceToken!.startsWith('dev_'))) {
-        tokenToSave = _cachedDeviceToken;
+      } catch (e) {
+        debugPrint('[PushNotificationService] FCM getToken failed: $e');
       }
     }
 
-    bool isRealFcm =
-        tokenToSave != null && tokenToSave.isNotEmpty && !tokenToSave.startsWith('dev_');
-
-    if (tokenToSave == null || tokenToSave.isEmpty) {
-      final stored = await LocalStorageService.instance
-          .getString('persistent_device_token');
-      if (stored != null && stored.isNotEmpty) {
-        tokenToSave = stored;
-        isRealFcm = !stored.startsWith('dev_');
-      } else {
-        tokenToSave =
-            'dev_${user.id.substring(0, 8)}_${DateTime.now().millisecondsSinceEpoch}';
-        isRealFcm = false;
-      }
+    if ((tokenToSave == null ||
+            tokenToSave.isEmpty ||
+            tokenToSave.startsWith('dev_')) &&
+        _cachedDeviceToken != null &&
+        _cachedDeviceToken!.isNotEmpty &&
+        !_cachedDeviceToken!.startsWith('dev_')) {
+      tokenToSave = _cachedDeviceToken;
     }
 
+    if (tokenToSave == null ||
+        tokenToSave.isEmpty ||
+        tokenToSave.startsWith('dev_')) {
+      debugPrint(
+          '[PushNotificationService] Skipping device token registration: valid FCM token unavailable.');
+      return;
+    }
+
+    _pendingRefreshToken = null;
     _cachedDeviceToken = tokenToSave;
-    await LocalStorageService.instance
-        .saveString('persistent_device_token', tokenToSave);
-    await LocalStorageService.instance
-        .saveString('persistent_token_provider', isRealFcm ? 'fcm' : 'local');
+    await LocalStorageService.instance.saveString(_tokenStorageKey, tokenToSave);
+    await LocalStorageService.instance.saveString(_tokenProviderKey, 'fcm');
 
     try {
       final platform =
-          Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'web');
+          Platform.isAndroid ? 'android' : (Platform.isIOS ? 'ios' : 'mobile');
 
-      if (isRealFcm) {
-        // Prune old dummy local tokens for this user once a real FCM token is active
-        try {
-          await client
-              .from('user_device_tokens')
-              .delete()
-              .eq('user_id', user.id)
-              .like('device_token', 'dev_%');
-        } catch (_) {}
-      }
+      // Prune legacy synthetic local tokens if any remain from older builds
+      try {
+        await client
+            .from('user_device_tokens')
+            .delete()
+            .eq('user_id', user.id)
+            .like('device_token', 'dev_%');
+      } catch (_) {}
 
       await client.from('user_device_tokens').upsert({
         'user_id': user.id,
         'device_token': tokenToSave,
         'device_type': platform,
-        'provider': isRealFcm ? 'fcm' : 'local',
+        'platform': platform,
+        'provider': 'fcm',
         'updated_at': DateTime.now().toUtc().toIso8601String(),
       }, onConflict: 'user_id, device_token');
 
-      debugPrint(
-          '[PushNotificationService] Registered ${isRealFcm ? 'FCM' : 'local'} device token.');
+      debugPrint('[PushNotificationService] Registered FCM device token.');
       await syncUnreadDatabaseNotifications();
     } catch (e) {
-      debugPrint('[PushNotificationService] Device token registration note: $e');
+      debugPrint('[PushNotificationService] Device token registration error: $e');
     }
   }
 
-  /// Sync unread notifications from database that occurred while the app was closed
+  /// Sync unread notifications from database that occurred while the app was closed,
+  /// marking global (user_id IS NULL) announcements read per-user via notification_reads.
   Future<void> syncUnreadDatabaseNotifications() async {
     final client = SupabaseService.instance.client;
     final user = SupabaseService.instance.currentUser;
@@ -582,27 +826,81 @@ class PushNotificationService {
     try {
       final rows = await client
           .from('notifications')
-          .select('*')
+          .select('id, user_id, title, body, type, data, is_read, created_at')
           .or('user_id.eq.${user.id},user_id.is.null')
-          .eq('is_read', false)
-          .order('created_at', ascending: true);
+          .order('created_at', ascending: true)
+          .limit(50);
 
-      if (rows is List && rows.isNotEmpty) {
-        for (final row in rows) {
-          final title = row['title']?.toString() ?? 'Notification';
-          final body = row['body']?.toString() ?? '';
-          final type = row['type']?.toString() ?? 'general';
-          NotificationCenterService.instance.addNotification(
-            title: title,
-            body: body,
-            type: type,
-          );
+      if (rows is! List || rows.isEmpty) return;
+
+      final readGlobalIds = <String>{};
+      try {
+        final readRows = await client
+            .from('notification_reads')
+            .select('notification_id')
+            .eq('user_id', user.id);
+        if (readRows is List) {
+          for (final r in readRows) {
+            final nid = r['notification_id']?.toString();
+            if (nid != null && nid.isNotEmpty) {
+              readGlobalIds.add(nid);
+            }
+          }
         }
+      } catch (e) {
+        debugPrint(
+            '[PushNotificationService] notification_reads lookup note: $e');
+      }
+
+      final directIdsToMark = <String>[];
+      final globalIdsToMark = <String>[];
+
+      for (final row in rows) {
+        final notifId = row['id']?.toString() ?? '';
+        final rowUserId = row['user_id']?.toString();
+        final isDirect = rowUserId != null && rowUserId == user.id;
+
+        if (isDirect) {
+          if (row['is_read'] == true) continue;
+          if (notifId.isNotEmpty) directIdsToMark.add(notifId);
+        } else {
+          if (notifId.isNotEmpty && readGlobalIds.contains(notifId)) continue;
+          if (notifId.isNotEmpty) globalIdsToMark.add(notifId);
+        }
+
+        final title = row['title']?.toString() ?? 'Notification';
+        final body = row['body']?.toString() ?? '';
+        final type = row['type']?.toString() ?? 'general';
+        final rowData = row['data'] is Map
+            ? Map<String, dynamic>.from(row['data'] as Map)
+            : null;
+        NotificationCenterService.instance.addNotification(
+          title: title,
+          body: body,
+          type: type,
+          data: rowData,
+        );
+      }
+
+      if (directIdsToMark.isNotEmpty) {
         await client
             .from('notifications')
             .update({'is_read': true})
-            .eq('user_id', user.id)
-            .eq('is_read', false);
+            .inFilter('id', directIdsToMark)
+            .eq('user_id', user.id);
+      }
+
+      if (globalIdsToMark.isNotEmpty) {
+        await client.from('notification_reads').upsert(
+          [
+            for (final nid in globalIdsToMark)
+              {
+                'notification_id': nid,
+                'user_id': user.id,
+              },
+          ],
+          onConflict: 'notification_id,user_id',
+        );
       }
     } catch (e) {
       debugPrint('[PushNotificationService] DB notification sync note: $e');
@@ -610,7 +908,7 @@ class PushNotificationService {
   }
 
   /// Broadcast a remote FCM push notification to all devices matching [targetAudience]
-  /// ('all', 'parents', 'teachers', or 'admins').
+  /// ('all', 'parents', 'teachers', or 'admins'). Requires admin/superadmin JWT.
   Future<void> dispatchPushNotificationToAll({
     required String title,
     required String body,
@@ -620,7 +918,12 @@ class PushNotificationService {
     Map<String, dynamic>? data,
   }) async {
     if (showLocally) {
-      await showNotification(title: title, body: body, type: type);
+      await showNotification(
+        title: title,
+        body: body,
+        type: type,
+        data: data,
+      );
     }
 
     final client = SupabaseService.instance.client;
@@ -632,7 +935,6 @@ class PushNotificationService {
         'body': body,
         'target_audience': targetAudience,
         'type': type,
-        'exclude_user_id': SupabaseService.instance.currentUser?.id,
         'data': {
           ...?data,
           'type': type,
@@ -644,7 +946,7 @@ class PushNotificationService {
     }
   }
 
-  /// Send a targeted remote FCM push notification to specific user IDs (e.g. parent, teacher, or chat recipient).
+  /// Send a targeted remote FCM push notification to specific user IDs.
   Future<void> dispatchPushToUsers({
     required List<String> userIds,
     required String title,
@@ -673,10 +975,11 @@ class PushNotificationService {
         'title': title,
         'body': body,
         'user_ids': cleanIds,
-        if (fallbackAudience != null && fallbackAudience.isNotEmpty)
+        if (cleanIds.isEmpty &&
+            fallbackAudience != null &&
+            fallbackAudience.isNotEmpty)
           'target_audience': fallbackAudience,
         'type': type,
-        'exclude_user_id': selfId,
         'data': {
           ...?data,
           'type': type,

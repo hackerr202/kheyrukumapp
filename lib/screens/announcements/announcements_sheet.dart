@@ -5,6 +5,7 @@ import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/notification_center_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../payments/payments_screen.dart';
@@ -323,7 +324,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                     height: 1.4,
                   ),
                 ),
-                if (isPaymentType) ...[
+                if (isPaymentType &&
+                    AuthSessionService.instance.canAccessPayments) ...[
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: () {
@@ -469,23 +471,20 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                     ),
                     constraints: const BoxConstraints(maxHeight: 260),
                     width: double.infinity,
-                    child: Image.network(
-                      item.attachmentUrl!,
+                    child: ProSignedImage(
+                      mediaRef: item.attachmentUrl!,
                       fit: BoxFit.contain,
                       width: double.infinity,
-                      loadingBuilder: (context, child, progress) {
-                        if (progress == null) return child;
-                        return SizedBox(
-                          height: 150,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: p.primary,
-                            ),
+                      placeholder: SizedBox(
+                        height: 150,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: p.primary,
                           ),
-                        );
-                      },
-                      errorBuilder: (_, __, ___) => Padding(
+                        ),
+                      ),
+                      errorWidget: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Row(
                           children: [
@@ -506,7 +505,10 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
             else
               InkWell(
                 onTap: () async {
-                  final uri = Uri.tryParse(item.attachmentUrl!);
+                  final resolved = await StorageService.resolveSignedUrl(
+                          item.attachmentUrl!) ??
+                      item.attachmentUrl!;
+                  final uri = Uri.tryParse(resolved);
                   if (uri != null && await canLaunchUrl(uri)) {
                     await launchUrl(uri, mode: LaunchMode.externalApplication);
                   }
@@ -633,17 +635,14 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
               child: InteractiveViewer(
                 minScale: 0.8,
                 maxScale: 4.0,
-                child: Image.network(
-                  imageUrl,
+                child: ProSignedImage(
+                  mediaRef: imageUrl,
                   fit: BoxFit.contain,
-                  loadingBuilder: (c, child, progress) {
-                    if (progress == null) return child;
-                    return const Center(
-                      child: CircularProgressIndicator(
-                        color: AppColors.goldWarm,
-                      ),
-                    );
-                  },
+                  placeholder: const Center(
+                    child: CircularProgressIndicator(
+                      color: AppColors.goldWarm,
+                    ),
+                  ),
                 ),
               ),
             ),
