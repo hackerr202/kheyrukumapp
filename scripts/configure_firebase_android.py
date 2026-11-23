@@ -45,8 +45,8 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled = true",
                 1,
             )
-        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 35")
-        content = re.sub(r"compileSdk\s*=\s*\d+", "compileSdk = 35", content)
+        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
+        content = re.sub(r"compileSdk\s*=\s*\d+", "compileSdk = 36", content)
         content = content.replace("targetSdk = flutter.targetSdkVersion", "targetSdk = 35")
         content = content.replace("minSdk = flutter.minSdkVersion", "minSdk = 24")
         content = re.sub(r"minSdk\s*=\s*2[0-3]\b", "minSdk = 24", content)
@@ -99,8 +99,8 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled true",
                 1,
             )
-        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 35")
-        gcontent = re.sub(r"compileSdkVersion\s+\d+", "compileSdkVersion 35", gcontent)
+        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
+        gcontent = re.sub(r"compileSdkVersion\s+\d+", "compileSdkVersion 36", gcontent)
         gcontent = gcontent.replace("targetSdkVersion flutter.targetSdkVersion", "targetSdkVersion 35")
         gcontent = gcontent.replace("minSdkVersion flutter.minSdkVersion", "minSdkVersion 24")
         gcontent = re.sub(r"minSdkVersion\s+2[0-3]\b", "minSdkVersion 24", gcontent)
