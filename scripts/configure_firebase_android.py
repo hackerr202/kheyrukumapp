@@ -45,11 +45,13 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled = true",
                 1,
             )
-        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 36")
-        content = re.sub(r"compileSdk\s*=\s*3[0-5]\b", "compileSdk = 36", content)
+        content = content.replace("compileSdk = flutter.compileSdkVersion", "compileSdk = 35")
+        content = re.sub(r"compileSdk\s*=\s*\d+", "compileSdk = 35", content)
         content = content.replace("targetSdk = flutter.targetSdkVersion", "targetSdk = 35")
         content = content.replace("minSdk = flutter.minSdkVersion", "minSdk = 24")
         content = re.sub(r"minSdk\s*=\s*2[0-3]\b", "minSdk = 24", content)
+        content = content.replace("ndkVersion = flutter.ndkVersion", 'ndkVersion = "27.3.13750724"')
+        content = re.sub(r'ndkVersion\s*=\s*flutter\.ndkVersion', 'ndkVersion = "27.3.13750724"', content)
 
         if "desugar_jdk_libs" not in content:
             content += '\ndependencies {\n    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.4")\n}\n'
@@ -97,11 +99,13 @@ def configure_gradle_kts(has_google_services: bool) -> None:
                 "defaultConfig {\n        multiDexEnabled true",
                 1,
             )
-        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 36")
-        gcontent = re.sub(r"compileSdkVersion\s+3[0-5]\b", "compileSdkVersion 36", gcontent)
+        gcontent = gcontent.replace("compileSdkVersion flutter.compileSdkVersion", "compileSdkVersion 35")
+        gcontent = re.sub(r"compileSdkVersion\s+\d+", "compileSdkVersion 35", gcontent)
         gcontent = gcontent.replace("targetSdkVersion flutter.targetSdkVersion", "targetSdkVersion 35")
         gcontent = gcontent.replace("minSdkVersion flutter.minSdkVersion", "minSdkVersion 24")
         gcontent = re.sub(r"minSdkVersion\s+2[0-3]\b", "minSdkVersion 24", gcontent)
+        gcontent = gcontent.replace("ndkVersion flutter.ndkVersion", 'ndkVersion "27.3.13750724"')
+        gcontent = re.sub(r'ndkVersion\s+flutter\.ndkVersion', 'ndkVersion "27.3.13750724"', gcontent)
         if "desugar_jdk_libs" not in gcontent:
             gcontent += '\ndependencies {\n    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.1.4"\n}\n'
         if has_google_services and "com.google.gms.google-services" not in gcontent:
