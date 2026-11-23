@@ -256,6 +256,7 @@ class ProAvatar extends StatelessWidget {
   final Color? color;
   final IconData? icon;
   final bool showGoldRing;
+  final String? imageUrl;
 
   const ProAvatar({
     super.key,
@@ -264,6 +265,7 @@ class ProAvatar extends StatelessWidget {
     this.color,
     this.icon,
     this.showGoldRing = false,
+    this.imageUrl,
   });
 
   @override
@@ -271,6 +273,7 @@ class ProAvatar extends StatelessWidget {
     final p = AppColors.of(context);
     final tone = color ?? p.primary;
     final initial = name.trim().isNotEmpty ? name.trim()[0].toUpperCase() : 'K';
+    final hasValidImage = imageUrl != null && imageUrl!.trim().isNotEmpty;
 
     return Container(
       width: radius * 2,
@@ -283,16 +286,37 @@ class ProAvatar extends StatelessWidget {
           width: showGoldRing ? 1.8 : 1.2,
         ),
       ),
-      child: Center(
-        child: icon != null
-            ? Icon(icon, size: radius * 0.95, color: tone)
-            : Text(
-                initial,
-                style: TextStyle(
-                  fontSize: radius * 0.78,
-                  fontWeight: FontWeight.w700,
-                  color: tone,
+      child: ClipOval(
+        child: hasValidImage
+            ? Image.network(
+                imageUrl!,
+                width: radius * 2,
+                height: radius * 2,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) => Center(
+                  child: icon != null
+                      ? Icon(icon, size: radius * 0.95, color: tone)
+                      : Text(
+                          initial,
+                          style: TextStyle(
+                            fontSize: radius * 0.78,
+                            fontWeight: FontWeight.w700,
+                            color: tone,
+                          ),
+                        ),
                 ),
+              )
+            : Center(
+                child: icon != null
+                    ? Icon(icon, size: radius * 0.95, color: tone)
+                    : Text(
+                        initial,
+                        style: TextStyle(
+                          fontSize: radius * 0.78,
+                          fontWeight: FontWeight.w700,
+                          color: tone,
+                        ),
+                      ),
               ),
       ),
     );
