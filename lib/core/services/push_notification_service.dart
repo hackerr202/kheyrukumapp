@@ -567,8 +567,45 @@ class PushNotificationService {
 
       debugPrint(
           '[PushNotificationService] Registered ${isRealFcm ? 'FCM' : 'local'} device token.');
+      await syncUnreadDatabaseNotifications();
     } catch (e) {
       debugPrint('[PushNotificationService] Device token registration note: $e');
+    }
+  }
+
+  /// Sync unread notifications from database that occurred while the app was closed
+  Future<void> syncUnreadDatabaseNotifications() async {
+    final client = SupabaseService.instance.client;
+    final user = SupabaseService.instance.currentUser;
+    if (client == null || user == null) return;
+
+    try {
+      final rows = await client
+          .from('notifications')
+          .select('*')
+          .or('user_id.eq.${user.id},user_id.is.null')
+          .eq('is_read', false)
+          .order('created_at', ascending: true);
+
+      if (rows is List && rows.isNotEmpty) {
+        for (final row in rows) {
+          final title = row['title']?.toString() ?? 'Notification';
+          final body = row['body']?.toString() ?? '';
+          final type = row['type']?.toString() ?? 'general';
+          NotificationCenterService.instance.addNotification(
+            title: title,
+            body: body,
+            type: type,
+          );
+        }
+        await client
+            .from('notifications')
+            .update({'is_read': true})
+            .eq('user_id', user.id)
+            .eq('is_read', false);
+      }
+    } catch (e) {
+      debugPrint('[PushNotificationService] DB notification sync note: $e');
     }
   }
 

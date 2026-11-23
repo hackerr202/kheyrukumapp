@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
+import 'core/localization/app_localizations.dart';
+import 'core/localization/locale_notifier.dart';
 import 'core/routes/app_routes.dart';
 import 'core/services/local_storage_service.dart';
 import 'core/services/push_notification_service.dart';
@@ -36,14 +39,31 @@ class KheyrukumApp extends StatelessWidget {
           ),
         );
 
-        return MaterialApp(
-          title: 'Kheyrukum - خيركم',
-          debugShowCheckedModeBanner: false,
-          theme: AppTheme.lightTheme,
-          darkTheme: AppTheme.darkTheme,
-          themeMode: themeMode,
-          initialRoute: AppRoutes.splash,
-          routes: AppRoutes.routes,
+        return ValueListenableBuilder<Locale>(
+          valueListenable: LocaleNotifier.instance,
+          builder: (context, appLocale, _) {
+            return MaterialApp(
+              title: 'Kheyrukum - خيركم',
+              debugShowCheckedModeBanner: false,
+              theme: AppTheme.lightTheme,
+              darkTheme: AppTheme.darkTheme,
+              themeMode: themeMode,
+              locale: appLocale,
+              supportedLocales: const [
+                Locale('en'),
+                Locale('ar'),
+                Locale('am'),
+              ],
+              localizationsDelegates: const [
+                AppLocalizations.delegate,
+                GlobalMaterialLocalizations.delegate,
+                GlobalWidgetsLocalizations.delegate,
+                GlobalCupertinoLocalizations.delegate,
+              ],
+              initialRoute: AppRoutes.splash,
+              routes: AppRoutes.routes,
+            );
+          },
         );
       },
     );

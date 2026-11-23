@@ -1,6 +1,8 @@
 class Student {
   final String id;
   final String fullName;
+  final int age;
+  final String? avatarUrl;
   final String? halaqahId;
   final String halaqahName;
   final String? parentId;
@@ -18,6 +20,8 @@ class Student {
   const Student({
     required this.id,
     required this.fullName,
+    this.age = 8,
+    this.avatarUrl,
     this.halaqahId,
     this.halaqahName = 'Study Circle',
     this.parentId,
@@ -37,6 +41,8 @@ class Student {
     return Student(
       id: json['id']?.toString() ?? '',
       fullName: json['full_name']?.toString() ?? 'Student',
+      age: (json['age'] as num?)?.toInt() ?? 8,
+      avatarUrl: json['avatar_url']?.toString(),
       halaqahId: json['halaqah_id']?.toString(),
       halaqahName: json['halaqah_name']?.toString() ??
           (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Study Circle'),
@@ -62,6 +68,8 @@ class Student {
     return {
       'id': id,
       'full_name': fullName,
+      'age': age,
+      'avatar_url': avatarUrl,
       'halaqah_id': halaqahId,
       'halaqah_name': halaqahName,
       'parent_id': parentId,
@@ -80,6 +88,8 @@ class Student {
 
   Student copyWith({
     String? fullName,
+    int? age,
+    String? avatarUrl,
     String? halaqahId,
     String? halaqahName,
     String? parentId,
@@ -95,6 +105,8 @@ class Student {
     return Student(
       id: id,
       fullName: fullName ?? this.fullName,
+      age: age ?? this.age,
+      avatarUrl: avatarUrl ?? this.avatarUrl,
       halaqahId: halaqahId ?? this.halaqahId,
       halaqahName: halaqahName ?? this.halaqahName,
       parentId: parentId ?? this.parentId,

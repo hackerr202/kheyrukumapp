@@ -177,15 +177,19 @@ class MoreTab extends StatelessWidget {
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
       builder: (context, currentRole, _) {
-        final isAdmin = currentRole == 'admin';
+        final isSuperAdmin = currentRole == 'superadmin';
+        final isAdmin = currentRole == 'admin' || isSuperAdmin;
         final isTeacher = currentRole == 'teacher';
         final isParent = currentRole == 'parent';
 
         final userName = AuthSessionService.instance.userName;
         final userEmail = AuthSessionService.instance.userEmail;
-        final roleLabel = isAdmin
-            ? 'Director'
-            : (isTeacher ? 'Ustaz' : 'Parent');
+        final avatarUrl = AuthSessionService.instance.avatarUrl;
+        final roleLabel = isSuperAdmin
+            ? 'Super Admin'
+            : (isAdmin
+                ? 'Director'
+                : (isTeacher ? 'Ustaz' : 'Parent'));
 
         return ListView(
           physics: const BouncingScrollPhysics(),
@@ -198,6 +202,7 @@ class MoreTab extends StatelessWidget {
                 children: [
                   ProAvatar(
                     name: userName,
+                    imageUrl: avatarUrl,
                     radius: 26,
                     color: AppColors.goldWarm,
                     showGoldRing: true,
@@ -371,7 +376,7 @@ class MoreTab extends StatelessWidget {
                           )
                         : null,
                   ),
-                  if (isAdmin || isParent) ...[
+                  if (isSuperAdmin || isParent) ...[
                     _buildDivider(p),
                     _buildMenuTile(
                       p: p,

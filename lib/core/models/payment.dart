@@ -8,6 +8,7 @@ class MonthlyPayment {
   final String month; // e.g. "October 2026"
   final double amount; // e.g. 50.0
   final DateTime dueDate;
+  final DateTime feeStartDate;
   final String status; // 'pending', 'submitted', 'approved', 'rejected', 'overdue'
   final String? receiptUrl;
   final String? receiptLocalMock; // Base64 or sample receipt identifier
@@ -27,6 +28,7 @@ class MonthlyPayment {
     required this.month,
     required this.amount,
     required this.dueDate,
+    required this.feeStartDate,
     this.status = 'pending',
     this.receiptUrl,
     this.receiptLocalMock,
@@ -50,6 +52,11 @@ class MonthlyPayment {
       dueDate: json['due_date'] != null
           ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
           : DateTime.now(),
+      feeStartDate: json['fee_start_date'] != null
+          ? DateTime.tryParse(json['fee_start_date'].toString()) ?? DateTime.now()
+          : (json['due_date'] != null
+              ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
+              : DateTime.now()),
       status: json['status']?.toString() ?? 'pending',
       receiptUrl: json['receipt_url']?.toString(),
       receiptLocalMock: json['receipt_local_mock']?.toString(),
@@ -73,6 +80,7 @@ class MonthlyPayment {
       'month': month,
       'amount': amount,
       'due_date': dueDate.toIso8601String(),
+      'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
       'status': status,
       'receipt_url': receiptUrl,
       'receipt_local_mock': receiptLocalMock,
@@ -94,6 +102,7 @@ class MonthlyPayment {
       (receiptLocalMock != null && receiptLocalMock!.isNotEmpty);
 
   MonthlyPayment copyWith({
+    DateTime? feeStartDate,
     String? status,
     String? receiptUrl,
     String? receiptLocalMock,
@@ -113,6 +122,7 @@ class MonthlyPayment {
       month: month,
       amount: amount,
       dueDate: dueDate,
+      feeStartDate: feeStartDate ?? this.feeStartDate,
       status: status ?? this.status,
       receiptUrl: receiptUrl ?? this.receiptUrl,
       receiptLocalMock: receiptLocalMock ?? this.receiptLocalMock,

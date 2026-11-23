@@ -50,7 +50,8 @@ class _HomeTabState extends State<HomeTab> {
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
       builder: (context, currentRole, _) {
-        final isAdmin = currentRole == 'admin';
+        final isSuperAdmin = currentRole == 'superadmin';
+        final isAdmin = currentRole == 'admin' || isSuperAdmin;
         final isTeacher = currentRole == 'teacher';
 
         return RefreshIndicator(

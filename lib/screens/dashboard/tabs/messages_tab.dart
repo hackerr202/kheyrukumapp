@@ -41,7 +41,7 @@ class _MessagesTabState extends State<MessagesTab> {
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
       builder: (context, currentRole, _) {
-        final isAdmin = currentRole == 'admin';
+        final isAdmin = currentRole == 'admin' || currentRole == 'superadmin';
         final isTeacher = currentRole == 'teacher';
         final isParent = currentRole == 'parent';
         final currentUserId = AuthSessionService.instance.userId;

@@ -26,9 +26,9 @@ class PaymentsScreen extends StatefulWidget {
 class _PaymentsScreenState extends State<PaymentsScreen> {
   String _selectedFilter = 'all';
 
-  bool get _isAdmin {
+  bool get _isSuperAdmin {
     final user = SupabaseService.instance.currentUser;
-    return AuthSessionService.instance.isAdmin ||
+    return AuthSessionService.instance.isSuperAdmin ||
         user?.email?.toLowerCase() == 'admin@kheyrukum.com';
   }
 
@@ -39,6 +39,34 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+
+    // Regular admins (not superadmin, not parent) cannot access payment data or fee registration
+    if (AuthSessionService.instance.currentRole == 'admin' && !_isSuperAdmin) {
+      return Scaffold(
+        backgroundColor: p.canvas,
+        appBar: AppBar(
+          backgroundColor: p.surface,
+          elevation: 0,
+          leading: IconButton(
+            icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
+            onPressed: () => Navigator.pop(context),
+          ),
+          title: const Text('Halaqah Fees & Tuition'),
+        ),
+        body: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(28),
+            child: ProEmptyState(
+              icon: Icons.lock_outline_rounded,
+              title: 'Access Restricted to Super Administrators',
+              message:
+                  'As an Administrator, you have full access to circles, students, attendance, and circulars. Financial records and tuition registrations are restricted exclusively to the Super Administrator.',
+              accentColor: p.gold,
+            ),
+          ),
+        ),
+      );
+    }
 
     return Scaffold(
       backgroundColor: p.canvas,
@@ -55,7 +83,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           child: Divider(height: 1, color: p.border),
         ),
         actions: [
-          if (_isAdmin) ...[
+          if (_isSuperAdmin) ...[
             TextButton.icon(
               onPressed: () => _showIssueInvoiceDialog(context),
               icon: Icon(Icons.add_circle_outline_rounded,
@@ -94,7 +122,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         builder: (context, snapshot) {
           final payments = snapshot.data ?? [];
 
-          if (!_isAdmin) {
+          if (!_isSuperAdmin) {
             final user = SupabaseService.instance.currentUser;
             final parentPayments = PaymentService.instance.getPaymentsForParent(
               user?.id ?? AuthSessionService.instance.userId,
@@ -994,6 +1022,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     }
 
     Student selectedStudent = students.first;
+    DateTime feeStartDate = DateTime.now();
     final monthCtrl = TextEditingController(text: 'October 2026');
     final amountCtrl = TextEditingController(text: '50');
 
@@ -1037,6 +1066,51 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   keyboardType: TextInputType.number,
                   decoration: const InputDecoration(labelText: 'Fee Amount (\$)'),
                 ),
+                const SizedBox(height: 12),
+                InkWell(
+                  onTap: () async {
+                    final picked = await showDatePicker(
+                      context: ctx,
+                      initialDate: feeStartDate,
+                      firstDate: DateTime(2020),
+                      lastDate: DateTime(2035),
+                    );
+                    if (picked != null) {
+                      setDialogState(() => feeStartDate = picked);
+                    }
+                  },
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 12),
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(10),
+                      border: Border.all(color: Colors.black26),
+                    ),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              'Fee Start Date *',
+                              style: TextStyle(
+                                  fontSize: 11, color: Colors.black54),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              feeStartDate.toLocal().toString().substring(0, 10),
+                              style: const TextStyle(
+                                  fontSize: 13.5, fontWeight: FontWeight.w600),
+                            ),
+                          ],
+                        ),
+                        const Icon(Icons.calendar_today_rounded,
+                            size: 18, color: Colors.black54),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
           ),
@@ -1058,6 +1132,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     month: monthCtrl.text.trim(),
                     amount: amt,
                     dueDate: DateTime.now().add(const Duration(days: 10)),
+                    feeStartDate: feeStartDate,
                   );
                   if (ctx.mounted) Navigator.pop(ctx);
                   if (context.mounted) {
@@ -1427,7 +1502,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           ),
         ),
         actions: [
-          if (_isAdmin && payment.isSubmitted) ...[
+          if (_isSuperAdmin && payment.isSubmitted) ...[
             TextButton(
               onPressed: () {
                 Navigator.pop(ctx);

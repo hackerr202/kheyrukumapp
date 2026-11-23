@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/models/chat_message.dart';
@@ -172,33 +173,34 @@ class _DashboardScreenState extends State<DashboardScreen> {
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, _, __) {
         final p = AppColors.of(context);
+        final loc = AppLocalizations.of(context);
 
         final navItems = [
-          const KheyrukumNavItem(
+          KheyrukumNavItem(
             icon: Icons.home_outlined,
             activeIcon: Icons.home_rounded,
-            label: 'Home',
+            label: loc.navHome,
           ),
-          const KheyrukumNavItem(
+          KheyrukumNavItem(
             icon: Icons.people_outline_rounded,
             activeIcon: Icons.people_rounded,
-            label: 'Students',
+            label: loc.navCircles,
           ),
           KheyrukumNavItem(
             icon: Icons.chat_bubble_outline_rounded,
             activeIcon: Icons.chat_bubble_rounded,
-            label: 'Chats',
+            label: loc.navMessages,
             badgeCount: _unreadMessagesCount,
           ),
-          const KheyrukumNavItem(
+          KheyrukumNavItem(
             icon: Icons.auto_stories_outlined,
             activeIcon: Icons.auto_stories_rounded,
-            label: 'Homework',
+            label: loc.navResources,
           ),
-          const KheyrukumNavItem(
+          KheyrukumNavItem(
             icon: Icons.grid_view_outlined,
             activeIcon: Icons.grid_view_rounded,
-            label: 'More',
+            label: loc.navMore,
           ),
         ];
 
@@ -217,14 +219,25 @@ class _DashboardScreenState extends State<DashboardScreen> {
                           AuthSessionService.instance.roleNotifier,
                       builder: (context, currentRole, _) {
                         final userName = AuthSessionService.instance.userName;
+                        final avatarUrl = AuthSessionService.instance.avatarUrl;
                         final displayName =
                             userName.isNotEmpty ? userName : 'Administrator';
-                        final roleLabel = currentRole == 'admin'
-                            ? 'Director'
-                            : (currentRole == 'teacher' ? 'Ustaz' : 'Parent');
-                        final roleColor = currentRole == 'admin'
+                        final isSuperAdmin = currentRole == 'superadmin';
+                        final isAdmin = currentRole == 'admin' || isSuperAdmin;
+                        final roleLabel = isSuperAdmin
+                            ? loc.roleSuperadmin
+                            : (isAdmin
+                                ? loc.roleAdmin
+                                : (currentRole == 'teacher'
+                                    ? loc.roleTeacher
+                                    : loc.roleParent));
+                        final roleColor = isSuperAdmin
                             ? p.gold
-                            : (currentRole == 'teacher' ? p.primary : p.info);
+                            : (isAdmin
+                                ? p.gold
+                                : (currentRole == 'teacher'
+                                    ? p.primary
+                                    : p.info));
 
                         String? pageTitle;
                         if (_currentTabIndex == 1) {
@@ -232,11 +245,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ? 'My Children'
                               : 'Students';
                         } else if (_currentTabIndex == 2) {
-                          pageTitle = 'Messages';
+                          pageTitle = loc.navMessages;
                         } else if (_currentTabIndex == 3) {
                           pageTitle = 'Homework';
                         } else if (_currentTabIndex == 4) {
-                          pageTitle = 'Center';
+                          pageTitle = loc.navMore;
                         }
 
                         return Padding(
@@ -260,9 +273,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               else ...[
                                 ProAvatar(
                                   name: displayName,
+                                  imageUrl: avatarUrl,
                                   radius: 22,
                                   color: roleColor,
-                                  showGoldRing: currentRole == 'admin',
+                                  showGoldRing: isAdmin,
                                 ),
                                 const SizedBox(width: 12),
                                 Expanded(
@@ -274,7 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                       Row(
                                         children: [
                                           Text(
-                                            'Assalamu Alaikum',
+                                            loc.greeting,
                                             style: TextStyle(
                                               fontSize: 11.5,
                                               color: p.inkSecondary,

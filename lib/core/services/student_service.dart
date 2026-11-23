@@ -226,7 +226,7 @@ class StudentService {
       final res = await client
           .from('students')
           .select(
-            'id, full_name, halaqah_id, current_juz, current_surah, current_ayah, date_of_birth, created_at, '
+            'id, full_name, age, avatar_url, halaqah_id, current_juz, current_surah, current_ayah, date_of_birth, created_at, '
             'halaqahs:halaqah_id(name), '
             'parent_students(parent_id, profiles:parent_id(full_name, phone, email))',
           )
@@ -397,6 +397,8 @@ class StudentService {
   /// Admin Action: Add new student and link to a specific parent
   Future<Student> addStudent({
     required String fullName,
+    required int age,
+    String? avatarUrl,
     required String halaqahName,
     required String parentId,
     required String parentName,
@@ -414,10 +416,14 @@ class StudentService {
       try {
         final Map<String, dynamic> insertPayload = {
           'full_name': fullName.trim(),
+          'age': age,
           'current_juz': currentJuz,
           'current_surah': currentSurah,
           'current_ayah': currentAyah,
         };
+        if (avatarUrl != null && avatarUrl.isNotEmpty) {
+          insertPayload['avatar_url'] = avatarUrl;
+        }
         if (_isValidUuid(halaqahId)) {
           insertPayload['halaqah_id'] = halaqahId;
         }
@@ -453,6 +459,8 @@ class StudentService {
     final newStudent = Student(
       id: finalStudentId,
       fullName: fullName,
+      age: age,
+      avatarUrl: avatarUrl,
       halaqahId: _isValidUuid(halaqahId) ? halaqahId : null,
       halaqahName: halaqahName,
       parentId: _isValidUuid(parentId) ? parentId : null,

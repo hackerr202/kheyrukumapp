@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
+import 'package:image_picker/image_picker.dart';
 import '../core/services/halaqah_service.dart';
+import '../core/services/storage_service.dart';
 import '../core/services/student_service.dart';
 import '../core/services/supabase_service.dart';
 import '../core/theme/app_colors.dart';
@@ -7,14 +9,20 @@ import '../screens/admin/halaqah_management_sheet.dart';
 
 /// Flagship Dialog for Enrolling Students:
 /// - Clean step-by-step layout in Deep Pine & Warm Gold
+/// - Requires Student Age as mandatory field
+/// - Optional student profile picture upload
 /// - Allows selecting an existing parent OR entering parent details (auto-generating an invite code)
 /// - Immediately persists to Supabase Cloud and local offline cache
 class AddStudentDialog {
   static void show(BuildContext context) {
     final nameCtrl = TextEditingController();
+    final ageCtrl = TextEditingController();
     final parentNameCtrl = TextEditingController();
     final parentPhoneCtrl = TextEditingController();
     final parentEmailCtrl = TextEditingController();
+
+    String? avatarUrl;
+    bool isUploadingAvatar = false;
 
     final halaqahs = HalaqahService.instance.halaqahs;
     String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
@@ -39,11 +47,16 @@ class AddStudentDialog {
           final currentHalaqahs = HalaqahService.instance.halaqahs;
           final currentParents = StudentService.instance.getRegisteredParents();
 
+          final parsedAge = int.tryParse(ageCtrl.text.trim());
+          final bool isAgeValid = parsedAge != null && parsedAge > 0 && parsedAge <= 99;
+
           final bool canSubmit = nameCtrl.text.trim().isNotEmpty &&
+              isAgeValid &&
               ((!createNewParent && selectedParentId != null) ||
                   (createNewParent && parentNameCtrl.text.trim().isNotEmpty)) &&
               selectedHalaqahId != null &&
-              !isSaving;
+              !isSaving &&
+              !isUploadingAvatar;
 
           return Dialog(
             backgroundColor: p.surface,
@@ -110,6 +123,118 @@ class AddStudentDialog {
                     ),
                     const SizedBox(height: 18),
 
+                    // Profile Picture (Optional)
+                    Center(
+                      child: Column(
+                        children: [
+                          Stack(
+                            children: [
+                              Container(
+                                width: 72,
+                                height: 72,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: p.primary.withOpacity(0.12),
+                                  border: Border.all(
+                                    color: p.gold.withOpacity(0.4),
+                                    width: 2,
+                                  ),
+                                  image: avatarUrl != null && avatarUrl!.isNotEmpty
+                                      ? DecorationImage(
+                                          image: NetworkImage(avatarUrl!),
+                                          fit: BoxFit.cover,
+                                        )
+                                      : null,
+                                ),
+                                child: isUploadingAvatar
+                                    ? Center(
+                                        child: SizedBox(
+                                          width: 24,
+                                          height: 24,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: p.primary,
+                                          ),
+                                        ),
+                                      )
+                                    : (avatarUrl == null || avatarUrl!.isEmpty)
+                                        ? Icon(
+                                            Icons.person_rounded,
+                                            size: 38,
+                                            color: p.primary,
+                                          )
+                                        : null,
+                              ),
+                              Positioned(
+                                bottom: 0,
+                                right: 0,
+                                child: InkWell(
+                                  onTap: isUploadingAvatar
+                                      ? null
+                                      : () async {
+                                          try {
+                                            final picker = ImagePicker();
+                                            final picked = await picker.pickImage(
+                                              source: ImageSource.gallery,
+                                              maxWidth: 600,
+                                              maxHeight: 600,
+                                              imageQuality: 85,
+                                            );
+                                            if (picked == null) return;
+                                            setDialogState(() => isUploadingAvatar = true);
+                                            final bytes = await picked.readAsBytes();
+                                            final ext = picked.name.split('.').last;
+                                            final uploaded = await StorageService.uploadAvatar(
+                                              userIdOrName: nameCtrl.text.trim().isNotEmpty
+                                                  ? nameCtrl.text.trim()
+                                                  : 'student',
+                                              bytes: bytes,
+                                              extension: ext.isNotEmpty ? ext : 'jpg',
+                                            );
+                                            if (ctx.mounted) {
+                                              setDialogState(() {
+                                                avatarUrl = uploaded;
+                                                isUploadingAvatar = false;
+                                              });
+                                            }
+                                          } catch (e) {
+                                            debugPrint('[AddStudentDialog] Avatar upload error: $e');
+                                            if (ctx.mounted) {
+                                              setDialogState(() => isUploadingAvatar = false);
+                                            }
+                                          }
+                                        },
+                                  child: Container(
+                                    padding: const EdgeInsets.all(6),
+                                    decoration: BoxDecoration(
+                                      color: p.primary,
+                                      shape: BoxShape.circle,
+                                      border: Border.all(color: p.surface, width: 2),
+                                    ),
+                                    child: const Icon(
+                                      Icons.camera_alt_rounded,
+                                      size: 14,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 6),
+                          Text(
+                            'Photo (Optional)',
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: p.inkSecondary,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
                     Text(
                       'STUDENT FULL NAME *',
                       style: TextStyle(
@@ -127,6 +252,34 @@ class AddStudentDialog {
                       decoration: const InputDecoration(
                         hintText: 'e.g. Abdur-Rahman Muhammed',
                         prefixIcon: Icon(Icons.face_rounded, size: 20),
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Text(
+                      'STUDENT AGE (YEARS) *',
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.inkMuted,
+                        letterSpacing: 0.6,
+                      ),
+                    ),
+                    const SizedBox(height: 6),
+                    TextField(
+                      controller: ageCtrl,
+                      keyboardType: TextInputType.number,
+                      onChanged: (_) => setDialogState(() {}),
+                      style: TextStyle(fontSize: 14, color: p.ink),
+                      decoration: InputDecoration(
+                        hintText: 'e.g. 9',
+                        prefixIcon: const Icon(Icons.cake_outlined, size: 20),
+                        suffixText: isAgeValid ? '✓ Valid' : null,
+                        suffixStyle: TextStyle(
+                          color: p.success,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
                     const SizedBox(height: 16),
@@ -359,6 +512,8 @@ class AddStudentDialog {
                                           .instance
                                           .addStudent(
                                         fullName: nameCtrl.text.trim(),
+                                        age: parsedAge ?? 8,
+                                        avatarUrl: avatarUrl,
                                         halaqahName: selectedHalaqahName,
                                         halaqahId: selectedHalaqahId,
                                         parentId: finalParentId,

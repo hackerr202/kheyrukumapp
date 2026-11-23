@@ -15,6 +15,7 @@ class StorageService {
   static const String announcementAttachmentsBucket = 'announcement_attachments';
   static const String chatAttachmentsBucket = 'chat_attachments';
   static const String voiceMessagesBucket = 'voice_messages';
+  static const String avatarsBucket = 'avatars';
 
   /// Upload file bytes to specified bucket and return its public URL
   static Future<String?> uploadFile({
@@ -86,6 +87,22 @@ class StorageService {
     final client = SupabaseService.instance.client;
     if (client == null) return '';
     return client.storage.from(bucket).getPublicUrl(path);
+  }
+
+  /// Convenience helper: upload avatar / profile picture
+  static Future<String?> uploadAvatar({
+    required String userIdOrName,
+    required List<int> bytes,
+    String extension = 'jpg',
+  }) async {
+    final cleanName = userIdOrName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final uniquePath = 'avatar_${cleanName}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+    return await uploadFile(
+      bucket: avatarsBucket,
+      path: uniquePath,
+      bytes: bytes,
+      mimeType: 'image/$extension',
+    );
   }
 
   /// Convenience helper: upload circular/announcement attachment

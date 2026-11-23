@@ -153,9 +153,15 @@ class PaymentService {
     required String month,
     required double amount,
     required DateTime dueDate,
+    required DateTime feeStartDate,
   }) async {
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
+    if (!AuthSessionService.instance.isSuperAdmin) {
+      throw Exception(
+        'Access Denied: Only Super Administrators can issue fees or manage payments.',
+      );
+    }
     if (parentId.isEmpty) {
       throw Exception('$studentName has no linked parent account yet.');
     }
@@ -167,6 +173,7 @@ class PaymentService {
           'month_year': month,
           'amount': amount,
           'due_date': dueDate.toIso8601String().substring(0, 10),
+          'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
           'status': 'pending',
         })
         .select(_selectColumns)
@@ -176,13 +183,37 @@ class PaymentService {
     _payments.insert(0, payment);
     _emit();
 
+    // 1. Persist notification in public.notifications for closed-app retrieval
+    try {
+      await client.from('notifications').insert({
+        'user_id': parentId,
+        'title': 'Monthly Tuition Fee Due 💳',
+        'body':
+            'Tuition for $month (${amount.toStringAsFixed(0)}) starting on ${feeStartDate.toLocal().toString().substring(0, 10)} has been issued for $studentName.',
+        'type': 'payment_reminder',
+        'data': {
+          'payment_id': payment.id,
+          'student_id': studentId,
+          'month': month,
+          'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
+        },
+      });
+    } catch (e) {
+      debugPrint('[PaymentService] Notification log error: $e');
+    }
+
+    // 2. Dispatch push notification to parent
     PushNotificationService.instance.dispatchPushToUsers(
       userIds: [parentId],
-      title: 'Monthly Tuition Due',
+      title: 'Monthly Tuition Due 💳',
       body:
-          'A tuition invoice for $month (${amount.toStringAsFixed(0)}) has been issued for $studentName.',
+          'A tuition invoice for $month (${amount.toStringAsFixed(0)}) starting on ${feeStartDate.toLocal().toString().substring(0, 10)} has been issued for $studentName.',
       type: 'payment_reminder',
-      data: {'payment_id': payment.id, 'student_id': studentId},
+      data: {
+        'payment_id': payment.id,
+        'student_id': studentId,
+        'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
+      },
     );
 
     return payment;
@@ -344,5 +375,40 @@ class PaymentService {
       type: 'payment_overdue',
       data: {'payment_id': payment.id, 'parent_id': payment.parentId},
     );
+  }
+
+  /// Automatically check all active fees and remind parents monthly
+  Future<void> checkAndSendMonthlyFeeReminders() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+
+    try {
+      final now = DateTime.now();
+      // Find pending payments
+      final pendingRows = await client
+          .from('monthly_payments')
+          .select(_selectColumns)
+          .eq('status', 'pending');
+
+      if (pendingRows is List) {
+        for (final row in pendingRows) {
+          final payment = _fromRow(Map<String, dynamic>.from(row as Map));
+          // If fee started on or before today, remind parent
+          if (payment.feeStartDate.isBefore(now) ||
+              payment.feeStartDate.day == now.day) {
+            PushNotificationService.instance.dispatchPushToUsers(
+              userIds: [payment.parentId],
+              title: 'Monthly Tuition Reminder 💳',
+              body:
+                  'Tuition for ${payment.studentName} (${payment.month}) is due. Please submit your payment and receipt.',
+              type: 'payment_reminder',
+              data: {'payment_id': payment.id},
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[PaymentService] Error running monthly fee reminders: $e');
+    }
   }
 }

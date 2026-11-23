@@ -20,6 +20,7 @@ class AuthSessionService {
   String _userName = '';
   String _userEmail = '';
   String _userPhone = '';
+  String? _avatarUrl;
   String _assignedHalaqahId = '';
   String _assignedHalaqahName = '';
 
@@ -28,12 +29,15 @@ class AuthSessionService {
   String get userName => _userName.isNotEmpty ? _userName : (_userEmail.isNotEmpty ? _userEmail : 'User');
   String get userEmail => _userEmail;
   String get userPhone => _userPhone;
+  String? get avatarUrl => _avatarUrl;
   String get assignedHalaqahId => _assignedHalaqahId;
   String get assignedHalaqahName => _assignedHalaqahName.isNotEmpty ? _assignedHalaqahName : 'Assigned Halaqah';
 
-  bool get isAdmin => currentRole == 'admin';
+  bool get isSuperAdmin => currentRole == 'superadmin';
+  bool get isAdmin => currentRole == 'admin' || currentRole == 'superadmin';
   bool get isTeacher => currentRole == 'teacher';
   bool get isParent => currentRole == 'parent';
+  bool get canAccessPayments => isSuperAdmin || isParent;
   bool get isAuthenticated => _userId.isNotEmpty || SupabaseService.instance.isAuthenticated;
 
   void _initSession() {
@@ -42,7 +46,7 @@ class AuthSessionService {
       _userId = user.id;
       _userEmail = user.email ?? '';
       if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
-        roleNotifier.value = 'admin';
+        roleNotifier.value = 'superadmin';
         _userName = 'Center Administrator';
       }
       syncFromSupabaseProfile();
@@ -60,16 +64,6 @@ class AuthSessionService {
     _userId = user.id;
     _userEmail = user.email ?? _userEmail;
 
-    if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
-      roleNotifier.value = 'admin';
-      _userName = 'Center Administrator';
-      try {
-        await PushNotificationService.instance.registerDeviceToken();
-        await PushNotificationService.instance.syncRoleSubscription('admin');
-      } catch (_) {}
-      return;
-    }
-
     try {
       final profile = await SupabaseService.instance.getUserProfile();
       if (profile != null) {
@@ -82,9 +76,12 @@ class AuthSessionService {
         _userName = profile['full_name'] ?? _userName;
         _userEmail = profile['email'] ?? _userEmail;
         _userPhone = profile['phone'] ?? _userPhone;
+        _avatarUrl = profile['avatar_url']?.toString();
         final role = (profile['role'] ?? 'parent').toString().toLowerCase();
-        if (['admin', 'teacher', 'parent'].contains(role)) {
+        if (['superadmin', 'admin', 'teacher', 'parent'].contains(role)) {
           roleNotifier.value = role;
+        } else if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
+          roleNotifier.value = 'superadmin';
         }
         if (profile['halaqah_id'] != null) {
           _assignedHalaqahId = profile['halaqah_id'].toString();
@@ -118,6 +115,9 @@ class AuthSessionService {
           }
         }
         roleNotifier.notifyListeners();
+      } else if (_userEmail.toLowerCase() == 'admin@kheyrukum.com') {
+        roleNotifier.value = 'superadmin';
+        _userName = 'Center Administrator';
       }
       try {
         await PushNotificationService.instance.registerDeviceToken();
@@ -136,16 +136,18 @@ class AuthSessionService {
     String? name,
     String? email,
     String? phone,
+    String? avatarUrl,
     String? halaqahId,
     String? halaqahName,
   }) {
     final cleanRole = role.toLowerCase().trim();
-    if (!['admin', 'teacher', 'parent'].contains(cleanRole)) return;
+    if (!['superadmin', 'admin', 'teacher', 'parent'].contains(cleanRole)) return;
 
     if (userId != null) _userId = userId;
     if (name != null) _userName = name;
     if (email != null) _userEmail = email;
     if (phone != null) _userPhone = phone;
+    if (avatarUrl != null) _avatarUrl = avatarUrl;
     if (halaqahId != null) _assignedHalaqahId = halaqahId;
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
 
@@ -164,6 +166,7 @@ class AuthSessionService {
     _userName = '';
     _userEmail = '';
     _userPhone = '';
+    _avatarUrl = null;
     _assignedHalaqahId = '';
     _assignedHalaqahName = '';
     roleNotifier.value = 'parent';
@@ -174,12 +177,14 @@ class AuthSessionService {
     String? name,
     String? email,
     String? phone,
+    String? avatarUrl,
     String? halaqahId,
     String? halaqahName,
   }) {
     if (name != null) _userName = name;
     if (email != null) _userEmail = email;
     if (phone != null) _userPhone = phone;
+    if (avatarUrl != null) _avatarUrl = avatarUrl;
     if (halaqahId != null) _assignedHalaqahId = halaqahId;
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
     roleNotifier.notifyListeners();

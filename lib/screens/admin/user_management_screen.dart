@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:image_picker/image_picker.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/halaqah_service.dart';
+import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/invite_code_dialog.dart';
@@ -24,6 +27,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   List<Map<String, dynamic>> _teachers = [];
   List<Map<String, dynamic>> _parents = [];
+  List<Map<String, dynamic>> _admins = [];
   List<Map<String, dynamic>> _inviteCodes = [];
   bool _isLoading = true;
   String? _loadError;
@@ -32,7 +36,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   @override
   void initState() {
     super.initState();
-    _tabController = TabController(length: 3, vsync: this);
+    _tabController = TabController(length: 4, vsync: this);
     _loadAllUserData();
   }
 
@@ -55,6 +59,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         setState(() {
           _teachers = [];
           _parents = [];
+          _admins = [];
           _inviteCodes = [];
           _loadError = 'Unable to connect to center server. Please try again.';
           _isLoading = false;
@@ -68,14 +73,22 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       final teachersRes = await client
           .from('profiles')
           .select(
-              'id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, created_at')
+              'id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, avatar_url, created_at')
           .eq('role', 'teacher')
           .order('created_at', ascending: false);
 
       final parentsRes = await client
           .from('profiles')
-          .select('id, full_name, email, phone, role, is_suspended, created_at')
+          .select(
+              'id, full_name, email, phone, role, is_suspended, avatar_url, created_at')
           .eq('role', 'parent')
+          .order('created_at', ascending: false);
+
+      final adminsRes = await client
+          .from('profiles')
+          .select(
+              'id, full_name, email, phone, role, is_suspended, halaqah_id, halaqah_name, avatar_url, created_at')
+          .inFilter('role', ['admin', 'superadmin'])
           .order('created_at', ascending: false);
 
       final codesRes = await client
@@ -87,6 +100,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         setState(() {
           _teachers = List<Map<String, dynamic>>.from(teachersRes);
           _parents = List<Map<String, dynamic>>.from(parentsRes);
+          _admins = List<Map<String, dynamic>>.from(adminsRes);
           _inviteCodes = List<Map<String, dynamic>>.from(codesRes);
           _loadError = null;
           _isLoading = false;
@@ -444,6 +458,221 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
   }
 
+  Future<void> _pickAndUploadUserAvatar(Map<String, dynamic> user) async {
+    final p = AppColors.of(context);
+    try {
+      final picker = ImagePicker();
+      final picked = await picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 600,
+        maxHeight: 600,
+        imageQuality: 85,
+      );
+      if (picked == null) return;
+
+      final bytes = await picked.readAsBytes();
+      final ext = picked.name.split('.').last;
+      final uploadedUrl = await StorageService.uploadAvatar(
+        userIdOrName: user['id']?.toString() ?? 'user',
+        bytes: bytes,
+        extension: ext.isNotEmpty ? ext : 'jpg',
+      );
+
+      if (uploadedUrl == null) {
+        throw Exception('Failed to upload image to storage.');
+      }
+
+      final client = SupabaseService.instance.client;
+      if (client != null) {
+        await client
+            .from('profiles')
+            .update({
+              'avatar_url': uploadedUrl,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', user['id']);
+      }
+
+      await _loadAllUserData();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${user['full_name']} profile photo updated.'),
+            backgroundColor: p.success,
+          ),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+                'Could not update photo: ${SupabaseService.cleanErrorMessage(e)}'),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _showChangeRoleDialog(Map<String, dynamic> user) async {
+    final p = AppColors.of(context);
+    final String currentRole =
+        (user['role'] ?? 'parent').toString().toLowerCase();
+    String selectedRole = currentRole;
+    final String userEmail = user['email']?.toString() ?? '';
+    final bool isPrimaryAdmin =
+        userEmail.toLowerCase() == 'admin@kheyrukum.com';
+
+    await showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          backgroundColor: p.surface,
+          shape:
+              RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+          title: Row(
+            children: [
+              Icon(Icons.shield_outlined, color: p.gold, size: 22),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  'Change Role for ${user['full_name']}',
+                  style: TextStyle(
+                      fontSize: 16, fontWeight: FontWeight.w700, color: p.ink),
+                ),
+              ),
+            ],
+          ),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Select permissions and access level for this user:',
+                style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
+              ),
+              const SizedBox(height: 14),
+              RadioListTile<String>(
+                title: const Text('Superadmin (Full Control)',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: const Text(
+                    'Full access including payments, fees, and user role promotion',
+                    style: TextStyle(fontSize: 11)),
+                value: 'superadmin',
+                groupValue: selectedRole,
+                activeColor: p.gold,
+                onChanged: (v) => setDialogState(() => selectedRole = v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Admin (Center Administrator)',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: const Text(
+                    'Study circles, students, attendance, homework (No payment access)',
+                    style: TextStyle(fontSize: 11)),
+                value: 'admin',
+                groupValue: selectedRole,
+                activeColor: p.primary,
+                onChanged: isPrimaryAdmin
+                    ? null
+                    : (v) => setDialogState(() => selectedRole = v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Teacher (Ustaz)',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: const Text(
+                    'Assigned study circle, attendance, and recitation grading',
+                    style: TextStyle(fontSize: 11)),
+                value: 'teacher',
+                groupValue: selectedRole,
+                activeColor: p.primary,
+                onChanged: isPrimaryAdmin
+                    ? null
+                    : (v) => setDialogState(() => selectedRole = v!),
+              ),
+              RadioListTile<String>(
+                title: const Text('Parent',
+                    style:
+                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: const Text(
+                    'Linked children, weekly reports, and tuition payment',
+                    style: TextStyle(fontSize: 11)),
+                value: 'parent',
+                groupValue: selectedRole,
+                activeColor: p.info,
+                onChanged: isPrimaryAdmin
+                    ? null
+                    : (v) => setDialogState(() => selectedRole = v!),
+              ),
+              if (isPrimaryAdmin)
+                Padding(
+                  padding: const EdgeInsets.only(top: 8),
+                  child: Text(
+                    'Note: The primary center director account must remain a Superadmin.',
+                    style: TextStyle(
+                        fontSize: 11,
+                        color: p.warning,
+                        fontStyle: FontStyle.italic),
+                  ),
+                ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: selectedRole == currentRole
+                  ? null
+                  : () async {
+                      Navigator.pop(ctx);
+                      try {
+                        final client = SupabaseService.instance.client;
+                        if (client == null) {
+                          throw Exception('Server not connected.');
+                        }
+                        await client.rpc('admin_set_user_role', params: {
+                          'p_user_id': user['id'],
+                          'p_new_role': selectedRole,
+                        });
+                        await _loadAllUserData();
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  '${user['full_name']} promoted to $selectedRole successfully.'),
+                              backgroundColor: p.success,
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                  'Failed to update role: ${SupabaseService.cleanErrorMessage(e)}'),
+                              backgroundColor: p.danger,
+                            ),
+                          );
+                        }
+                      }
+                    },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: p.primary,
+                foregroundColor: Colors.white,
+              ),
+              child: const Text('Update Role'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
@@ -469,7 +698,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               ),
             ),
             Text(
-              '${_teachers.length} Teachers • ${_parents.length} Parents',
+              '${_teachers.length} Teachers • ${_parents.length} Parents • ${_admins.length} Admins',
               style: TextStyle(color: p.inkSecondary, fontSize: 11.5),
             ),
           ],
@@ -501,9 +730,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               indicatorWeight: 3,
               labelColor: p.primary,
               unselectedLabelColor: p.inkSecondary,
+              isScrollable: true,
               tabs: [
                 Tab(text: 'Teachers (${_teachers.length})'),
                 Tab(text: 'Parents (${_parents.length})'),
+                Tab(text: 'Admins (${_admins.length})'),
                 Tab(text: 'Invites (${_inviteCodes.length})'),
               ],
             ),
@@ -541,6 +772,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         children: [
                           _buildUserList(_teachers, 'teacher', p),
                           _buildUserList(_parents, 'parent', p),
+                          _buildUserList(_admins, 'admin', p),
                           _buildInviteCodesList(p),
                         ],
                       )),
@@ -598,10 +830,13 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               children: [
                 ProAvatar(
                   name: name,
+                  imageUrl: user['avatar_url']?.toString(),
                   radius: 22,
                   color: isSuspended
                       ? p.danger
-                      : (listType == 'teacher' ? p.primary : p.gold),
+                      : (user['role'] == 'superadmin' || user['role'] == 'admin'
+                          ? p.gold
+                          : (listType == 'teacher' ? p.primary : p.gold)),
                 ),
                 const SizedBox(width: 14),
                 Expanded(
@@ -638,31 +873,42 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                             : (user['email']?.toString() ?? 'No contact info'),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       ),
-                      if (listType == 'teacher') ...[
-                        const SizedBox(height: 5),
-                        Builder(
-                          builder: (_) {
-                            final matches = HalaqahService.instance.halaqahs
-                                .where((h) => h.teacherId == user['id']);
-                            final profileHalaqah =
-                                user['halaqah_name']?.toString();
-                            final assignedName = (profileHalaqah != null &&
-                                    profileHalaqah.isNotEmpty)
-                                ? profileHalaqah
-                                : (matches.isNotEmpty
-                                    ? matches.first.name
-                                    : 'Unassigned Circle');
-                            return Text(
-                              assignedName,
-                              style: TextStyle(
-                                fontSize: 11.5,
-                                color: p.primary,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            );
-                          },
-                        ),
-                      ],
+                      const SizedBox(height: 5),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        children: [
+                          ProStatusPill(
+                            label: (user['role'] ?? listType).toString().toUpperCase(),
+                            color: (user['role'] == 'superadmin' || user['role'] == 'admin')
+                                ? p.gold
+                                : (listType == 'teacher' ? p.primary : p.info),
+                          ),
+                          if (listType == 'teacher')
+                            Builder(
+                              builder: (_) {
+                                final matches = HalaqahService.instance.halaqahs
+                                    .where((h) => h.teacherId == user['id']);
+                                final profileHalaqah =
+                                    user['halaqah_name']?.toString();
+                                final assignedName = (profileHalaqah != null &&
+                                        profileHalaqah.isNotEmpty)
+                                    ? profileHalaqah
+                                    : (matches.isNotEmpty
+                                        ? matches.first.name
+                                        : 'Unassigned Circle');
+                                return Text(
+                                  assignedName,
+                                  style: TextStyle(
+                                    fontSize: 11.5,
+                                    color: p.primary,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                );
+                              },
+                            ),
+                        ],
+                      ),
                     ],
                   ),
                 ),
@@ -673,7 +919,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   ),
                   color: p.surface,
                   onSelected: (val) {
-                    if (val == 'assign_halaqah') {
+                    if (val == 'promote') {
+                      _showChangeRoleDialog(user);
+                    } else if (val == 'avatar') {
+                      _pickAndUploadUserAvatar(user);
+                    } else if (val == 'assign_halaqah') {
                       _showAssignHalaqahDialog(user);
                     } else if (val == 'suspend') {
                       _toggleSuspendUser(user);
@@ -682,6 +932,44 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     }
                   },
                   itemBuilder: (context) => [
+                    if (AuthSessionService.instance.isSuperAdmin) ...[
+                      PopupMenuItem(
+                        value: 'promote',
+                        child: Row(
+                          children: [
+                            Icon(Icons.shield_outlined,
+                                size: 18, color: p.gold),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Promote / Change Role',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: p.gold,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      PopupMenuItem(
+                        value: 'avatar',
+                        child: Row(
+                          children: [
+                            Icon(Icons.photo_camera_outlined,
+                                size: 18, color: p.primary),
+                            const SizedBox(width: 10),
+                            Text(
+                              'Update Photo',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: p.primary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
                     if (listType == 'teacher')
                       PopupMenuItem(
                         value: 'assign_halaqah',
