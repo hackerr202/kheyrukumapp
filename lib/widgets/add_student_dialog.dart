@@ -273,7 +273,7 @@ class AddStudentDialog {
                       style: TextStyle(fontSize: 14, color: p.ink),
                       decoration: InputDecoration(
                         hintText: 'e.g. 9',
-                        prefixIcon: const Icon(Icons.cake_outlined, size: 20),
+                        prefixIcon: const Icon(Icons.cake, size: 20),
                         suffixText: isAgeValid ? '✓ Valid' : null,
                         suffixStyle: TextStyle(
                           color: p.success,

@@ -533,7 +533,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
           title: Row(
             children: [
-              Icon(Icons.shield_outlined, color: p.gold, size: 22),
+              Icon(Icons.security, color: p.gold, size: 22),
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
@@ -937,7 +937,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         value: 'promote',
                         child: Row(
                           children: [
-                            Icon(Icons.shield_outlined,
+                            Icon(Icons.security,
                                 size: 18, color: p.gold),
                             const SizedBox(width: 10),
                             Text(
@@ -955,7 +955,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         value: 'avatar',
                         child: Row(
                           children: [
-                            Icon(Icons.photo_camera_outlined,
+                            Icon(Icons.photo_camera,
                                 size: 18, color: p.primary),
                             const SizedBox(width: 10),
                             Text(

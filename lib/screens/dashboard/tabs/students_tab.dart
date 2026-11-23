@@ -1754,7 +1754,7 @@ class _StudentsTabState extends State<StudentsTab> {
                     decoration: const InputDecoration(
                       labelText: 'Student Age *',
                       hintText: 'e.g. 8',
-                      prefixIcon: Icon(Icons.cake_outlined, size: 20),
+                      prefixIcon: Icon(Icons.cake, size: 20),
                     ),
                   ),
                   const SizedBox(height: 14),
