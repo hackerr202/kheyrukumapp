@@ -1,5 +1,8 @@
+import 'dart:async';
 import 'package:flutter/material.dart';
+import '../services/connectivity_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/supabase_service.dart';
 
 /// Centralized ValueNotifier for application language and directionality.
 /// Supported language codes:
@@ -30,6 +33,27 @@ class LocaleNotifier extends ValueNotifier<Locale> {
     try {
       await LocalStorageService.instance.saveString(prefKey, clean);
     } catch (_) {}
+    unawaited(syncPreferredLanguageToProfile(clean));
+  }
+
+  /// Syncs the selected language to `public.profiles.preferred_language`
+  /// when authenticated and online, ignoring offline/network errors gracefully.
+  Future<void> syncPreferredLanguageToProfile([String? languageCode]) async {
+    final code = (languageCode ?? value.languageCode).toLowerCase().trim();
+    if (!['en', 'ar', 'am'].contains(code)) return;
+    if (!ConnectivityService.instance.isOnline) return;
+
+    final client = SupabaseService.instance.client;
+    final user = SupabaseService.instance.currentUser;
+    if (client == null || user == null) return;
+
+    try {
+      await client
+          .from('profiles')
+          .update({'preferred_language': code}).eq('id', user.id);
+    } catch (e) {
+      debugPrint('[LocaleNotifier] preferred_language sync note: $e');
+    }
   }
 
   bool get isRtl => value.languageCode == 'ar';

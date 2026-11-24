@@ -1,5 +1,7 @@
+import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../localization/locale_notifier.dart';
 import 'connectivity_service.dart';
 import 'local_storage_service.dart';
 import 'offline_sync_service.dart';
@@ -180,6 +182,15 @@ class AuthSessionService {
       }
 
       await _saveCachedProfile(isSuspended: false);
+
+      final serverLang =
+          profile['preferred_language']?.toString().toLowerCase().trim() ?? '';
+      final localLang = LocaleNotifier.instance.value.languageCode;
+      if (serverLang != localLang) {
+        unawaited(
+          LocaleNotifier.instance.syncPreferredLanguageToProfile(localLang),
+        );
+      }
 
       // Always notify listeners even if the role string remained identical (e.g. account switch).
       // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
