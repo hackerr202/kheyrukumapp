@@ -435,6 +435,7 @@ class AnnouncementService {
         body: content,
         targetAudience: targetAudience,
         type: 'announcement',
+        showLocally: false,
         data: {
           'announcement_id': ann.id,
           'target_audience': targetAudience,

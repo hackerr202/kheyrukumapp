@@ -20,6 +20,7 @@ class MessagingService {
 
   final List<Conversation> _conversations = [];
   final Map<String, List<ChatMessage>> _messagesMap = {};
+  final Map<String, String> _profileNamesById = {};
   bool _cacheLoaded = false;
 
   final StreamController<List<Conversation>> _conversationsController =
@@ -85,6 +86,7 @@ class MessagingService {
     _chatControllers.clear();
     _conversations.clear();
     _messagesMap.clear();
+    _profileNamesById.clear();
     _cacheLoaded = false;
     isLoadingNotifier.value = false;
     errorNotifier.value = null;
@@ -315,6 +317,7 @@ class MessagingService {
           _conversationsController.add(List.from(_conversations));
         }
         await _saveConversationsCache();
+        unawaited(_hydrateParticipantNames(parsed));
       }
     } catch (e) {
       if (ConnectivityService.isNetworkError(e)) {
@@ -439,17 +442,103 @@ class MessagingService {
     }
   }
 
-  /// Returns a viewer-appropriate display title for a conversation.
+  bool _isPlaceholderName(String? value) {
+    final lower = value?.trim().toLowerCase() ?? '';
+    if (lower.isEmpty) return true;
+    return lower.contains('challenger') ||
+        lower == 'test' ||
+        lower.startsWith('test ') ||
+        lower.startsWith('test_') ||
+        lower == 'admin director' ||
+        lower == 'center director';
+  }
+
+  Future<void> _hydrateParticipantNames(List<Conversation> convos) async {
+    final client = SupabaseService.instance.client;
+    if (client == null || convos.isEmpty) return;
+
+    final ids = <String>{};
+    for (final c in convos) {
+      if (c.isGroup) continue;
+      for (final pid in c.participantIds) {
+        final clean = pid.trim();
+        if (_isValidUuid(clean)) ids.add(clean);
+      }
+    }
+    if (ids.isEmpty) return;
+
+    var updated = false;
+    try {
+      final rpcRes = await client.rpc(
+        'get_conversation_participant_names',
+        params: {'p_user_ids': ids.toList()},
+      );
+      if (rpcRes is List) {
+        for (final row in rpcRes) {
+          if (row is! Map) continue;
+          final id = row['id']?.toString().trim() ?? '';
+          final name = row['full_name']?.toString().trim() ?? '';
+          if (id.isNotEmpty &&
+              name.isNotEmpty &&
+              _profileNamesById[id] != name) {
+            _profileNamesById[id] = name;
+            updated = true;
+          }
+        }
+      }
+    } catch (_) {
+      try {
+        final contacts = await fetchMessageableContacts();
+        for (final c in contacts) {
+          final id = c['id']?.toString().trim() ?? '';
+          final name = c['full_name']?.toString().trim() ?? '';
+          if (id.isNotEmpty &&
+              name.isNotEmpty &&
+              _profileNamesById[id] != name) {
+            _profileNamesById[id] = name;
+            updated = true;
+          }
+        }
+      } catch (_) {}
+    }
+
+    if (updated &&
+        !_conversationsController.isClosed &&
+        _conversations.isNotEmpty) {
+      _conversationsController.add(List.from(_conversations));
+    }
+  }
+
+  /// Returns a viewer-appropriate display title for a conversation, preferring
+  /// the live `profiles.full_name` of the other participant for direct chats.
   String displayTitleFor(Conversation convo, String currentUserId) {
     if (!convo.isGroup && convo.participantIds.isNotEmpty) {
       if (currentUserId.isNotEmpty &&
           convo.participantIds.contains(currentUserId)) {
         for (var i = 0; i < convo.participantIds.length; i++) {
-          if (convo.participantIds[i] != currentUserId &&
-              i < convo.participantNames.length &&
-              convo.participantNames[i].trim().isNotEmpty) {
-            return convo.participantNames[i].trim();
+          final pid = convo.participantIds[i];
+          if (pid != currentUserId) {
+            final liveName = _profileNamesById[pid];
+            if (liveName != null && liveName.trim().isNotEmpty) {
+              return liveName.trim();
+            }
+            if (i < convo.participantNames.length &&
+                convo.participantNames[i].trim().isNotEmpty) {
+              return convo.participantNames[i].trim();
+            }
           }
+        }
+      } else if (convo.participantIds.length >= 2) {
+        final first = _profileNamesById[convo.participantIds[0]] ??
+            (convo.participantNames.isNotEmpty
+                ? convo.participantNames[0]
+                : '');
+        final second = _profileNamesById[convo.participantIds[1]] ??
+            (convo.participantNames.length > 1
+                ? convo.participantNames[1]
+                : '');
+        if (first.trim().isNotEmpty && second.trim().isNotEmpty) {
+          return '${first.trim()} & ${second.trim()}';
         }
       } else if (convo.participantNames.length >= 2) {
         return '${convo.participantNames[0]} & ${convo.participantNames[1]}';
@@ -1084,6 +1173,10 @@ class MessagingService {
     }
 
     await _saveConversationsCacheAndEmit(convo);
+    if (!_isPlaceholderName(otherName)) {
+      _profileNamesById[otherUserId] = otherName.trim();
+    }
+    unawaited(_hydrateParticipantNames([convo]));
 
     if (initialMessage != null && initialMessage.trim().isNotEmpty) {
       await sendMessage(
@@ -1152,22 +1245,63 @@ class MessagingService {
     );
   }
 
-  Future<String?> _resolveAdminUserId() async {
+  Future<({String id, String name})?> _resolveAdminContact() async {
     final client = SupabaseService.instance.client;
     if (client == null) return null;
+
+    ({String id, String name})? pickBest(Iterable<Map<String, dynamic>> rows) {
+      ({String id, String name, int rank})? best;
+      for (final row in rows) {
+        final id = row['id']?.toString().trim() ?? '';
+        if (!_isValidUuid(id)) continue;
+        if (row['is_suspended'] == true) continue;
+        final role = row['role']?.toString().toLowerCase().trim() ?? '';
+        if (role != 'superadmin' && role != 'admin') continue;
+
+        final fullName = row['full_name']?.toString().trim() ?? '';
+        final email = row['email']?.toString().trim() ?? '';
+        final resolvedName = fullName.isNotEmpty
+            ? fullName
+            : (email.isNotEmpty ? email : 'Center Director');
+
+        final isSuper = role == 'superadmin';
+        final isRealName = !_isPlaceholderName(fullName);
+        final rank = (isRealName ? 0 : 2) + (isSuper ? 0 : 1);
+        if (best == null || rank < best.rank) {
+          best = (id: id, name: resolvedName, rank: rank);
+        }
+      }
+      return best != null ? (id: best.id, name: best.name) : null;
+    }
+
+    try {
+      final contacts = await fetchMessageableContacts();
+      final fromContacts = pickBest(contacts);
+      if (fromContacts != null) return fromContacts;
+    } catch (_) {}
+
     try {
       final res = await client
           .from('profiles')
-          .select('id')
+          .select('id, full_name, email, role, is_suspended')
           .inFilter('role', ['superadmin', 'admin'])
-          .eq('is_suspended', false)
-          .limit(1)
-          .maybeSingle();
-      return res?['id']?.toString();
+          .or('is_suspended.is.null,is_suspended.eq.false')
+          .limit(25);
+      if (res is List) {
+        final fromTable = pickBest(
+          res.whereType<Map>().map((e) => Map<String, dynamic>.from(e)),
+        );
+        if (fromTable != null) return fromTable;
+      }
     } catch (e) {
-      debugPrint('[MessagingService] Failed to resolve admin ID: $e');
-      return null;
+      debugPrint('[MessagingService] Failed to resolve admin contact: $e');
     }
+    return null;
+  }
+
+  Future<String?> _resolveAdminUserId() async {
+    final contact = await _resolveAdminContact();
+    return contact?.id;
   }
 
   Future<String?> _resolveTeacherUserId({
@@ -1316,13 +1450,25 @@ class MessagingService {
     String? initialMessage,
   }) async {
     String resolvedTargetId = targetId ?? '';
-    if (!_isValidUuid(resolvedTargetId)) {
-      resolvedTargetId = (targetRole == 'admin'
-              ? await _resolveAdminUserId()
-              : await _resolveTeacherUserId(
-                  halaqahId: halaqahId,
-                  halaqahName: halaqahName,
-                )) ??
+    String resolvedTargetName = targetName;
+    if (targetRole == 'admin') {
+      if (!_isValidUuid(resolvedTargetId)) {
+        final adminContact = await _resolveAdminContact();
+        if (adminContact != null) {
+          resolvedTargetId = adminContact.id;
+          resolvedTargetName = adminContact.name;
+        }
+      } else if (_isPlaceholderName(resolvedTargetName)) {
+        final live = _profileNamesById[resolvedTargetId];
+        if (live != null && live.trim().isNotEmpty) {
+          resolvedTargetName = live.trim();
+        }
+      }
+    } else if (!_isValidUuid(resolvedTargetId)) {
+      resolvedTargetId = await _resolveTeacherUserId(
+            halaqahId: halaqahId,
+            halaqahName: halaqahName,
+          ) ??
           '';
     }
 
@@ -1342,8 +1488,8 @@ class MessagingService {
       callerName: parentName,
       callerRole: 'parent',
       otherUserId: resolvedTargetId,
-      otherName: targetName,
-      title: targetName,
+      otherName: resolvedTargetName,
+      title: resolvedTargetName,
       halaqahId: halaqahId,
       groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
       initialMessage: initialMessage,

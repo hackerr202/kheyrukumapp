@@ -16,28 +16,6 @@ import '../../widgets/pro_shimmer.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../messages/chat_screen.dart';
 
-class _CenterPaymentChannel {
-  final String labelKey;
-  final String accountNumber;
-
-  const _CenterPaymentChannel({
-    required this.labelKey,
-    required this.accountNumber,
-  });
-}
-
-/// Centralized school payment destination config for Superadmin/center administration.
-const List<_CenterPaymentChannel> _kCenterPaymentChannels = [
-  _CenterPaymentChannel(
-    labelKey: 'cbeBankName',
-    accountNumber: '1000123456789',
-  ),
-  _CenterPaymentChannel(
-    labelKey: 'telebirrAccountLabel',
-    accountNumber: '+251 91 123 4567',
-  ),
-];
-
 /// Flagship Tuition & Fee Management Screen:
 /// - Parents: View active monthly due, copy configured center bank/mobile accounts, upload real receipt screenshots, track status.
 /// - Admins: Issue invoices, inspect actual uploaded receipt images, approve/reject with reason, message overdue parents.
@@ -301,7 +279,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     textBaseline: TextBaseline.alphabetic,
                     children: [
                       Text(
-                        '\$${activePayment.amount.toStringAsFixed(0)}',
+                        AppLocalizations.of(context)
+                            .formatCurrency(activePayment.amount),
                         style: const TextStyle(
                           fontSize: 32,
                           fontWeight: FontWeight.w800,
@@ -337,9 +316,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                             child: Text(
                               AppLocalizations.of(context)
                                   .tr('verifiedApprovedByLine', {
-                                'name': activePayment.reviewedBy ??
+                                'name': activePayment.displayReviewerName ??
                                     AppLocalizations.of(context)
-                                        .centerAdministrationTitle,
+                                        .translate('centerDirectorFallback'),
                               }),
                               style: const TextStyle(
                                 color: Colors.white,
@@ -408,41 +387,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           const SizedBox(height: 20),
 
           // Bank & Digital Channels
-          ProCard(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Icon(Icons.account_balance_rounded,
-                        size: 20, color: p.primary),
-                    const SizedBox(width: 8),
-                    Flexible(
-                      child: Text(
-                        AppLocalizations.of(context).schoolPaymentDetails,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 14.5,
-                          color: p.ink,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 14),
-                for (var i = 0; i < _kCenterPaymentChannels.length; i++) ...[
-                  if (i > 0) const SizedBox(height: 10),
-                  _buildCopyableAccountRow(
-                    context: context,
-                    p: p,
-                    label: AppLocalizations.of(context)
-                        .translate(_kCenterPaymentChannels[i].labelKey),
-                    accountNumber: _kCenterPaymentChannels[i].accountNumber,
-                  ),
-                ],
-              ],
-            ),
+          _buildPaymentChannelsCard(
+            context: context,
+            p: p,
+            allowEdit: false,
           ),
 
           const SizedBox(height: 24),
@@ -511,6 +459,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 color: p.success,
               ),
             ],
+          ),
+          const SizedBox(height: 18),
+          _buildPaymentChannelsCard(
+            context: context,
+            p: p,
+            allowEdit: _isSuperAdmin,
           ),
           const SizedBox(height: 22),
 
@@ -617,7 +571,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   ),
                 ),
                 Text(
-                  '\$${payment.amount.toStringAsFixed(0)}',
+                  loc.formatCurrency(payment.amount),
                   style: TextStyle(
                     fontWeight: FontWeight.w800,
                     fontSize: 19,
@@ -929,6 +883,88 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             ],
           ],
         ),
+      ),
+    );
+  }
+
+  Widget _buildPaymentChannelsCard({
+    required BuildContext context,
+    required AppPalette p,
+    required bool allowEdit,
+  }) {
+    final loc = AppLocalizations.of(context);
+    return ValueListenableBuilder<List<CenterPaymentChannel>>(
+      valueListenable: PaymentService.instance.paymentChannelsNotifier,
+      builder: (context, channels, _) {
+        return ProCard(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.account_balance_rounded,
+                      size: 20, color: p.primary),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      loc.schoolPaymentDetails,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14.5,
+                        color: p.ink,
+                      ),
+                    ),
+                  ),
+                  if (allowEdit)
+                    TextButton.icon(
+                      onPressed: () =>
+                          _showEditPaymentChannelsDialog(context, channels),
+                      icon: Icon(Icons.edit_outlined,
+                          size: 16, color: p.primary),
+                      label: Text(
+                        loc.translate('editPaymentChannelsAction'),
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: p.primary,
+                        ),
+                      ),
+                      style: TextButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 10, vertical: 6),
+                        minimumSize: const Size(0, 32),
+                        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 14),
+              for (var i = 0; i < channels.length; i++) ...[
+                if (i > 0) const SizedBox(height: 10),
+                _buildCopyableAccountRow(
+                  context: context,
+                  p: p,
+                  label: loc.translate(channels[i].labelKey),
+                  accountNumber: channels[i].accountNumber,
+                ),
+              ],
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditPaymentChannelsDialog(
+    BuildContext context,
+    List<CenterPaymentChannel> channels,
+  ) {
+    showDialog<void>(
+      context: context,
+      builder: (_) => _EditPaymentChannelsDialog(
+        channels: channels,
+        hostMessenger: ScaffoldMessenger.of(context),
       ),
     );
   }
@@ -1266,7 +1302,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     _buildReceiptRow(
                         p, loc.translate('monthShort'), payment.month),
                     _buildReceiptRow(p, loc.translate('amountShort'),
-                        '\$${payment.amount.toStringAsFixed(2)}'),
+                        loc.formatCurrency(payment.amount, decimals: 2)),
                     _buildReceiptRow(p, loc.translate('statusFieldLabel'),
                         loc.localizedPaymentStatus(payment.status)),
                   ],
@@ -1560,7 +1596,9 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
               controller: _amountCtrl,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: InputDecoration(labelText: '${loc.feeAmount} (\$)'),
+              decoration: InputDecoration(
+                labelText: '${loc.feeAmount} (${loc.translate('currencyCode')})',
+              ),
             ),
             const SizedBox(height: 12),
             InkWell(
@@ -1975,6 +2013,141 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
                   ),
                 )
               : Text(loc.translate('confirmRejectionAction')),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditPaymentChannelsDialog extends StatefulWidget {
+  final List<CenterPaymentChannel> channels;
+  final ScaffoldMessengerState hostMessenger;
+
+  const _EditPaymentChannelsDialog({
+    required this.channels,
+    required this.hostMessenger,
+  });
+
+  @override
+  State<_EditPaymentChannelsDialog> createState() =>
+      _EditPaymentChannelsDialogState();
+}
+
+class _EditPaymentChannelsDialogState
+    extends State<_EditPaymentChannelsDialog> {
+  late final TextEditingController _cbeCtrl;
+  late final TextEditingController _telebirrCtrl;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    String findAccount(String id, String fallback) {
+      for (final ch in widget.channels) {
+        if (ch.id == id && ch.accountNumber.trim().isNotEmpty) {
+          return ch.accountNumber.trim();
+        }
+      }
+      return fallback;
+    }
+
+    _cbeCtrl = TextEditingController(
+      text: findAccount('cbe', '1000123456789'),
+    );
+    _telebirrCtrl = TextEditingController(
+      text: findAccount('telebirr', '+251 91 123 4567'),
+    );
+  }
+
+  @override
+  void dispose() {
+    _cbeCtrl.dispose();
+    _telebirrCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    if (_isSaving) return;
+    final cbe = _cbeCtrl.text.trim();
+    final telebirr = _telebirrCtrl.text.trim();
+    if (cbe.isEmpty || telebirr.isEmpty) return;
+
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    setState(() => _isSaving = true);
+    try {
+      await PaymentService.instance.savePaymentChannels(
+        cbeNumber: cbe,
+        telebirrNumber: telebirr,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(loc.translate('paymentChannelsSavedMsg')),
+          backgroundColor: p.success,
+        ),
+      );
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _isSaving = false);
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(SupabaseService.cleanErrorMessage(e)),
+          backgroundColor: p.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    return AlertDialog(
+      title: Text(loc.translate('editPaymentChannelsTitle')),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _cbeCtrl,
+              enabled: !_isSaving,
+              keyboardType: TextInputType.text,
+              decoration: InputDecoration(
+                labelText: loc.translate('cbeBankName'),
+                prefixIcon: const Icon(Icons.account_balance_rounded, size: 18),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _telebirrCtrl,
+              enabled: !_isSaving,
+              keyboardType: TextInputType.phone,
+              decoration: InputDecoration(
+                labelText: loc.translate('telebirrAccountLabel'),
+                prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: Text(loc.cancel),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: p.primary,
+            foregroundColor: p.onPrimary,
+          ),
+          child: Text(
+            _isSaving
+                ? loc.savingProgress
+                : loc.translate('saveAccountsAction'),
+          ),
         ),
       ],
     );

@@ -66,6 +66,7 @@ class PushNotificationService {
   String? _cachedDeviceToken;
   String? _pendingRefreshToken;
   Map<String, dynamic>? _pendingNavigationIntent;
+  final Map<String, DateTime> _recentShownNotifications = {};
 
   StreamSubscription<String>? _tokenRefreshSub;
   StreamSubscription<RemoteMessage>? _foregroundMsgSub;
@@ -619,6 +620,7 @@ class PushNotificationService {
     _cachedDeviceToken = null;
     _pendingRefreshToken = null;
     _pendingNavigationIntent = null;
+    _recentShownNotifications.clear();
     await LocalStorageService.instance.remove(_tokenStorageKey);
     await LocalStorageService.instance.remove(_tokenProviderKey);
     await LocalStorageService.instance.remove(_cachedRoleKey);
@@ -735,6 +737,20 @@ class PushNotificationService {
     Map<String, dynamic>? data,
   }) async {
     try {
+      final dedupKey =
+          '${type.toLowerCase().trim()}|${title.trim()}|${body.trim()}';
+      final now = DateTime.now();
+      _recentShownNotifications.removeWhere(
+        (_, shownAt) => now.difference(shownAt).inSeconds >= 30,
+      );
+      final lastShown = _recentShownNotifications[dedupKey];
+      if (lastShown != null && now.difference(lastShown).inSeconds < 15) {
+        debugPrint(
+            '[PushNotificationService] Suppressed duplicate local notification within 15s: $dedupKey');
+        return;
+      }
+      _recentShownNotifications[dedupKey] = now;
+
       final notifId = id ?? _allocateNotificationId();
 
       final NotificationDetails platformDetails = NotificationDetails(

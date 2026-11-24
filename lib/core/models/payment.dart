@@ -1,6 +1,51 @@
 import '../utils/json_parsers.dart';
 
+class CenterPaymentChannel {
+  final String id;
+  final String labelKey;
+  final String accountName;
+  final String accountNumber;
+  final int displayOrder;
+
+  const CenterPaymentChannel({
+    required this.id,
+    required this.labelKey,
+    this.accountName = '',
+    required this.accountNumber,
+    this.displayOrder = 0,
+  });
+
+  factory CenterPaymentChannel.fromJson(Map<String, dynamic> json) {
+    return CenterPaymentChannel(
+      id: JsonParsers.asString(json['id']),
+      labelKey: JsonParsers.asNullableString(json['label_key']) ?? 'cbeBankName',
+      accountName: JsonParsers.asString(json['account_name']),
+      accountNumber: JsonParsers.asString(json['account_number']),
+      displayOrder: JsonParsers.asInt(json['display_order'], 0),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'id': id,
+      'label_key': labelKey,
+      'account_name': accountName,
+      'account_number': accountNumber,
+      'display_order': displayOrder,
+    };
+  }
+}
+
 class MonthlyPayment {
+  static final RegExp _uuidPattern = RegExp(
+    r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+  );
+
+  static bool looksLikeUuid(String? value) {
+    final trimmed = value?.trim() ?? '';
+    return trimmed.isNotEmpty && _uuidPattern.hasMatch(trimmed);
+  }
+
   final String id;
   final String parentId;
   final String parentName;
@@ -18,6 +63,7 @@ class MonthlyPayment {
   final DateTime? submittedAt;
   final DateTime? reviewedAt;
   final String? reviewedBy;
+  final String? verifiedByName;
   final String? notes;
 
   const MonthlyPayment({
@@ -38,6 +84,7 @@ class MonthlyPayment {
     this.submittedAt,
     this.reviewedAt,
     this.reviewedBy,
+    this.verifiedByName,
     this.notes,
   });
 
@@ -62,6 +109,7 @@ class MonthlyPayment {
       submittedAt: JsonParsers.asNullableDateTime(json['submitted_at']),
       reviewedAt: JsonParsers.asNullableDateTime(json['reviewed_at']),
       reviewedBy: JsonParsers.asNullableString(json['reviewed_by']),
+      verifiedByName: JsonParsers.asNullableString(json['verified_by_name']),
       notes: JsonParsers.asNullableString(json['notes']),
     );
   }
@@ -85,8 +133,22 @@ class MonthlyPayment {
       'submitted_at': submittedAt?.toIso8601String(),
       'reviewed_at': reviewedAt?.toIso8601String(),
       'reviewed_by': reviewedBy,
+      'verified_by_name': verifiedByName,
       'notes': notes,
     };
+  }
+
+  /// Safe human-readable reviewer name; never returns a raw Postgres UUID.
+  String? get displayReviewerName {
+    final named = verifiedByName?.trim();
+    if (named != null && named.isNotEmpty && !looksLikeUuid(named)) {
+      return named;
+    }
+    final fallback = reviewedBy?.trim();
+    if (fallback != null && fallback.isNotEmpty && !looksLikeUuid(fallback)) {
+      return fallback;
+    }
+    return null;
   }
 
   bool get isApproved => status.toLowerCase() == 'approved';
@@ -107,6 +169,7 @@ class MonthlyPayment {
     DateTime? submittedAt,
     DateTime? reviewedAt,
     String? reviewedBy,
+    String? verifiedByName,
     String? notes,
   }) {
     return MonthlyPayment(
@@ -127,6 +190,7 @@ class MonthlyPayment {
       submittedAt: submittedAt ?? this.submittedAt,
       reviewedAt: reviewedAt ?? this.reviewedAt,
       reviewedBy: reviewedBy ?? this.reviewedBy,
+      verifiedByName: verifiedByName ?? this.verifiedByName,
       notes: notes ?? this.notes,
     );
   }

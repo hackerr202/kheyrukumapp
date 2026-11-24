@@ -25,7 +25,27 @@ class PaymentService {
   static const String _selectColumns =
       '*, student:students!student_id(full_name), parent:profiles!parent_id(full_name, email)';
 
+  static const List<CenterPaymentChannel> _defaultChannels = [
+    CenterPaymentChannel(
+      id: 'cbe',
+      labelKey: 'cbeBankName',
+      accountName: 'Kheyrukum Islamic Center',
+      accountNumber: '1000123456789',
+      displayOrder: 1,
+    ),
+    CenterPaymentChannel(
+      id: 'telebirr',
+      labelKey: 'telebirrAccountLabel',
+      accountName: 'Kheyrukum Islamic Center',
+      accountNumber: '+251 91 123 4567',
+      displayOrder: 2,
+    ),
+  ];
+
   final List<MonthlyPayment> _payments = [];
+  final Map<String, String> _reviewerNamesById = {};
+  final ValueNotifier<List<CenterPaymentChannel>> paymentChannelsNotifier =
+      ValueNotifier<List<CenterPaymentChannel>>(_defaultChannels);
   bool _cacheLoaded = false;
   final StreamController<List<MonthlyPayment>> _paymentsController =
       StreamController<List<MonthlyPayment>>.broadcast();
@@ -87,6 +107,7 @@ class PaymentService {
             JsonParsers.asNullableDateTime(p['submitted_at']) ?? mut.createdAt,
         reviewedAt: existing.reviewedAt,
         reviewedBy: existing.reviewedBy,
+        verifiedByName: existing.verifiedByName,
         notes: p['notes']?.toString() ?? existing.notes,
       );
     }
@@ -105,6 +126,14 @@ class PaymentService {
         for (final item in cached) {
           _payments.add(MonthlyPayment.fromJson(item));
         }
+      }
+      final cachedChannels = await LocalStorageService.instance
+          .getUserJsonList(uid, 'payment_channels');
+      if (cachedChannels.isNotEmpty) {
+        paymentChannelsNotifier.value = cachedChannels
+            .map((c) => CenterPaymentChannel.fromJson(c))
+            .toList()
+          ..sort((a, b) => a.displayOrder.compareTo(b.displayOrder));
       }
       _applyPendingPaymentOverlays();
       _emit();
@@ -153,12 +182,132 @@ class PaymentService {
       }
     }
     _payments.clear();
+    _reviewerNamesById.clear();
+    paymentChannelsNotifier.value = _defaultChannels;
     _cacheLoaded = false;
     _emit();
     if (uid.isNotEmpty) {
       await LocalStorageService.instance.removeUserCache(uid, 'payments');
+      await LocalStorageService.instance
+          .removeUserCache(uid, 'payment_channels');
     }
     await LocalStorageService.instance.remove('cached_payments');
+  }
+
+  Future<void> fetchPaymentChannels() async {
+    final client = SupabaseService.instance.client;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
+    if (!ConnectivityService.instance.isOnline) return;
+    try {
+      final res = await client
+          .from('center_payment_channels')
+          .select('id, label_key, account_name, account_number, display_order')
+          .order('display_order', ascending: true);
+      if (res is List && res.isNotEmpty) {
+        final channels = res
+            .whereType<Map>()
+            .map((r) =>
+                CenterPaymentChannel.fromJson(Map<String, dynamic>.from(r)))
+            .where((c) => c.accountNumber.trim().isNotEmpty)
+            .toList();
+        if (channels.isNotEmpty) {
+          paymentChannelsNotifier.value = channels;
+          final uid = _uid;
+          if (uid.isNotEmpty) {
+            await LocalStorageService.instance.saveUserJsonList(
+              uid,
+              'payment_channels',
+              channels.map((c) => c.toJson()).toList(),
+            );
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[PaymentService] fetchPaymentChannels note: $e');
+    }
+  }
+
+  Future<void> savePaymentChannels({
+    required String cbeNumber,
+    required String telebirrNumber,
+  }) async {
+    _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
+    final client = SupabaseService.instance.client;
+    if (client == null) throw Exception('Not connected to the server.');
+
+    final cleanCbe = cbeNumber.trim();
+    final cleanTelebirr = telebirrNumber.trim();
+    if (cleanCbe.isEmpty || cleanTelebirr.isEmpty) {
+      throw Exception('Both account numbers are required.');
+    }
+
+    final existing = paymentChannelsNotifier.value;
+    CenterPaymentChannel? findExisting(String id) {
+      for (final c in existing) {
+        if (c.id == id) return c;
+      }
+      return null;
+    }
+
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final uid = AuthSessionService.instance.userId;
+    final rows = [
+      {
+        'id': 'cbe',
+        'label_key': 'cbeBankName',
+        'account_name':
+            findExisting('cbe')?.accountName ?? 'Kheyrukum Islamic Center',
+        'account_number': cleanCbe,
+        'display_order': 1,
+        'updated_at': nowIso,
+        if (uid.isNotEmpty) 'updated_by': uid,
+      },
+      {
+        'id': 'telebirr',
+        'label_key': 'telebirrAccountLabel',
+        'account_name':
+            findExisting('telebirr')?.accountName ?? 'Kheyrukum Islamic Center',
+        'account_number': cleanTelebirr,
+        'display_order': 2,
+        'updated_at': nowIso,
+        if (uid.isNotEmpty) 'updated_by': uid,
+      },
+    ];
+
+    await client
+        .from('center_payment_channels')
+        .upsert(rows, onConflict: 'id');
+
+    final updated = [
+      CenterPaymentChannel(
+        id: 'cbe',
+        labelKey: 'cbeBankName',
+        accountName:
+            findExisting('cbe')?.accountName ?? 'Kheyrukum Islamic Center',
+        accountNumber: cleanCbe,
+        displayOrder: 1,
+      ),
+      CenterPaymentChannel(
+        id: 'telebirr',
+        labelKey: 'telebirrAccountLabel',
+        accountName:
+            findExisting('telebirr')?.accountName ?? 'Kheyrukum Islamic Center',
+        accountNumber: cleanTelebirr,
+        displayOrder: 2,
+      ),
+    ];
+    paymentChannelsNotifier.value = updated;
+    if (_uid.isNotEmpty) {
+      await LocalStorageService.instance.saveUserJsonList(
+        _uid,
+        'payment_channels',
+        updated.map((c) => c.toJson()).toList(),
+      );
+    }
   }
 
   /// Reload all payments visible to the current user (preserving pending offline receipts).
@@ -172,6 +321,7 @@ class PaymentService {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
     if (!ConnectivityService.instance.isOnline) return;
+    unawaited(fetchPaymentChannels());
     try {
       final res = await client
           .from('monthly_payments')
@@ -187,12 +337,62 @@ class PaymentService {
         _applyPendingPaymentOverlays();
         _emit();
         await _saveToCache();
+        unawaited(_hydrateMissingReviewerNames());
       }
     } catch (e) {
       debugPrint('[PaymentService] Failed to load payments: $e');
       if (ConnectivityService.isNetworkError(e)) {
         ConnectivityService.instance.reportNetworkFailure();
       }
+    }
+  }
+
+  Future<void> _hydrateMissingReviewerNames() async {
+    final client = SupabaseService.instance.client;
+    if (client == null) return;
+    final missingIds = _payments
+        .where((p) =>
+            p.displayReviewerName == null &&
+            MonthlyPayment.looksLikeUuid(p.reviewedBy))
+        .map((p) => p.reviewedBy!.trim())
+        .toSet()
+        .toList();
+    if (missingIds.isEmpty) return;
+
+    var updated = false;
+    try {
+      final rpcRes = await client.rpc(
+        'get_conversation_participant_names',
+        params: {'p_user_ids': missingIds},
+      );
+      if (rpcRes is List) {
+        for (final r in rpcRes) {
+          if (r is! Map) continue;
+          final id = r['id']?.toString().trim() ?? '';
+          final name = r['full_name']?.toString().trim() ?? '';
+          if (id.isNotEmpty && name.isNotEmpty) {
+            _reviewerNamesById[id] = name;
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint('[PaymentService] Reviewer name hydration note: $e');
+    }
+
+    if (_reviewerNamesById.isEmpty) return;
+    for (var i = 0; i < _payments.length; i++) {
+      final p = _payments[i];
+      if (p.displayReviewerName == null && p.reviewedBy != null) {
+        final resolved = _reviewerNamesById[p.reviewedBy!.trim()];
+        if (resolved != null && resolved.isNotEmpty) {
+          _payments[i] = p.copyWith(verifiedByName: resolved);
+          updated = true;
+        }
+      }
+    }
+    if (updated) {
+      _emit();
+      await _saveToCache();
     }
   }
 
@@ -207,6 +407,13 @@ class PaymentService {
     if (parent != null) {
       if (parent['full_name'] != null) json['parent_name'] = parent['full_name'];
       if (parent['email'] != null) json['parent_email'] = parent['email'];
+    }
+    final existingName = json['verified_by_name']?.toString().trim() ?? '';
+    final reviewedBy = json['reviewed_by']?.toString().trim() ?? '';
+    if (existingName.isEmpty &&
+        reviewedBy.isNotEmpty &&
+        _reviewerNamesById.containsKey(reviewedBy)) {
+      json['verified_by_name'] = _reviewerNamesById[reviewedBy];
     }
     return MonthlyPayment.fromJson(json);
   }
@@ -251,11 +458,13 @@ class PaymentService {
         AuthSessionService.instance.isParent &&
         parentId == userId) {
       if (payload.eventType == PostgresChangeEvent.insert) {
-        _notify(
-          'Monthly Tuition Due 💳',
-          'A tuition invoice for $month ($amount) has been issued.',
-          'payment_reminder',
-        );
+        if (!PushNotificationService.instance.isFirebaseReady) {
+          _notify(
+            'Monthly Tuition Fee Due 💳',
+            'A tuition invoice for $month ($amount ETB) has been issued.',
+            'payment_reminder',
+          );
+        }
       } else if (newStatus == 'approved') {
         _notify(
           'Payment Approved ✅',
@@ -340,12 +549,14 @@ class PaymentService {
     _emit();
     await _saveToCache();
 
+    // Single Source of Truth: inserting into public.notifications triggers the
+    // Supabase DB Webhook -> send-push-notification Edge Function once.
     try {
       await client.from('notifications').insert({
         'user_id': parentId,
         'title': 'Monthly Tuition Fee Due 💳',
         'body':
-            'Tuition for $month (${amount.toStringAsFixed(0)}) starting on ${feeStartDate.toLocal().toString().substring(0, 10)} has been issued for $studentName.',
+            'Tuition for $month (${amount.toStringAsFixed(0)} ETB) starting on ${feeStartDate.toLocal().toString().substring(0, 10)} has been issued for $studentName.',
         'type': 'payment_reminder',
         'data': {
           'payment_id': payment.id,
@@ -357,19 +568,6 @@ class PaymentService {
     } catch (e) {
       debugPrint('[PaymentService] Notification log error: $e');
     }
-
-    PushNotificationService.instance.dispatchPushToUsers(
-      userIds: [parentId],
-      title: 'Monthly Tuition Due 💳',
-      body:
-          'A tuition invoice for $month (${amount.toStringAsFixed(0)}) starting on ${feeStartDate.toLocal().toString().substring(0, 10)} has been issued for $studentName.',
-      type: 'payment_reminder',
-      data: {
-        'payment_id': payment.id,
-        'student_id': studentId,
-        'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
-      },
-    );
 
     return payment;
   }
@@ -457,6 +655,7 @@ class PaymentService {
           submittedAt: now,
           reviewedAt: existing.reviewedAt,
           reviewedBy: existing.reviewedBy,
+          verifiedByName: existing.verifiedByName,
           notes: cleanNote,
         );
         _emit();
@@ -579,6 +778,33 @@ class PaymentService {
     }
   }
 
+  Future<void> _updatePaymentReviewRow(
+    SupabaseClient client,
+    String paymentId,
+    Map<String, dynamic> fields,
+  ) async {
+    try {
+      await client.from('monthly_payments').update(fields).eq('id', paymentId);
+    } on PostgrestException catch (e) {
+      if (e.code == '42703' && fields.containsKey('verified_by_name')) {
+        final fallback = Map<String, dynamic>.from(fields)
+          ..remove('verified_by_name');
+        await client
+            .from('monthly_payments')
+            .update(fallback)
+            .eq('id', paymentId);
+      } else {
+        rethrow;
+      }
+    }
+  }
+
+  String _resolveReviewerDisplayName(String? adminName) {
+    final explicit = adminName?.trim() ?? '';
+    if (explicit.isNotEmpty) return explicit;
+    return AuthSessionService.instance.userName.trim();
+  }
+
   /// Superadmin approves the payment (strictly online-only).
   Future<void> approvePayment({
     required String paymentId,
@@ -594,12 +820,17 @@ class PaymentService {
     final matching = _payments.where((p) => p.id == paymentId);
     final existing = matching.isNotEmpty ? matching.first : null;
     final reviewerId = AuthSessionService.instance.userId;
-    await client.from('monthly_payments').update({
+    final reviewerName = _resolveReviewerDisplayName(adminName);
+    if (reviewerId.isNotEmpty && reviewerName.isNotEmpty) {
+      _reviewerNamesById[reviewerId] = reviewerName;
+    }
+    await _updatePaymentReviewRow(client, paymentId, {
       'status': 'approved',
       'reviewed_at': DateTime.now().toUtc().toIso8601String(),
       'reviewed_by': reviewerId.isEmpty ? null : reviewerId,
+      if (reviewerName.isNotEmpty) 'verified_by_name': reviewerName,
       'rejection_reason': null,
-    }).eq('id', paymentId);
+    });
     await refresh();
 
     if (existing != null && existing.parentId.isNotEmpty) {
@@ -630,12 +861,17 @@ class PaymentService {
     final matching = _payments.where((p) => p.id == paymentId);
     final existing = matching.isNotEmpty ? matching.first : null;
     final reviewerId = AuthSessionService.instance.userId;
-    await client.from('monthly_payments').update({
+    final reviewerName = _resolveReviewerDisplayName(adminName);
+    if (reviewerId.isNotEmpty && reviewerName.isNotEmpty) {
+      _reviewerNamesById[reviewerId] = reviewerName;
+    }
+    await _updatePaymentReviewRow(client, paymentId, {
       'status': 'rejected',
       'rejection_reason': reason,
       'reviewed_at': DateTime.now().toUtc().toIso8601String(),
       'reviewed_by': reviewerId.isEmpty ? null : reviewerId,
-    }).eq('id', paymentId);
+      if (reviewerName.isNotEmpty) 'verified_by_name': reviewerName,
+    });
     await refresh();
 
     if (existing != null && existing.parentId.isNotEmpty) {

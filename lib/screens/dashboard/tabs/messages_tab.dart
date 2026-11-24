@@ -462,16 +462,42 @@ class _MessagesTabState extends State<MessagesTab> {
         MessagingService.instance.displayTitleFor(convo, currentUserId);
 
     Widget lastMsgWidget;
-    final preview = convo.lastMessage;
-    if (preview.startsWith('🎤 Voice') || preview.contains('(0:')) {
+    final preview = convo.lastMessage.trim();
+    if (preview.startsWith('🎤') ||
+        preview.startsWith('Voice message') ||
+        preview.contains('(0:')) {
+      final stripped = preview
+          .replaceFirst(RegExp(r'^🎤\s*'), '')
+          .replaceFirst(RegExp(r'^Voice message\s*', caseSensitive: false), '')
+          .trim();
+      final voiceLabel = stripped.isNotEmpty
+          ? '${loc.translate('voicePreviewLabel')} $stripped'
+          : loc.translate('voicePreviewLabel');
       lastMsgWidget = _buildPreviewWithIcon(
-          Icons.mic_rounded, p.primary, preview, hasUnread, p);
-    } else if (preview.startsWith('📷 Photo')) {
+          Icons.mic_rounded, p.primary, voiceLabel, hasUnread, p);
+    } else if (preview.startsWith('📷') ||
+        preview.startsWith('🖼️') ||
+        preview.toLowerCase().startsWith('photo')) {
+      lastMsgWidget = _buildPreviewWithIcon(Icons.photo_rounded, p.info,
+          loc.translate('photoPreviewLabel'), hasUnread, p);
+    } else if (preview.startsWith('🎥') ||
+        preview.toLowerCase().startsWith('video')) {
+      lastMsgWidget = _buildPreviewWithIcon(Icons.videocam_rounded, p.info,
+          loc.translate('videoOption'), hasUnread, p);
+    } else if (preview.startsWith('📎') ||
+        preview.toLowerCase().startsWith('document') ||
+        preview.toLowerCase().startsWith('attachment')) {
+      final strippedDoc = preview
+          .replaceFirst(RegExp(r'^📎\s*'), '')
+          .replaceFirst(
+              RegExp(r'^(?:Document|Attachment)\s*:?\s*', caseSensitive: false),
+              '')
+          .trim();
+      final docLabel = strippedDoc.isNotEmpty
+          ? '${loc.translate('documentPreviewLabel')}: $strippedDoc'
+          : loc.translate('documentPreviewLabel');
       lastMsgWidget = _buildPreviewWithIcon(
-          Icons.photo_rounded, p.info, preview, hasUnread, p);
-    } else if (preview.startsWith('📎 Document')) {
-      lastMsgWidget = _buildPreviewWithIcon(
-          Icons.attach_file_rounded, p.gold, preview, hasUnread, p);
+          Icons.attach_file_rounded, p.gold, docLabel, hasUnread, p);
     } else {
       lastMsgWidget = Text(
         preview.isNotEmpty ? preview : loc.tapToOpenConvo,

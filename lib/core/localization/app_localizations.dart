@@ -585,7 +585,7 @@ class AppLocalizations {
       'paymentApprovedForMsg': 'Payment approved for {name}.',
       'rejectAction': 'Reject',
       'approveAction': 'Approve',
-      'amountLineLabel': 'Amount: \${amount}',
+      'amountLineLabel': 'Amount: {amount} ETB',
       'viewReceiptAction': 'View Receipt',
       'rejectionReasonQuote': 'Rejection Reason: "{reason}"',
       'noStudentsEnrolledAlertTitle': 'No Students Enrolled',
@@ -603,7 +603,7 @@ class AppLocalizations {
       'receiptSubmittedSuccessMsg': 'Receipt submitted successfully. Admin will verify.',
       'uploadPaymentReceiptTitle': 'Upload Payment Receipt',
       'studentMonthLine': 'Student: {name} ({month})',
-      'amountDueLine': 'Amount Due: \${amount}',
+      'amountDueLine': 'Amount Due: {amount} ETB',
       'paymentChannelLabel': 'Payment Channel',
       'selectedFileLabel': 'Selected: {name}',
       'tapPickReceiptHint': 'Tap to Pick Receipt Screenshot',
@@ -884,6 +884,15 @@ class AppLocalizations {
       'recitationAttachedBadge': 'Audio Attached',
       'listenToRecitationTitle': 'Student Recitation Recording',
       'ratingMaqbool': 'Maqbool',
+      'currencyCode': 'ETB',
+      'centerDirectorFallback': 'Center Director',
+      'photoPreviewLabel': 'Photo',
+      'voicePreviewLabel': 'Voice message',
+      'documentPreviewLabel': 'Document',
+      'editPaymentChannelsAction': 'Edit Accounts',
+      'editPaymentChannelsTitle': 'Edit Center Payment Accounts',
+      'paymentChannelsSavedMsg': 'Center payment accounts updated.',
+      'saveAccountsAction': 'Save Accounts',
     },
 
     // =========================================================================
@@ -1445,7 +1454,7 @@ class AppLocalizations {
       'paymentApprovedForMsg': 'تم اعتماد الدفع للطالب {name}.',
       'rejectAction': 'رفض',
       'approveAction': 'اعتماد',
-      'amountLineLabel': 'المبلغ: \${amount}',
+      'amountLineLabel': 'المبلغ: {amount} بر',
       'viewReceiptAction': 'عرض الإيصال',
       'rejectionReasonQuote': 'سبب الرفض: "{reason}"',
       'noStudentsEnrolledAlertTitle': 'لا يوجد طلاب مسجلون',
@@ -1463,7 +1472,7 @@ class AppLocalizations {
       'receiptSubmittedSuccessMsg': 'تم رفع الإيصال بنجاح. ستتحقق الإدارة منه.',
       'uploadPaymentReceiptTitle': 'رفع إيصال الدفع',
       'studentMonthLine': 'الطالب: {name} ({month})',
-      'amountDueLine': 'المبلغ المستحق: \${amount}',
+      'amountDueLine': 'المبلغ المستحق: {amount} بر',
       'paymentChannelLabel': 'طريقة الدفع',
       'selectedFileLabel': 'المحدد: {name}',
       'tapPickReceiptHint': 'اضغط لاختيار صورة الإيصال',
@@ -1744,6 +1753,15 @@ class AppLocalizations {
       'recitationAttachedBadge': 'تلاوة مرفقة',
       'listenToRecitationTitle': 'تسجيل تلاوة الطالب',
       'ratingMaqbool': 'مقبول',
+      'currencyCode': 'بر',
+      'centerDirectorFallback': 'مدير المركز',
+      'photoPreviewLabel': 'صورة',
+      'voicePreviewLabel': 'رسالة صوتية',
+      'documentPreviewLabel': 'مستند',
+      'editPaymentChannelsAction': 'تعديل الحسابات',
+      'editPaymentChannelsTitle': 'تعديل حسابات الدفع للمركز',
+      'paymentChannelsSavedMsg': 'تم تحديث حسابات الدفع للمركز.',
+      'saveAccountsAction': 'حفظ الحسابات',
     },
 
     // =========================================================================
@@ -2304,7 +2322,7 @@ class AppLocalizations {
       'paymentApprovedForMsg': 'ለ{name} ክፍያ ጸድቋል።',
       'rejectAction': 'ውድቅ አድርግ',
       'approveAction': 'አጽድቅ',
-      'amountLineLabel': 'መጠን፦ \${amount}',
+      'amountLineLabel': 'መጠን፦ {amount} ብር',
       'viewReceiptAction': 'ደረሰኝ ተመልከት',
       'rejectionReasonQuote': 'ውድቅ የተደረገበት ምክንያት፦ "{reason}"',
       'noStudentsEnrolledAlertTitle': 'ምንም ተማሪዎች አልተመዘገቡም',
@@ -2322,7 +2340,7 @@ class AppLocalizations {
       'receiptSubmittedSuccessMsg': 'ደረሰኙ በተሳካ ሁኔታ ቀርቧል። አስተዳደሩ ያረጋግጠዋል።',
       'uploadPaymentReceiptTitle': 'የክፍያ ደረሰኝ ይስቀሉ',
       'studentMonthLine': 'ተማሪ፦ {name} ({month})',
-      'amountDueLine': 'የሚከፈል መጠን፦ \${amount}',
+      'amountDueLine': 'የሚከፈል መጠን፦ {amount} ብር',
       'paymentChannelLabel': 'የክፍያ መንገድ',
       'selectedFileLabel': 'የተመረጠ፦ {name}',
       'tapPickReceiptHint': 'የደረሰኝ ምስል ለመምረጥ ይንኩ',
@@ -2602,6 +2620,15 @@ class AppLocalizations {
       'recitationAttachedBadge': 'የድምፅ ንባብ ተያይዟል',
       'listenToRecitationTitle': 'የተማሪው የንባብ ቅጂ',
       'ratingMaqbool': 'መቅቡል',
+      'currencyCode': 'ብር',
+      'centerDirectorFallback': 'የማዕከሉ ዳይሬክተር',
+      'photoPreviewLabel': 'ፎቶ',
+      'voicePreviewLabel': 'የድምጽ መልእክት',
+      'documentPreviewLabel': 'ሰነድ',
+      'editPaymentChannelsAction': 'ሂሳቦችን አርትዕ',
+      'editPaymentChannelsTitle': 'የማዕከሉን የክፍያ ሂሳቦች ያርትዑ',
+      'paymentChannelsSavedMsg': 'የማዕከሉ የክፍያ ሂሳቦች ተዘምነዋል።',
+      'saveAccountsAction': 'ሂሳቦችን አስቀምጥ',
     },
   };
 
@@ -2865,6 +2892,9 @@ class AppLocalizations {
   String get savedOfflineQueued => translate('savedOfflineQueued');
   String get syncingStatus => translate('syncingStatus');
   String get openStatus => translate('openStatus');
+
+  String formatCurrency(num amount, {int decimals = 0}) =>
+      '${amount.toStringAsFixed(decimals)} ${translate('currencyCode')}';
 
   String tr(String key, [Map<String, String> args = const {}]) {
     var result = translate(key);
