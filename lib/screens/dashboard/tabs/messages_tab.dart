@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/chat_message.dart';
 import '../../../core/services/auth_session_service.dart';
@@ -78,7 +79,12 @@ class _MessagesTabState extends State<MessagesTab> {
       }
     }
     return seen.values.toList()
-      ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
+      ..sort((a, b) {
+        if (a.isPinned != b.isPinned) {
+          return a.isPinned ? -1 : 1;
+        }
+        return b.lastMessageTime.compareTo(a.lastMessageTime);
+      });
   }
 
   Future<void> _handleRefresh() async {
@@ -358,7 +364,12 @@ class _MessagesTabState extends State<MessagesTab> {
                               ),
                               clipBehavior: Clip.antiAlias,
                               child: _buildChatTile(
-                                  context, convo, currentUserId, p),
+                                context,
+                                convo,
+                                currentUserId,
+                                p,
+                                isAdmin: isAdmin,
+                              ),
                             );
                           },
                         ),
@@ -452,8 +463,9 @@ class _MessagesTabState extends State<MessagesTab> {
     BuildContext context,
     Conversation convo,
     String currentUserId,
-    AppPalette p,
-  ) {
+    AppPalette p, {
+    required bool isAdmin,
+  }) {
     final loc = AppLocalizations.of(context);
     final hasUnread = convo.unreadCount > 0;
     final isGroup = convo.isGroup;
@@ -513,6 +525,8 @@ class _MessagesTabState extends State<MessagesTab> {
 
     return InkWell(
       onTap: () => _openConversation(context, convo),
+      onLongPress: () =>
+          _showChatActionsMenu(context, convo, displayTitle, isAdmin),
       child: Padding(
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
@@ -646,6 +660,249 @@ class _MessagesTabState extends State<MessagesTab> {
         ),
       ],
     );
+  }
+
+  void _showChatActionsMenu(
+    BuildContext context,
+    Conversation convo,
+    String displayTitle,
+    bool isAdmin,
+  ) {
+    HapticFeedback.mediumImpact();
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+
+    showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Material(
+              color: p.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(color: p.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: p.inkMuted.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                    child: Row(
+                      children: [
+                        ProAvatar(
+                          name: displayTitle,
+                          radius: 18,
+                          color: p.primary,
+                          icon: convo.isGroup ? Icons.groups_rounded : null,
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            displayTitle,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: p.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: p.border),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: p.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child:
+                          Icon(Icons.edit_outlined, size: 19, color: p.primary),
+                    ),
+                    title: Text(
+                      loc.translate('editChatAction'),
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: p.ink,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      if (!mounted) return;
+                      _showEditChatDialog(context, convo, displayTitle);
+                    },
+                  ),
+                  if (isAdmin) ...[
+                    Divider(height: 1, indent: 64, color: p.border),
+                    ListTile(
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: p.danger.withOpacity(0.12),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.delete_outline_rounded,
+                            size: 19, color: p.danger),
+                      ),
+                      title: Text(
+                        loc.translate('deleteChatAction'),
+                        style: TextStyle(
+                          fontSize: 14.5,
+                          fontWeight: FontWeight.w600,
+                          color: p.danger,
+                        ),
+                      ),
+                      onTap: () {
+                        Navigator.pop(sheetCtx);
+                        if (!mounted) return;
+                        _confirmDeleteChat(context, convo, displayTitle);
+                      },
+                    ),
+                  ],
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _showEditChatDialog(
+    BuildContext context,
+    Conversation convo,
+    String currentDisplayTitle,
+  ) async {
+    final loc = AppLocalizations.of(context);
+    final p = AppColors.of(context);
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (_) => _EditChatDialog(
+        convo: convo,
+        initialTitle: currentDisplayTitle,
+      ),
+    );
+    if (saved == true && mounted) {
+      ScaffoldMessenger.of(this.context).showSnackBar(
+        SnackBar(
+          content: Text(loc.translate('chatUpdatedMsg')),
+          backgroundColor: p.success,
+        ),
+      );
+    }
+  }
+
+  Future<void> _confirmDeleteChat(
+    BuildContext context,
+    Conversation convo,
+    String displayTitle,
+  ) async {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: p.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: p.border),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: p.danger, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                loc.translate('deleteChatConfirmTitle'),
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  color: p.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              displayTitle,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+                color: p.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              loc.translate('deleteChatConfirmDesc'),
+              style: TextStyle(
+                fontSize: 13,
+                color: p.inkSecondary,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(loc.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: p.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(loc.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true || !mounted) return;
+    final messenger = ScaffoldMessenger.of(this.context);
+    final res = await MessagingService.instance.deleteConversation(convo.id);
+    if (!mounted) return;
+
+    if (res['success'] == true) {
+      messenger.showSnackBar(
+        SnackBar(
+          content: Text(loc.translate('chatDeletedMsg')),
+          backgroundColor: p.success,
+        ),
+      );
+    } else {
+      final msg = res['offline'] == true
+          ? loc.translate('offlineActionRequiredMsg')
+          : (res['error']?.toString() ?? loc.translate('actionFailedMsg'));
+      messenger.showSnackBar(
+        SnackBar(content: Text(msg), backgroundColor: p.danger),
+      );
+    }
   }
 
   Future<void> _openNewChatSheet(BuildContext context) async {
@@ -1306,6 +1563,188 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
           ),
         ],
       ),
+    );
+  }
+}
+
+class _EditChatDialog extends StatefulWidget {
+  final Conversation convo;
+  final String initialTitle;
+
+  const _EditChatDialog({
+    required this.convo,
+    required this.initialTitle,
+  });
+
+  @override
+  State<_EditChatDialog> createState() => _EditChatDialogState();
+}
+
+class _EditChatDialogState extends State<_EditChatDialog> {
+  late final TextEditingController _titleCtrl;
+  late bool _isPinned;
+  bool _isSaving = false;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    _titleCtrl = TextEditingController(text: widget.initialTitle);
+    _isPinned = widget.convo.isPinned;
+  }
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _save() async {
+    final loc = AppLocalizations.of(context);
+    final clean = _titleCtrl.text.trim();
+    if (clean.isEmpty) {
+      setState(() => _error = loc.translate('chatNameLabel'));
+      return;
+    }
+
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
+
+    final res = await MessagingService.instance.updateConversation(
+      conversationId: widget.convo.id,
+      title: clean,
+      isPinned: _isPinned,
+    );
+
+    if (!mounted) return;
+    if (res['success'] == true) {
+      Navigator.of(context).pop(true);
+    } else {
+      setState(() {
+        _isSaving = false;
+        _error = res['offline'] == true
+            ? loc.translate('offlineActionRequiredMsg')
+            : (res['error']?.toString() ?? loc.translate('actionFailedMsg'));
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+
+    return AlertDialog(
+      backgroundColor: p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(20),
+        side: BorderSide(color: p.border),
+      ),
+      title: Text(
+        loc.translate('editChatTitle'),
+        style: TextStyle(
+          fontSize: 16.5,
+          fontWeight: FontWeight.w700,
+          color: p.ink,
+        ),
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          TextField(
+            controller: _titleCtrl,
+            enabled: !_isSaving,
+            textCapitalization: TextCapitalization.words,
+            style: TextStyle(color: p.ink, fontSize: 14),
+            decoration: InputDecoration(
+              labelText: loc.translate('chatNameLabel'),
+              filled: true,
+              fillColor: p.surfaceSubtle,
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: p.border),
+              ),
+              enabledBorder: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(12),
+                borderSide: BorderSide(color: p.border),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: _isSaving
+                ? null
+                : () => setState(() => _isPinned = !_isPinned),
+            borderRadius: BorderRadius.circular(10),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 4),
+              child: Row(
+                children: [
+                  Icon(
+                    _isPinned
+                        ? Icons.push_pin_rounded
+                        : Icons.push_pin_outlined,
+                    size: 19,
+                    color: _isPinned ? p.gold : p.inkMuted,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      loc.translate('pinChatLabel'),
+                      style: TextStyle(
+                        fontSize: 13.5,
+                        fontWeight: FontWeight.w600,
+                        color: p.ink,
+                      ),
+                    ),
+                  ),
+                  Switch(
+                    value: _isPinned,
+                    onChanged: _isSaving
+                        ? null
+                        : (v) => setState(() => _isPinned = v),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 6),
+            Align(
+              alignment: AlignmentDirectional.centerStart,
+              child: Text(
+                _error!,
+                style: TextStyle(color: p.danger, fontSize: 12),
+              ),
+            ),
+          ],
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.of(context).pop(false),
+          child: Text(loc.cancel),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _save,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: p.primary,
+            foregroundColor: p.onPrimary,
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : Text(loc.translate('saveChanges')),
+        ),
+      ],
     );
   }
 }

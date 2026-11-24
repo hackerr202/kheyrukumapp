@@ -11,6 +11,7 @@ class ProCard extends StatelessWidget {
   final EdgeInsetsGeometry padding;
   final EdgeInsetsGeometry? margin;
   final VoidCallback? onTap;
+  final VoidCallback? onLongPress;
   final Color? borderColor;
   final Color? backgroundColor;
   final Color? accentStripeColor;
@@ -22,6 +23,7 @@ class ProCard extends StatelessWidget {
     this.padding = const EdgeInsets.all(16),
     this.margin,
     this.onTap,
+    this.onLongPress,
     this.borderColor,
     this.backgroundColor,
     this.accentStripeColor,
@@ -68,11 +70,12 @@ class ProCard extends StatelessWidget {
           ),
         ],
       ),
-      child: onTap != null
+      child: (onTap != null || onLongPress != null)
           ? Material(
               color: Colors.transparent,
               child: InkWell(
                 onTap: onTap,
+                onLongPress: onLongPress,
                 borderRadius: BorderRadius.circular(borderRadius),
                 child: content,
               ),

@@ -462,6 +462,68 @@ class AnnouncementService {
     }
   }
 
+  /// Update an existing announcement (Admin, online required).
+  /// Does not re-dispatch push notifications to avoid duplicate alert spam.
+  Future<Map<String, dynamic>> updateAnnouncement({
+    required String id,
+    required String title,
+    required String content,
+    required String targetAudience,
+    required String authorName,
+    required bool isPinned,
+    String? attachmentUrl,
+    String? attachmentName,
+  }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      return {'success': false, 'offline': true};
+    }
+    final client = SupabaseService.instance.client;
+    if (client == null) return {'success': false, 'offline': true};
+
+    try {
+      final res = await client
+          .from('announcements')
+          .update({
+            'title': title.trim(),
+            'content': content.trim(),
+            'target_audience': targetAudience,
+            'author_name': authorName.trim(),
+            'is_pinned': isPinned,
+            'attachment_url': attachmentUrl,
+            'attachment_name': attachmentName,
+          })
+          .eq('id', id)
+          .select()
+          .single();
+
+      final updated = Announcement.fromJson(Map<String, dynamic>.from(res));
+      final idx = _announcements.indexWhere((a) => a.id == id);
+      if (idx != -1) {
+        _announcements[idx] = updated;
+      } else {
+        _announcements.insert(0, updated);
+      }
+      _announcements.sort((a, b) {
+        if (a.isPinned != b.isPinned) {
+          return a.isPinned ? -1 : 1;
+        }
+        return b.createdAt.compareTo(a.createdAt);
+      });
+      if (!_announcementsController.isClosed) {
+        _announcementsController.add(List.from(_announcements));
+      }
+      await _saveAnnouncementsCache();
+      return {'success': true, 'data': updated};
+    } catch (e) {
+      debugPrint('[AnnouncementService] Update failed: $e');
+      return {
+        'success': false,
+        'error': SupabaseService.cleanErrorMessage(e),
+      };
+    }
+  }
+
   /// Delete an announcement (Admin, online required).
   Future<bool> deleteAnnouncement(String id) async {
     if (!ConnectivityService.instance.isOnline &&

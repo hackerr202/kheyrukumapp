@@ -27,6 +27,28 @@ class Conversation {
     this.isPinned = false,
   });
 
+  Conversation copyWith({
+    String? title,
+    bool? isPinned,
+    String? lastMessage,
+    DateTime? lastMessageTime,
+    int? unreadCount,
+  }) {
+    return Conversation(
+      id: id,
+      title: title ?? this.title,
+      isGroup: isGroup,
+      participantIds: participantIds,
+      participantNames: participantNames,
+      lastMessage: lastMessage ?? this.lastMessage,
+      lastMessageTime: lastMessageTime ?? this.lastMessageTime,
+      halaqahId: halaqahId,
+      groupType: groupType,
+      unreadCount: unreadCount ?? this.unreadCount,
+      isPinned: isPinned ?? this.isPinned,
+    );
+  }
+
   factory Conversation.fromJson(Map<String, dynamic> json) {
     return Conversation(
       id: JsonParsers.asString(json['id']),

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/localization/notification_templates.dart';
@@ -6,6 +7,7 @@ import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -29,6 +31,225 @@ class AnnouncementsSheet extends StatefulWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => AnnouncementsSheet(initialTab: initialTab),
     );
+  }
+
+  /// Long-press Admin popup menu to edit or permanently delete an announcement.
+  static Future<void> showAdminActions(
+    BuildContext context,
+    Announcement item,
+  ) async {
+    HapticFeedback.mediumImpact();
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+
+    await showModalBottomSheet<void>(
+      context: context,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return SafeArea(
+          top: false,
+          child: Padding(
+            padding: const EdgeInsets.fromLTRB(12, 0, 12, 12),
+            child: Material(
+              color: p.surface,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+                side: BorderSide(color: p.border),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  Container(
+                    width: 38,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: p.inkMuted.withOpacity(0.35),
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.fromLTRB(20, 14, 20, 8),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: p.gold.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(Icons.campaign_rounded,
+                              size: 19, color: p.gold),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(
+                            item.title,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: p.ink,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                  Divider(height: 1, color: p.border),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: p.primary.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child:
+                          Icon(Icons.edit_outlined, size: 19, color: p.primary),
+                    ),
+                    title: Text(
+                      loc.translate('editAnnouncementAction'),
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: p.ink,
+                      ),
+                    ),
+                    onTap: () {
+                      Navigator.pop(sheetCtx);
+                      if (!context.mounted) return;
+                      showDialog(
+                        context: context,
+                        builder: (_) =>
+                            PostAnnouncementDialog(existingAnnouncement: item),
+                      );
+                    },
+                  ),
+                  Divider(height: 1, indent: 64, color: p.border),
+                  ListTile(
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: p.danger.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Icon(Icons.delete_outline_rounded,
+                          size: 19, color: p.danger),
+                    ),
+                    title: Text(
+                      loc.translate('deleteAnnouncementAction'),
+                      style: TextStyle(
+                        fontSize: 14.5,
+                        fontWeight: FontWeight.w600,
+                        color: p.danger,
+                      ),
+                    ),
+                    onTap: () async {
+                      Navigator.pop(sheetCtx);
+                      if (!context.mounted) return;
+                      await _confirmAndDeleteAnnouncement(context, item);
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                ],
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  static Future<void> _confirmAndDeleteAnnouncement(
+    BuildContext context,
+    Announcement item,
+  ) async {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final deletedMsg = loc.translate('announcementDeletedMsg');
+    final offlineMsg = loc.translate('offlineActionRequiredMsg');
+    final failedMsg = loc.translate('actionFailedMsg');
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogCtx) => AlertDialog(
+        backgroundColor: p.surface,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(20),
+          side: BorderSide(color: p.border),
+        ),
+        title: Row(
+          children: [
+            Icon(Icons.delete_outline_rounded, color: p.danger, size: 22),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Text(
+                loc.translate('deleteAnnouncementConfirmTitle'),
+                style: TextStyle(
+                  fontSize: 16.5,
+                  fontWeight: FontWeight.w700,
+                  color: p.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              item.title,
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13.5,
+                color: p.ink,
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              loc.translate('deleteAnnouncementConfirmDesc'),
+              style: TextStyle(
+                fontSize: 13,
+                color: p.inkSecondary,
+                height: 1.4,
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogCtx, false),
+            child: Text(loc.cancel),
+          ),
+          ElevatedButton(
+            onPressed: () => Navigator.pop(dialogCtx, true),
+            style: ElevatedButton.styleFrom(
+              backgroundColor: p.danger,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(loc.delete),
+          ),
+        ],
+      ),
+    );
+
+    if (confirmed != true) return;
+    final ok = await AnnouncementService.instance.deleteAnnouncement(item.id);
+    if (ok) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(deletedMsg), backgroundColor: p.success),
+      );
+    } else {
+      final errMsg =
+          !ConnectivityService.instance.isOnline ? offlineMsg : failedMsg;
+      messenger.showSnackBar(
+        SnackBar(content: Text(errMsg), backgroundColor: p.danger),
+      );
+    }
   }
 
   @override
@@ -421,6 +642,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
         item.targetAudience == 'parents' ? loc.parentsTab : loc.teachersTab;
 
     return ProCard(
+      onLongPress: AuthSessionService.instance.isAdmin
+          ? () => AnnouncementsSheet.showAdminActions(context, item)
+          : null,
       accentStripeColor: item.isPinned ? p.gold : null,
       borderColor: item.isPinned ? p.gold.withOpacity(0.45) : p.border,
       padding: const EdgeInsets.all(16),

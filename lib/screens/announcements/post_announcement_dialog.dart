@@ -3,6 +3,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/localization/app_localizations.dart';
+import '../../core/models/announcement.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/storage_service.dart';
@@ -10,10 +11,12 @@ import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/pro_ui_kit.dart';
 
-/// Flagship Modal Dialog for Admins to compose and broadcast real-time circulars
-/// with native device image/document pickers and Supabase Storage uploads.
+/// Flagship Modal Dialog for Admins to compose, edit, and broadcast real-time
+/// circulars with native device image/document pickers and Supabase Storage uploads.
 class PostAnnouncementDialog extends StatefulWidget {
-  const PostAnnouncementDialog({super.key});
+  final Announcement? existingAnnouncement;
+
+  const PostAnnouncementDialog({super.key, this.existingAnnouncement});
 
   @override
   State<PostAnnouncementDialog> createState() => _PostAnnouncementDialogState();
@@ -35,16 +38,35 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   bool _isUploadingAttachment = false;
   bool _didInitLocalizedDefaults = false;
 
+  bool get _isEditing => widget.existingAnnouncement != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existingAnnouncement;
+    if (existing != null) {
+      _titleController.text = existing.title;
+      _contentController.text = existing.content;
+      _authorController.text = existing.authorName;
+      _selectedAudience = existing.targetAudience;
+      _isPinned = existing.isPinned;
+      _attachmentUrl = existing.attachmentUrl;
+      _attachmentName = existing.attachmentName;
+    }
+  }
+
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
     if (!_didInitLocalizedDefaults) {
       _didInitLocalizedDefaults = true;
-      final loc = AppLocalizations.of(context);
-      final name = AuthSessionService.instance.userName;
-      _authorController.text = name.isNotEmpty
-          ? '$name (${loc.translate('directorRoleShort')})'
-          : loc.translate('centerAdministrationTitle');
+      if (!_isEditing) {
+        final loc = AppLocalizations.of(context);
+        final name = AuthSessionService.instance.userName;
+        _authorController.text = name.isNotEmpty
+            ? '$name (${loc.translate('directorRoleShort')})'
+            : loc.translate('centerAdministrationTitle');
+      }
     }
   }
 
@@ -225,15 +247,26 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
     });
 
     try {
-      final res = await AnnouncementService.instance.broadcastAnnouncement(
-        title: title,
-        content: content,
-        targetAudience: _selectedAudience,
-        authorName: _authorController.text.trim(),
-        isPinned: _isPinned,
-        attachmentUrl: _attachmentUrl,
-        attachmentName: _attachmentName,
-      );
+      final res = _isEditing
+          ? await AnnouncementService.instance.updateAnnouncement(
+              id: widget.existingAnnouncement!.id,
+              title: title,
+              content: content,
+              targetAudience: _selectedAudience,
+              authorName: _authorController.text.trim(),
+              isPinned: _isPinned,
+              attachmentUrl: _attachmentUrl,
+              attachmentName: _attachmentName,
+            )
+          : await AnnouncementService.instance.broadcastAnnouncement(
+              title: title,
+              content: content,
+              targetAudience: _selectedAudience,
+              authorName: _authorController.text.trim(),
+              isPinned: _isPinned,
+              attachmentUrl: _attachmentUrl,
+              attachmentName: _attachmentName,
+            );
 
       if (!mounted) return;
 
@@ -243,15 +276,21 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
         Navigator.of(context).pop(true);
         messenger.showSnackBar(
           SnackBar(
-            content: Text(loc.translate('announcementBroadcastedMsg')),
+            content: Text(
+              _isEditing
+                  ? loc.translate('announcementUpdatedMsg')
+                  : loc.translate('announcementBroadcastedMsg'),
+            ),
             backgroundColor: successColor,
           ),
         );
       } else {
         setState(() {
-          _errorMessage = res['error'] ??
-              res['message'] ??
-              loc.translate('broadcastFailedMsg');
+          _errorMessage = res['offline'] == true
+              ? loc.translate('offlineActionRequiredMsg')
+              : (res['error']?.toString() ??
+                  res['message']?.toString() ??
+                  loc.translate('broadcastFailedMsg'));
         });
       }
     } catch (e) {
@@ -298,15 +337,21 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                           color: p.gold.withOpacity(0.14),
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        child: Icon(Icons.campaign_rounded,
-                            color: p.gold, size: 22),
+                        child: Icon(
+                            _isEditing
+                                ? Icons.edit_note_rounded
+                                : Icons.campaign_rounded,
+                            color: p.gold,
+                            size: 22),
                       ),
                       const SizedBox(width: 12),
                       Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            loc.translate('broadcastCircularTitle'),
+                            _isEditing
+                                ? loc.translate('editAnnouncementAction')
+                                : loc.translate('broadcastCircularTitle'),
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
@@ -646,11 +691,17 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Icon(Icons.send_rounded, size: 16),
+                          : Icon(
+                              _isEditing
+                                  ? Icons.save_rounded
+                                  : Icons.send_rounded,
+                              size: 16),
                       label: Text(
                         _isBroadcasting
                             ? AppLocalizations.of(context).loading
-                            : AppLocalizations.of(context).postAnnouncement,
+                            : (_isEditing
+                                ? loc.translate('saveChanges')
+                                : AppLocalizations.of(context).postAnnouncement),
                       ),
                     ),
                   ),

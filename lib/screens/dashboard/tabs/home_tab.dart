@@ -1538,6 +1538,9 @@ class _VerticalAnnouncementsList extends StatelessWidget {
           padding: const EdgeInsets.only(bottom: 12),
           child: ProCard(
             onTap: () => AnnouncementsSheet.show(context, initialTab: 1),
+            onLongPress: AuthSessionService.instance.isAdmin
+                ? () => AnnouncementsSheet.showAdminActions(context, item)
+                : null,
             accentStripeColor: isPinned ? p.gold : null,
             borderColor: isPinned ? p.gold.withOpacity(0.45) : p.border,
             padding: const EdgeInsets.all(16),

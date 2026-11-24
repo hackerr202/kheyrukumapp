@@ -903,6 +903,27 @@ class AppLocalizations {
       'studentOverviewTitle': 'Student Overview',
       'latestRecitationLabel': 'Latest Recitation',
       'notMarkedYetLabel': 'Not marked yet',
+      'editChatAction': 'Edit Chat',
+      'deleteChatAction': 'Delete Chat',
+      'editChatTitle': 'Edit Conversation',
+      'chatNameLabel': 'Chat Name',
+      'pinChatLabel': 'Pin to top',
+      'deleteChatConfirmTitle': 'Delete Conversation?',
+      'deleteChatConfirmDesc':
+          'This will permanently delete this conversation and all its messages for everyone.',
+      'chatUpdatedMsg': 'Conversation updated',
+      'chatDeletedMsg': 'Conversation deleted',
+      'editAnnouncementAction': 'Edit Announcement',
+      'deleteAnnouncementAction': 'Delete Announcement',
+      'deleteAnnouncementConfirmTitle': 'Delete Announcement?',
+      'deleteAnnouncementConfirmDesc':
+          'This announcement will be permanently removed for all users.',
+      'announcementUpdatedMsg': 'Announcement updated',
+      'announcementDeletedMsg': 'Announcement deleted',
+      'saveChanges': 'Save Changes',
+      'offlineActionRequiredMsg':
+          'Internet connection is required for this action.',
+      'actionFailedMsg': 'Action failed. Please try again.',
     },
 
     // =========================================================================
@@ -1782,6 +1803,26 @@ class AppLocalizations {
       'studentOverviewTitle': 'ملف الطالب',
       'latestRecitationLabel': 'آخر تلاوة',
       'notMarkedYetLabel': 'لم يُسجّل بعد',
+      'editChatAction': 'تعديل المحادثة',
+      'deleteChatAction': 'حذف المحادثة',
+      'editChatTitle': 'تعديل المحادثة',
+      'chatNameLabel': 'اسم المحادثة',
+      'pinChatLabel': 'تثبيت في الأعلى',
+      'deleteChatConfirmTitle': 'حذف المحادثة؟',
+      'deleteChatConfirmDesc':
+          'سيؤدي هذا إلى حذف هذه المحادثة وجميع رسائلها نهائياً للجميع.',
+      'chatUpdatedMsg': 'تم تحديث المحادثة',
+      'chatDeletedMsg': 'تم حذف المحادثة',
+      'editAnnouncementAction': 'تعديل الإعلان',
+      'deleteAnnouncementAction': 'حذف الإعلان',
+      'deleteAnnouncementConfirmTitle': 'حذف الإعلان؟',
+      'deleteAnnouncementConfirmDesc':
+          'سيتم حذف هذا الإعلان نهائياً لجميع المستخدمين.',
+      'announcementUpdatedMsg': 'تم تحديث الإعلان',
+      'announcementDeletedMsg': 'تم حذف الإعلان',
+      'saveChanges': 'حفظ التغييرات',
+      'offlineActionRequiredMsg': 'يلزم الاتصال بالإنترنت لتنفيذ هذا الإجراء.',
+      'actionFailedMsg': 'فشل الإجراء. يرجى المحاولة مرة أخرى.',
     },
 
     // =========================================================================
@@ -2659,6 +2700,26 @@ class AppLocalizations {
       'studentOverviewTitle': 'የተማሪ አጠቃላይ መረጃ',
       'latestRecitationLabel': 'የቅርብ ንባብ',
       'notMarkedYetLabel': 'ገና አልተመዘገበም',
+      'editChatAction': 'ውይይት አርትዕ',
+      'deleteChatAction': 'ውይይት አጥፋ',
+      'editChatTitle': 'ውይይትን አርትዕ',
+      'chatNameLabel': 'የውይይት ስም',
+      'pinChatLabel': 'ከላይ ሰካ',
+      'deleteChatConfirmTitle': 'ውይይቱ ይጥፋ?',
+      'deleteChatConfirmDesc':
+          'ይህ ውይይቱን እና ሁሉንም መልዕክቶቹን ለሁሉም ሰው በቋሚነት ያጠፋል።',
+      'chatUpdatedMsg': 'ውይይቱ ተዘምኗል',
+      'chatDeletedMsg': 'ውይይቱ ጠፍቷል',
+      'editAnnouncementAction': 'ማስታወቂያ አርትዕ',
+      'deleteAnnouncementAction': 'ማስታወቂያ አጥፋ',
+      'deleteAnnouncementConfirmTitle': 'ማስታወቂያው ይጥፋ?',
+      'deleteAnnouncementConfirmDesc':
+          'ይህ ማስታወቂያ ለሁሉም ተጠቃሚዎች በቋሚነት ይጠፋል።',
+      'announcementUpdatedMsg': 'ማስታወቂያው ተዘምኗል',
+      'announcementDeletedMsg': 'ማስታወቂያው ጠፍቷል',
+      'saveChanges': 'ለውጦችን አስቀምጥ',
+      'offlineActionRequiredMsg': 'ለዚህ እርምጃ የኢንተርኔት ግንኙነት ያስፈልጋል።',
+      'actionFailedMsg': 'እርምጃው አልተሳካም። እባክዎ እንደገና ይሞክሩ።',
     },
   };
 

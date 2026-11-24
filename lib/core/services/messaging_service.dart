@@ -510,9 +510,39 @@ class MessagingService {
   }
 
   /// Returns a viewer-appropriate display title for a conversation, preferring
-  /// the live `profiles.full_name` of the other participant for direct chats.
+  /// explicit custom-renamed titles or the live `profiles.full_name` of the
+  /// other participant for direct chats.
   String displayTitleFor(Conversation convo, String currentUserId) {
+    final rawTitle = convo.title.trim();
     if (!convo.isGroup && convo.participantIds.isNotEmpty) {
+      if (rawTitle.isNotEmpty &&
+          rawTitle.toLowerCase() != 'conversation' &&
+          rawTitle.toLowerCase() != 'direct chat') {
+        final knownNamesLower = <String>{
+          for (final n in convo.participantNames)
+            if (n.trim().isNotEmpty) n.trim().toLowerCase(),
+          for (final pid in convo.participantIds)
+            if ((_profileNamesById[pid] ?? '').trim().isNotEmpty)
+              _profileNamesById[pid]!.trim().toLowerCase(),
+        };
+        final lowerTitle = rawTitle.toLowerCase();
+        var matchesDefaultParticipantTitle = knownNamesLower.contains(lowerTitle);
+        if (!matchesDefaultParticipantTitle && knownNamesLower.length >= 2) {
+          for (final a in knownNamesLower) {
+            for (final b in knownNamesLower) {
+              if (a != b && lowerTitle == '$a & $b') {
+                matchesDefaultParticipantTitle = true;
+                break;
+              }
+            }
+            if (matchesDefaultParticipantTitle) break;
+          }
+        }
+        if (!matchesDefaultParticipantTitle) {
+          return rawTitle;
+        }
+      }
+
       if (currentUserId.isNotEmpty &&
           convo.participantIds.contains(currentUserId)) {
         for (var i = 0; i < convo.participantIds.length; i++) {
@@ -544,7 +574,103 @@ class MessagingService {
         return '${convo.participantNames[0]} & ${convo.participantNames[1]}';
       }
     }
-    return convo.title.isNotEmpty ? convo.title : 'Direct Chat';
+    return rawTitle.isNotEmpty ? rawTitle : 'Direct Chat';
+  }
+
+  /// Update a conversation's title and/or pin state (online required).
+  Future<Map<String, dynamic>> updateConversation({
+    required String conversationId,
+    required String title,
+    bool? isPinned,
+  }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      return {'success': false, 'offline': true};
+    }
+    final client = SupabaseService.instance.client;
+    if (client == null || !_isValidUuid(conversationId)) {
+      return {'success': false, 'offline': client == null};
+    }
+
+    final cleanTitle = title.trim();
+    if (cleanTitle.isEmpty) {
+      return {'success': false, 'error': 'Conversation title cannot be empty.'};
+    }
+
+    try {
+      final payload = <String, dynamic>{
+        'title': cleanTitle,
+        if (isPinned != null) 'is_pinned': isPinned,
+      };
+      await client
+          .from('conversations')
+          .update(payload)
+          .eq('id', conversationId);
+
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx != -1) {
+        _conversations[idx] = _conversations[idx].copyWith(
+          title: cleanTitle,
+          isPinned: isPinned,
+        );
+        _conversations.sort((a, b) {
+          if (a.isPinned != b.isPinned) {
+            return a.isPinned ? -1 : 1;
+          }
+          return b.lastMessageTime.compareTo(a.lastMessageTime);
+        });
+        if (!_conversationsController.isClosed) {
+          _conversationsController.add(List.from(_conversations));
+        }
+        await _saveConversationsCache();
+      }
+      return {'success': true};
+    } catch (e) {
+      debugPrint('[MessagingService] updateConversation failed: $e');
+      return {
+        'success': false,
+        'error': SupabaseService.cleanErrorMessage(e),
+      };
+    }
+  }
+
+  /// Permanently delete a conversation and its messages (Admin RLS, online required).
+  Future<Map<String, dynamic>> deleteConversation(String conversationId) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      return {'success': false, 'offline': true};
+    }
+    final client = SupabaseService.instance.client;
+    if (client == null || !_isValidUuid(conversationId)) {
+      return {'success': false, 'offline': client == null};
+    }
+
+    try {
+      await client.from('conversations').delete().eq('id', conversationId);
+      _conversations.removeWhere((c) => c.id == conversationId);
+      _messagesMap.remove(conversationId);
+      final chatCtrl = _chatControllers[conversationId];
+      if (chatCtrl != null && !chatCtrl.isClosed) {
+        chatCtrl.add(const []);
+      }
+      await LocalStorageService.instance.remove('cache_msgs_$conversationId');
+      final uid = _uid;
+      if (uid.isNotEmpty) {
+        await LocalStorageService.instance
+            .removeUserCache(uid, 'msgs_$conversationId');
+      }
+      if (!_conversationsController.isClosed) {
+        _conversationsController.add(List.from(_conversations));
+      }
+      await _saveConversationsCache();
+      return {'success': true};
+    } catch (e) {
+      debugPrint('[MessagingService] deleteConversation failed: $e');
+      return {
+        'success': false,
+        'error': SupabaseService.cleanErrorMessage(e),
+      };
+    }
   }
 
   /// Fetch contacts the signed-in user is permitted to message (online required).
