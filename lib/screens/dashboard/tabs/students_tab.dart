@@ -91,6 +91,7 @@ class _StudentsTabState extends State<StudentsTab> {
   // 1. TEACHER VIEW: Assigned Class Roster, Daily Attendance & Parent Chat
   // ===========================================================================
   Widget _buildTeacherView(BuildContext context, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
     final assignedHalaqahId = AuthSessionService.instance.assignedHalaqahId;
     final classStudents = StudentService.instance.getStudentsForHalaqah(
