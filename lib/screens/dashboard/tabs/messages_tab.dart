@@ -566,7 +566,7 @@ class _MessagesTabState extends State<MessagesTab> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        loc.formatChatTimestamp(convo.lastMessageTime),
+                        loc.formatChatTimestamp(convo.lastMessageTime.toLocal()),
                         style: TextStyle(
                           fontSize: 11,
                           color: hasUnread ? p.primary : p.inkMuted,

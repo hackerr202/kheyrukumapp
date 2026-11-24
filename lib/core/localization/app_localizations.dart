@@ -342,7 +342,7 @@ class AppLocalizations {
       'reviewAction': 'Review',
       'juzOf30': 'Juz {juz} of 30',
       'juzShort': 'Juz {juz}',
-      'juzSurahAyahSummary': 'Juz {juz} • Surah #{surah}, Ayah {ayah}',
+      'juzSurahAyahSummary': 'Juz {juz} • {surah}, Ayah {ayah}',
       'languageEnglishLabel': 'English',
       'languageArabicLabel': 'Arabic',
       'languageAmharicLabel': 'Amharic',
@@ -893,6 +893,16 @@ class AppLocalizations {
       'editPaymentChannelsTitle': 'Edit Center Payment Accounts',
       'paymentChannelsSavedMsg': 'Center payment accounts updated.',
       'saveAccountsAction': 'Save Accounts',
+      'rosterSummaryMetrics':
+          '{students} Students • {circles} Circles • {present} Present Today',
+      'searchStudentsOrParentsHint': 'Search students or parents...',
+      'ageYearsShort': '{age}y',
+      'noRecitationLoggedYet': 'No recitation logged yet',
+      'logHifzAction': 'Log Hifz',
+      'messageParentTooltip': 'Message Parent',
+      'studentOverviewTitle': 'Student Overview',
+      'latestRecitationLabel': 'Latest Recitation',
+      'notMarkedYetLabel': 'Not marked yet',
     },
 
     // =========================================================================
@@ -1211,7 +1221,7 @@ class AppLocalizations {
       'reviewAction': 'مراجعة',
       'juzOf30': 'الجزء {juz} من 30',
       'juzShort': 'الجزء {juz}',
-      'juzSurahAyahSummary': 'الجزء {juz} • سورة رقم {surah}، آية {ayah}',
+      'juzSurahAyahSummary': 'الجزء {juz} • {surah}، آية {ayah}',
       'languageEnglishLabel': 'الإنجليزية',
       'languageArabicLabel': 'العربية',
       'languageAmharicLabel': 'الأمهرية',
@@ -1762,6 +1772,16 @@ class AppLocalizations {
       'editPaymentChannelsTitle': 'تعديل حسابات الدفع للمركز',
       'paymentChannelsSavedMsg': 'تم تحديث حسابات الدفع للمركز.',
       'saveAccountsAction': 'حفظ الحسابات',
+      'rosterSummaryMetrics':
+          '{students} طالب • {circles} حلقات • {present} حاضر اليوم',
+      'searchStudentsOrParentsHint': 'ابحث عن طالب أو ولي أمر...',
+      'ageYearsShort': '{age} سنة',
+      'noRecitationLoggedYet': 'لم يتم تسجيل تلاوة بعد',
+      'logHifzAction': 'تسجيل الحفظ',
+      'messageParentTooltip': 'مراسلة ولي الأمر',
+      'studentOverviewTitle': 'ملف الطالب',
+      'latestRecitationLabel': 'آخر تلاوة',
+      'notMarkedYetLabel': 'لم يُسجّل بعد',
     },
 
     // =========================================================================
@@ -2079,7 +2099,7 @@ class AppLocalizations {
       'reviewAction': 'ገምግም',
       'juzOf30': 'ጁዝ {juz} ከ30',
       'juzShort': 'ጁዝ {juz}',
-      'juzSurahAyahSummary': 'ጁዝ {juz} • ሱራ #{surah}፣ አንቀጽ {ayah}',
+      'juzSurahAyahSummary': 'ጁዝ {juz} • {surah}፣ አንቀጽ {ayah}',
       'languageEnglishLabel': 'እንግሊዝኛ',
       'languageArabicLabel': 'ዓረብኛ',
       'languageAmharicLabel': 'አማርኛ',
@@ -2629,6 +2649,16 @@ class AppLocalizations {
       'editPaymentChannelsTitle': 'የማዕከሉን የክፍያ ሂሳቦች ያርትዑ',
       'paymentChannelsSavedMsg': 'የማዕከሉ የክፍያ ሂሳቦች ተዘምነዋል።',
       'saveAccountsAction': 'ሂሳቦችን አስቀምጥ',
+      'rosterSummaryMetrics':
+          '{students} ተማሪዎች • {circles} ሐለቃዎች • {present} ዛሬ የተገኙ',
+      'searchStudentsOrParentsHint': 'ተማሪዎችን ወይም ወላጆችን ይፈልጉ...',
+      'ageYearsShort': '{age} ዓመት',
+      'noRecitationLoggedYet': 'እስካሁን የተመዘገበ ንባብ የለም',
+      'logHifzAction': 'ሒፍዝ መዝግብ',
+      'messageParentTooltip': 'ወላጅን ያነጋግሩ',
+      'studentOverviewTitle': 'የተማሪ አጠቃላይ መረጃ',
+      'latestRecitationLabel': 'የቅርብ ንባብ',
+      'notMarkedYetLabel': 'ገና አልተመዘገበም',
     },
   };
 
@@ -3072,19 +3102,30 @@ class AppLocalizations {
 
   /// Localized chat list timestamp (Now, 5m, 4:30 PM/ص/ከሰዓት, Yesterday, M/D).
   String formatChatTimestamp(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return now;
-    if (diff.inHours < 1) {
+    final localDt = dt.toLocal();
+    final nowDt = DateTime.now();
+    final diff = nowDt.difference(localDt);
+    if (diff.inMinutes >= 0 && diff.inMinutes < 1) return now;
+    if (diff.inHours >= 0 && diff.inHours < 1) {
       return tr('minutesShort', {'count': '${diff.inMinutes}'});
     }
-    if (diff.inDays == 0) {
-      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-      final min = dt.minute.toString().padLeft(2, '0');
-      final ampm = dt.hour >= 12 ? pmLabel : amLabel;
+    final isSameDay = localDt.year == nowDt.year &&
+        localDt.month == nowDt.month &&
+        localDt.day == nowDt.day;
+    if (isSameDay) {
+      final hour = localDt.hour > 12
+          ? localDt.hour - 12
+          : (localDt.hour == 0 ? 12 : localDt.hour);
+      final min = localDt.minute.toString().padLeft(2, '0');
+      final ampm = localDt.hour >= 12 ? pmLabel : amLabel;
       return '$hour:$min $ampm';
     }
-    if (diff.inDays == 1) return yesterday;
-    return '${dt.month}/${dt.day}';
+    final yesterdayDt = nowDt.subtract(const Duration(days: 1));
+    final isYesterday = localDt.year == yesterdayDt.year &&
+        localDt.month == yesterdayDt.month &&
+        localDt.day == yesterdayDt.day;
+    if (isYesterday) return yesterday;
+    return '${localDt.month}/${localDt.day}';
   }
 
   // Student Gender & Polish Getters

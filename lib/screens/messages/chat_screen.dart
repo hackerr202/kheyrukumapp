@@ -1728,13 +1728,18 @@ class _ChatScreenState extends State<ChatScreen>
                         color: timeColor,
                       ),
                     ),
-                  Text(
-                    '${msg.timestamp.hour.toString().padLeft(2, '0')}:${msg.timestamp.minute.toString().padLeft(2, '0')}',
-                    style: TextStyle(
-                      fontSize: 10,
-                      color: timeColor,
-                      fontFeatures: const [FontFeature.tabularFigures()],
-                    ),
+                  Builder(
+                    builder: (_) {
+                      final localTs = msg.timestamp.toLocal();
+                      return Text(
+                        '${localTs.hour.toString().padLeft(2, '0')}:${localTs.minute.toString().padLeft(2, '0')}',
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: timeColor,
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      );
+                    },
                   ),
                   if (isMe) ...[
                     const SizedBox(width: 4),

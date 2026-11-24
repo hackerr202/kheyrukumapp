@@ -79,7 +79,7 @@ class HomeworkService {
         ...p,
         'id': id,
         'created_at':
-            p['created_at']?.toString() ?? mut.createdAt.toIso8601String(),
+            p['created_at']?.toString() ?? mut.createdAt.toUtc().toIso8601String(),
       });
       _assignments.removeWhere((a) => a.id == id);
       _assignments.insert(0, assignment);

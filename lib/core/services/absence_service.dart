@@ -68,7 +68,7 @@ class AbsenceService {
           AbsenceRequest.fromJson({
             ...p,
             'id': id,
-            'created_at': mut.createdAt.toIso8601String(),
+            'created_at': mut.createdAt.toUtc().toIso8601String(),
           }),
         );
       }

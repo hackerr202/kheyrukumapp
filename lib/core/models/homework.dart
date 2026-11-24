@@ -50,8 +50,8 @@ class HomeworkAssignment {
       'to_ayah': toAyah,
       'tajweed_focus': tajweedFocus,
       'instructions': instructions,
-      'due_date': dueDate.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
+      'due_date': dueDate.toUtc().toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 
@@ -209,10 +209,10 @@ class HomeworkSubmission {
       'status': status,
       'repetition_count': repetitionCount,
       'parent_note': parentNote,
-      'practiced_at': practicedAt?.toIso8601String(),
+      'practiced_at': practicedAt?.toUtc().toIso8601String(),
       'teacher_rating': teacherRating,
       'teacher_feedback': teacherFeedback,
-      'reviewed_at': reviewedAt?.toIso8601String(),
+      'reviewed_at': reviewedAt?.toUtc().toIso8601String(),
     };
   }
 

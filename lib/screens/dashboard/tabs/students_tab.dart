@@ -15,6 +15,7 @@ import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/surah_names.dart';
 import '../../../widgets/add_student_dialog.dart';
 import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
@@ -661,7 +662,10 @@ class _StudentsTabState extends State<StudentsTab> {
                       Text(
                         loc.tr('juzSurahAyahSummary', {
                           'juz': '${student.currentJuz}',
-                          'surah': '${student.currentSurah}',
+                          'surah': SurahNames.formatted(
+                            student.currentSurah,
+                            languageCode: loc.locale.languageCode,
+                          ),
                           'ayah': '${student.currentAyah}',
                         }),
                         style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
@@ -1298,7 +1302,11 @@ class _StudentsTabState extends State<StudentsTab> {
                     const SizedBox(width: 8),
                     _buildHeroMetricTile(
                       AppLocalizations.of(context).surahLabel,
-                      '#${currentChild.currentSurah}',
+                      SurahNames.nameFor(
+                        currentChild.currentSurah,
+                        languageCode:
+                            AppLocalizations.of(context).locale.languageCode,
+                      ),
                     ),
                     const SizedBox(width: 8),
                     _buildHeroMetricTile(
@@ -1540,6 +1548,88 @@ class _StudentsTabState extends State<StudentsTab> {
   // ===========================================================================
   // 3. ADMIN VIEW: Full Roster, Circle Filter Chips & Student Enrollment
   // ===========================================================================
+  String _titleCaseName(String raw) {
+    final trimmed = raw.trim();
+    if (trimmed.isEmpty) return raw;
+    return trimmed
+        .split(RegExp(r'\s+'))
+        .map((w) => w.isEmpty ? w : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
+  }
+
+  bool _hasLoggedRecitation(Student student, List<WeeklyReport> reports) {
+    if (reports.isNotEmpty) return true;
+    if (student.currentSurah <= 0) return false;
+    if (student.currentJuz == 30 &&
+        student.currentSurah == 1 &&
+        student.currentAyah == 1) {
+      return false;
+    }
+    return true;
+  }
+
+  Color _ratingBadgeColor(String rating, AppPalette p) {
+    final lower = rating.trim().toLowerCase();
+    if (lower.contains('excellent') || lower.contains('mumtaz')) {
+      return const Color(0xFFC89B3C);
+    }
+    if (lower.contains('needs') || lower.contains('revision')) {
+      return p.warning;
+    }
+    return p.success;
+  }
+
+  Future<void> _openParentDirectChat(
+      BuildContext context, Student student) async {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    if (student.parentId == null || student.parentId!.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              loc.tr('noLinkedParentMsg', {'name': student.fullName}),
+            ),
+          ),
+        );
+      }
+      return;
+    }
+    try {
+      final convo = await MessagingService.instance.startDirectChatWithParent(
+        parentId: student.parentId!,
+        parentName: student.parentName,
+      );
+      if (context.mounted) {
+        final displayTitle = MessagingService.instance
+            .displayTitleFor(convo, AuthSessionService.instance.userId);
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversationId: convo.id,
+              conversationTitle: displayTitle,
+              targetRole: 'parent',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              loc.tr('couldNotOpenChatMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
+            ),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+    }
+  }
+
   Widget _buildAdminView(
       BuildContext context, List<Student> allStudents, AppPalette p) {
     final filtered = allStudents.where((s) {
@@ -1556,6 +1646,19 @@ class _StudentsTabState extends State<StudentsTab> {
     for (final pay in PaymentService.instance.allPayments) {
       paymentsByStudent.putIfAbsent(pay.studentId, () => []).add(pay);
     }
+
+    final halaqahs = HalaqahService.instance.halaqahs;
+    final circleCount = halaqahs.isNotEmpty
+        ? halaqahs.length
+        : allStudents
+            .map((s) => s.halaqahName.trim())
+            .where((n) => n.isNotEmpty)
+            .toSet()
+            .length;
+    final presentTodayCount = allStudents.where((s) {
+      final status = StudentService.instance.getTodayAttendanceForStudent(s.id)?.status;
+      return status == 'present' || status == 'late';
+    }).length;
 
     return RefreshIndicator(
       color: p.primary,
@@ -1574,17 +1677,21 @@ class _StudentsTabState extends State<StudentsTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${allStudents.length} ${loc.studentsCount}',
+                      loc.studentRoster,
                       style: TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w800,
                         color: p.ink,
                         letterSpacing: -0.2,
                       ),
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      loc.parentLinkage,
+                      loc.tr('rosterSummaryMetrics', {
+                        'students': '${allStudents.length}',
+                        'circles': '$circleCount',
+                        'present': '$presentTodayCount',
+                      }),
                       style: TextStyle(fontSize: 12, color: p.inkSecondary),
                     ),
                   ],
@@ -1608,17 +1715,17 @@ class _StudentsTabState extends State<StudentsTab> {
 
           if (allStudents.isNotEmpty) ...[
             ProSearchField(
-              hintText: loc.search,
+              hintText: loc.translate('searchStudentsOrParentsHint'),
               query: _searchQuery,
               onChanged: (val) => setState(() => _searchQuery = val.trim()),
             ),
             const SizedBox(height: 12),
             ValueListenableBuilder(
               valueListenable: HalaqahService.instance.halaqahsNotifier,
-              builder: (context, halaqahs, _) {
+              builder: (context, halaqahsList, _) {
                 final circleNames = <String>[
                   'All',
-                  ...halaqahs.map((h) => h.name),
+                  ...halaqahsList.map((h) => h.name),
                 ];
                 if (circleNames.length <= 1) return const SizedBox.shrink();
                 return SizedBox(
@@ -1670,7 +1777,7 @@ class _StudentsTabState extends State<StudentsTab> {
             ProEmptyState(
               icon: Icons.school_outlined,
               title: loc.studentRoster,
-              message: loc.parentLinkage,
+              message: loc.translate('addOneStudentBeforeTuitionMsg'),
               actionLabel: loc.enrollStudent,
               onAction: () => AddStudentDialog.show(context),
             )
@@ -1678,7 +1785,7 @@ class _StudentsTabState extends State<StudentsTab> {
             ProEmptyState(
               icon: Icons.search_off_rounded,
               title: loc.none,
-              message: loc.search,
+              message: loc.translate('searchStudentsOrParentsHint'),
             )
           else
             ...filtered.map(
@@ -1699,45 +1806,46 @@ class _StudentsTabState extends State<StudentsTab> {
     List<MonthlyPayment> studentPayments,
   ) {
     final loc = AppLocalizations.of(context);
+    final displayName = _titleCaseName(student.fullName);
     final genderLabel = loc.localizedGender(student.gender);
-    final parentContact = student.parentPhone.isNotEmpty
-        ? ' • ${student.parentPhone}'
-        : (student.parentEmail != null && student.parentEmail!.isNotEmpty
-            ? ' • ${student.parentEmail}'
-            : '');
+    final metaParts = <String>[
+      if (student.age > 0)
+        loc.tr('ageYearsShort', {'age': '${student.age}'}),
+      if (genderLabel != null) genderLabel,
+    ];
+    final metaLine = metaParts.join(' • ');
 
-    final String badgeText;
-    final Color badgeColor;
-    if (studentPayments.isNotEmpty) {
-      final latest = studentPayments.first.status;
-      badgeText = switch (latest.toLowerCase()) {
-        'approved' => loc.approved,
-        'submitted' => loc.submitted,
-        'rejected' => loc.rejected,
-        'overdue' => loc.overdue,
-        _ => loc.pending,
-      };
-      badgeColor = latest == 'approved'
-          ? p.success
-          : (latest == 'rejected' || latest == 'overdue'
-              ? p.danger
-              : p.gold);
-    } else {
-      badgeText = student.halaqahName;
-      badgeColor = p.primary;
-    }
+    final parentLine = student.parentPhone.isNotEmpty
+        ? '${student.parentName} • ${student.parentPhone}'
+        : student.parentName;
+
+    final reports = StudentService.instance.getWeeklyReportsForStudent(student.id);
+    final latestReport = reports.isNotEmpty ? reports.first : null;
+    final hasRecitation = _hasLoggedRecitation(student, reports);
+
+    final todayAtt = StudentService.instance.getTodayAttendanceForStudent(student.id);
+    final attStatus = todayAtt?.status;
+    final attColor = attStatus != null ? _statusColor(attStatus, p) : p.primary;
+    final attLabel = attStatus != null
+        ? loc.localizedAttendanceStatus(attStatus)
+        : loc.translate('attendanceShortTab');
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
       child: ProCard(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          _showStudentDetailSheet(context, student, p, studentPayments);
+        },
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Top Row: Avatar + Name (+ Age/Gender) + Single Circle Pill + Menu
             Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.center,
               children: [
                 ProAvatar(
-                  name: student.fullName,
+                  name: displayName,
                   radius: 21,
                   color: p.primary,
                 ),
@@ -1745,49 +1853,36 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Row(
-                        children: [
-                          Flexible(
-                            child: Text(
-                              student.fullName,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
-                              style: TextStyle(
-                                fontSize: 15.5,
-                                fontWeight: FontWeight.w700,
-                                color: p.ink,
-                              ),
-                            ),
-                          ),
-                          if (genderLabel != null) ...[
-                            const SizedBox(width: 6),
-                            ProStatusPill(
-                              label: genderLabel,
-                              color:
-                                  student.gender == 'male' ? p.primary : p.gold,
-                              icon: student.gender == 'male'
-                                  ? Icons.male_rounded
-                                  : Icons.female_rounded,
-                            ),
-                          ],
-                        ],
-                      ),
-                      const SizedBox(height: 2),
                       Text(
-                        loc.tr('parentContactLine', {
-                          'name': student.parentName,
-                          'contact': parentContact,
-                        }),
-                        style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                        displayName,
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 15.5,
+                          fontWeight: FontWeight.w700,
+                          color: p.ink,
+                        ),
                       ),
+                      if (metaLine.isNotEmpty) ...[
+                        const SizedBox(height: 2),
+                        Text(
+                          metaLine,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            fontWeight: FontWeight.w500,
+                            color: p.inkSecondary,
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),
                 const SizedBox(width: 6),
-                ProStatusPill(label: badgeText, color: badgeColor),
+                ProStatusPill(label: student.halaqahName, color: p.primary),
                 PopupMenuButton<String>(
                   padding: EdgeInsets.zero,
                   constraints: const BoxConstraints(),
@@ -1912,7 +2007,28 @@ class _StudentsTabState extends State<StudentsTab> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
+            // Second Row: Full-width Parent Row with Icon
+            Row(
+              children: [
+                Icon(Icons.person_outline_rounded, size: 15, color: p.inkMuted),
+                const SizedBox(width: 6),
+                Expanded(
+                  child: Text(
+                    parentLine,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      color: p.inkSecondary,
+                      fontWeight: FontWeight.w500,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            // Quran Progress Strip (no redundant circle name; real Surah names)
             Container(
               padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 8),
               decoration: BoxDecoration(
@@ -1921,102 +2037,161 @@ class _StudentsTabState extends State<StudentsTab> {
               ),
               child: Row(
                 children: [
-                  Icon(Icons.auto_stories_outlined,
-                      size: 14, color: p.primary),
+                  Icon(
+                    Icons.auto_stories_outlined,
+                    size: 14,
+                    color: hasRecitation ? p.primary : p.inkMuted,
+                  ),
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      '${student.halaqahName} • ${loc.tr('juzSurahAyahSummary', {
-                        'juz': '${student.currentJuz}',
-                        'surah': '${student.currentSurah}',
-                        'ayah': '${student.currentAyah}',
-                      })}',
+                      hasRecitation
+                          ? loc.tr('juzSurahAyahSummary', {
+                              'juz': '${student.currentJuz}',
+                              'surah': SurahNames.formatted(
+                                student.currentSurah,
+                                languageCode: loc.locale.languageCode,
+                              ),
+                              'ayah': '${student.currentAyah}',
+                            })
+                          : loc.translate('noRecitationLoggedYet'),
                       style: TextStyle(
                         fontSize: 12,
-                        color: p.inkSecondary,
-                        fontWeight: FontWeight.w500,
+                        color: hasRecitation ? p.ink : p.inkMuted,
+                        fontWeight:
+                            hasRecitation ? FontWeight.w600 : FontWeight.w500,
                       ),
+                      maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                   ),
+                  if (latestReport != null &&
+                      latestReport.tajweedRating.trim().isNotEmpty) ...[
+                    const SizedBox(width: 6),
+                    ProStatusPill(
+                      label: loc.localizedTajweedRating(latestReport.tajweedRating),
+                      color: _ratingBadgeColor(latestReport.tajweedRating, p),
+                    ),
+                  ],
                 ],
               ),
             ),
             const SizedBox(height: 12),
+            // Action Row: Primary Attendance Pill + Secondary Log Hifz + Compact Chat Icon
             Row(
               children: [
                 Expanded(
-                  child: _buildCompactCardAction(
-                    icon: Icons.check_circle_outline_rounded,
-                    label: loc.translate('attendanceShortTab'),
-                    color: p.success,
-                    onTap: () => _showMarkAttendanceDialog(context, student),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildCompactCardAction(
-                    icon: Icons.menu_book_rounded,
-                    label: loc.translate('reportShortTab'),
-                    color: p.primary,
-                    onTap: () => _showWeeklyReportDialog(context, student),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _buildCompactCardAction(
-                    icon: Icons.chat_bubble_outline_rounded,
-                    label: loc.translate('messageShortAction'),
-                    color: p.gold,
-                    onTap: () async {
-                      if (student.parentId == null ||
-                          student.parentId!.isEmpty) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                loc.tr('noLinkedParentMsg', {
-                                  'name': student.fullName,
-                                }),
-                              ),
-                            ),
-                          );
-                        }
-                        return;
-                      }
-                      try {
-                        final convo = await MessagingService.instance
-                            .startDirectChatWithParent(
-                          parentId: student.parentId!,
-                          parentName: student.parentName,
-                        );
-                        if (context.mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                conversationId: convo.id,
-                                conversationTitle: convo.title,
-                                targetRole: 'parent',
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                loc.tr('couldNotOpenChatMsg', {
-                                  'error': SupabaseService.cleanErrorMessage(e),
-                                }),
-                              ),
-                              backgroundColor: p.danger,
-                            ),
-                          );
-                        }
-                      }
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.lightImpact();
+                      _showMarkAttendanceDialog(context, student);
                     },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 42,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: attStatus != null
+                            ? attColor.withValues(alpha: 0.14)
+                            : p.primarySoft,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: attColor.withValues(alpha: 0.30),
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            attStatus != null
+                                ? Icons.check_circle_rounded
+                                : Icons.check_circle_outline_rounded,
+                            size: 16,
+                            color: attColor,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              attLabel,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: attColor,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _showWeeklyReportDialog(context, student);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      height: 42,
+                      padding: const EdgeInsets.symmetric(horizontal: 10),
+                      decoration: BoxDecoration(
+                        color: p.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            Icons.menu_book_rounded,
+                            size: 16,
+                            color: p.inkSecondary,
+                          ),
+                          const SizedBox(width: 6),
+                          Flexible(
+                            child: Text(
+                              loc.translate('logHifzAction'),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: p.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Tooltip(
+                  message: loc.translate('messageParentTooltip'),
+                  child: InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      _openParentDirectChat(context, student);
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      width: 44,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: p.surfaceSubtle,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: p.border),
+                      ),
+                      child: Icon(
+                        Icons.chat_bubble_outline_rounded,
+                        size: 18,
+                        color: p.primary,
+                      ),
+                    ),
                   ),
                 ),
               ],
@@ -2322,6 +2497,219 @@ class _StudentsTabState extends State<StudentsTab> {
         ),
       );
     }
+  }
+
+  void _showStudentDetailSheet(
+    BuildContext context,
+    Student student,
+    AppPalette p,
+    List<MonthlyPayment> studentPayments,
+  ) {
+    final loc = AppLocalizations.of(context);
+    final displayName = _titleCaseName(student.fullName);
+    final genderLabel = loc.localizedGender(student.gender);
+    final todayAtt =
+        StudentService.instance.getTodayAttendanceForStudent(student.id);
+    final reports =
+        StudentService.instance.getWeeklyReportsForStudent(student.id);
+    final latestReport = reports.isNotEmpty ? reports.first : null;
+    final hasRecitation = _hasLoggedRecitation(student, reports);
+    final latestPay = studentPayments.isNotEmpty ? studentPayments.first : null;
+
+    showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: p.surface,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (sheetCtx) {
+        return SafeArea(
+          child: SingleChildScrollView(
+            padding: const EdgeInsets.fromLTRB(20, 14, 20, 24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Center(
+                  child: Container(
+                    width: 40,
+                    height: 4,
+                    decoration: BoxDecoration(
+                      color: p.border,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    ProAvatar(name: displayName, radius: 26, color: p.primary),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            displayName,
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              color: p.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Wrap(
+                            spacing: 6,
+                            runSpacing: 6,
+                            children: [
+                              ProStatusPill(
+                                label: student.halaqahName,
+                                color: p.primary,
+                              ),
+                              if (student.age > 0)
+                                ProStatusPill(
+                                  label: loc.tr(
+                                    'ageYearsShort',
+                                    {'age': '${student.age}'},
+                                  ),
+                                  color: p.inkSecondary,
+                                ),
+                              if (genderLabel != null)
+                                ProStatusPill(
+                                  label: genderLabel,
+                                  color: student.gender == 'male'
+                                      ? p.primary
+                                      : p.gold,
+                                ),
+                            ],
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
+                ProCard(
+                  backgroundColor: p.surfaceSubtle,
+                  padding: const EdgeInsets.all(14),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _buildReportLine(
+                        p,
+                        loc.roleParent,
+                        student.parentPhone.isNotEmpty
+                            ? '${student.parentName} • ${student.parentPhone}'
+                            : student.parentName,
+                      ),
+                      const SizedBox(height: 8),
+                      _buildReportLine(
+                        p,
+                        loc.translate('todaysAttendanceLabel'),
+                        todayAtt != null
+                            ? loc.localizedAttendanceStatus(todayAtt.status)
+                            : loc.translate('notMarkedYetLabel'),
+                      ),
+                      const SizedBox(height: 8),
+                      _buildReportLine(
+                        p,
+                        loc.translate('latestRecitationLabel'),
+                        hasRecitation
+                            ? loc.tr('juzSurahAyahSummary', {
+                                'juz': '${student.currentJuz}',
+                                'surah': SurahNames.formatted(
+                                  student.currentSurah,
+                                  languageCode: loc.locale.languageCode,
+                                ),
+                                'ayah': '${student.currentAyah}',
+                              })
+                            : loc.translate('noRecitationLoggedYet'),
+                      ),
+                      if (latestReport != null &&
+                          latestReport.tajweedRating.trim().isNotEmpty) ...[
+                        const SizedBox(height: 8),
+                        _buildReportLine(
+                          p,
+                          loc.translate('recitationRatingLabel'),
+                          loc.localizedTajweedRating(latestReport.tajweedRating),
+                        ),
+                      ],
+                      if (latestPay != null) ...[
+                        const SizedBox(height: 8),
+                        _buildReportLine(
+                          p,
+                          loc.tuitionAndFees,
+                          '${latestPay.month} • ${loc.localizedPaymentStatus(latestPay.status)}',
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 16),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showMarkAttendanceDialog(context, student);
+                        },
+                        icon: const Icon(Icons.check_circle_outline_rounded,
+                            size: 18),
+                        label: Text(loc.translate('attendanceShortTab')),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _showWeeklyReportDialog(context, student);
+                        },
+                        icon: const Icon(Icons.menu_book_rounded, size: 18),
+                        label: Text(loc.translate('logHifzAction')),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () {
+                          Navigator.pop(sheetCtx);
+                          _openParentDirectChat(context, student);
+                        },
+                        icon: const Icon(Icons.chat_bubble_outline_rounded,
+                            size: 18),
+                        label: Text(loc.translate('messageParentTooltip')),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          Navigator.pop(sheetCtx);
+                          await AddStudentDialog.show(
+                            context,
+                            existingStudent: student,
+                          );
+                          if (mounted) setState(() {});
+                        },
+                        icon: const Icon(Icons.edit_outlined, size: 18),
+                        label: Text(loc.editStudent),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
   }
 }
 

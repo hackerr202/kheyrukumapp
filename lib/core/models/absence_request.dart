@@ -94,8 +94,8 @@ class AbsenceRequest {
       'notes': notes,
       'status': status,
       'reviewed_by': reviewedBy,
-      'created_at': createdAt.toIso8601String(),
-      'reviewed_at': reviewedAt?.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
+      'reviewed_at': reviewedAt?.toUtc().toIso8601String(),
     };
   }
 

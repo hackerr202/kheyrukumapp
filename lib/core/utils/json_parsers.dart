@@ -50,15 +50,27 @@ class JsonParsers {
 
   static DateTime asDateTime(dynamic v, [DateTime? fallback]) {
     final parsed = asNullableDateTime(v);
-    return parsed ?? fallback ?? DateTime.now();
+    if (parsed != null) return parsed;
+    if (fallback != null) {
+      return fallback.isUtc ? fallback.toLocal() : fallback;
+    }
+    return DateTime.now();
   }
+
+  static final RegExp _dateOnlyRegex = RegExp(r'^\d{4}-\d{2}-\d{2}$');
+  static final RegExp _tzSuffixRegex =
+      RegExp(r'(?:[zZ]|[+-]\d{2}(?::?\d{2})?)$');
 
   static DateTime? asNullableDateTime(dynamic v) {
     if (v == null) return null;
-    if (v is DateTime) return v;
+    if (v is DateTime) return v.isUtc ? v.toLocal() : v;
     final s = v.toString().trim();
     if (s.isEmpty) return null;
-    return DateTime.tryParse(s);
+    if (_dateOnlyRegex.hasMatch(s)) {
+      return DateTime.tryParse(s);
+    }
+    final normalized = _tzSuffixRegex.hasMatch(s) ? s : '${s}Z';
+    return DateTime.tryParse(normalized)?.toLocal();
   }
 
   static Map<String, dynamic>? asMap(dynamic v) {

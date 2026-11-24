@@ -57,8 +57,8 @@ class InvitationCode {
       'linked_student_id': linkedStudentId,
       'target_halaqah_id': targetHalaqahId,
       'is_used': isUsed,
-      'expires_at': expiresAt.toIso8601String(),
-      'created_at': createdAt.toIso8601String(),
+      'expires_at': expiresAt.toUtc().toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 

@@ -350,71 +350,71 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         return Padding(
                           padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
-                          child: Row(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              if (pageTitle != null)
-                                Expanded(
-                                  child: Text(
-                                    pageTitle,
-                                    style: TextStyle(
-                                      fontSize: 22,
-                                      fontWeight: FontWeight.w800,
-                                      color: p.ink,
-                                      letterSpacing: -0.4,
+                              Row(
+                                children: [
+                                  if (pageTitle != null)
+                                    Expanded(
+                                      child: Text(
+                                        pageTitle,
+                                        style: TextStyle(
+                                          fontSize: 22,
+                                          fontWeight: FontWeight.w800,
+                                          color: p.ink,
+                                          letterSpacing: -0.4,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    )
+                                  else ...[
+                                    ProAvatar(
+                                      name: displayName,
+                                      imageUrl: avatarUrl,
+                                      radius: 21,
+                                      color: roleColor,
+                                      showGoldRing: isAdmin,
                                     ),
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                  ),
-                                )
-                              else ...[
-                                ProAvatar(
-                                  name: displayName,
-                                  imageUrl: avatarUrl,
-                                  radius: 22,
-                                  color: roleColor,
-                                  showGoldRing: isAdmin,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    mainAxisSize: MainAxisSize.min,
-                                    children: [
-                                      Row(
+                                    const SizedBox(width: 11),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        mainAxisSize: MainAxisSize.min,
                                         children: [
-                                          Flexible(
-                                            child: Text(
-                                              loc.tr('assalamuAlaikumUser', {
-                                                'name': displayName
-                                                    .trim()
-                                                    .split(RegExp(r'\s+'))
-                                                    .first,
-                                              }),
-                                              style: TextStyle(
-                                                fontSize: 16.5,
-                                                fontWeight: FontWeight.w700,
-                                                color: p.ink,
-                                                letterSpacing: -0.3,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
+                                          Text(
+                                            loc.tr('assalamuAlaikumUser', {
+                                              'name': displayName
+                                                  .trim()
+                                                  .split(RegExp(r'\s+'))
+                                                  .first,
+                                            }),
+                                            style: TextStyle(
+                                              fontSize: 16.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: p.ink,
+                                              letterSpacing: -0.3,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
-                                          const SizedBox(width: 7),
+                                          const SizedBox(height: 3),
                                           Container(
                                             padding: const EdgeInsets.symmetric(
                                               horizontal: 7,
                                               vertical: 2,
                                             ),
                                             decoration: BoxDecoration(
-                                              color:
-                                                  roleColor.withOpacity(0.12),
+                                              color: roleColor.withValues(
+                                                  alpha: 0.12),
                                               borderRadius:
                                                   BorderRadius.circular(6),
                                               border: Border.all(
-                                                color:
-                                                    roleColor.withOpacity(0.28),
+                                                color: roleColor.withValues(
+                                                    alpha: 0.28),
                                               ),
                                             ),
                                             child: Text(
@@ -429,139 +429,146 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 3),
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.nights_stay_outlined,
-                                            size: 12,
-                                            color: p.gold,
-                                          ),
-                                          const SizedBox(width: 4),
-                                          Expanded(
-                                            child: Text(
-                                              '${HijriDateHelper.format(DateTime.now(), loc)} • ${loc.formatTodayDateBanner()}',
-                                              style: TextStyle(
-                                                fontSize: 11.5,
-                                                color: p.inkSecondary,
-                                                fontWeight: FontWeight.w500,
-                                              ),
-                                              maxLines: 1,
-                                              overflow: TextOverflow.ellipsis,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                              ],
-                              if (_currentTabIndex == 2) ...[
-                                InkWell(
-                                  onTap: () {
-                                    HapticFeedback.selectionClick();
-                                    _messagesNewChatTrigger.value++;
-                                  },
-                                  borderRadius: BorderRadius.circular(18),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                      horizontal: 11,
-                                      vertical: 7,
                                     ),
-                                    decoration: BoxDecoration(
-                                      color: p.primary,
+                                  ],
+                                  if (_currentTabIndex == 2) ...[
+                                    InkWell(
+                                      onTap: () {
+                                        HapticFeedback.selectionClick();
+                                        _messagesNewChatTrigger.value++;
+                                      },
                                       borderRadius: BorderRadius.circular(18),
-                                    ),
-                                    child: Row(
-                                      mainAxisSize: MainAxisSize.min,
-                                      children: [
-                                        Icon(
-                                          Icons.add_rounded,
-                                          size: 16,
-                                          color: p.onPrimary,
+                                      child: Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 11,
+                                          vertical: 7,
                                         ),
-                                        const SizedBox(width: 4),
-                                        Text(
-                                          loc.translate('newShortButton'),
-                                          style: TextStyle(
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w700,
-                                            color: p.onPrimary,
-                                          ),
+                                        decoration: BoxDecoration(
+                                          color: p.primary,
+                                          borderRadius:
+                                              BorderRadius.circular(18),
                                         ),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                              ],
-                              // Notification Bell
-                              ValueListenableBuilder<int>(
-                                valueListenable: _unreadTotalNotifier,
-                                builder: (context, totalUnread, _) {
-                                  return Stack(
-                                    clipBehavior: Clip.none,
-                                    children: [
-                                      _HeaderIconButton(
-                                        icon: Icons.notifications_none_rounded,
-                                        tooltip: loc.schoolAnnouncements,
-                                        onTap: () {
-                                          AnnouncementService.instance
-                                              .markAllAsRead();
-                                          _unreadAnnouncementsCount = 0;
-                                          _updateUnreadTotal();
-                                          AnnouncementsSheet.show(
-                                            context,
-                                            initialTab: 0,
-                                          );
-                                        },
-                                      ),
-                                      if (totalUnread > 0)
-                                        PositionedDirectional(
-                                          top: -4,
-                                          end: -4,
-                                          child: Container(
-                                            padding: const EdgeInsets.symmetric(
-                                              horizontal: 5,
-                                              vertical: 2,
+                                        child: Row(
+                                          mainAxisSize: MainAxisSize.min,
+                                          children: [
+                                            Icon(
+                                              Icons.add_rounded,
+                                              size: 16,
+                                              color: p.onPrimary,
                                             ),
-                                            constraints: const BoxConstraints(
-                                              minWidth: 18,
-                                              minHeight: 18,
-                                            ),
-                                            decoration: BoxDecoration(
-                                              color: p.danger,
-                                              borderRadius:
-                                                  BorderRadius.circular(10),
-                                              border: Border.all(
-                                                color: p.canvas,
-                                                width: 1.5,
+                                            const SizedBox(width: 4),
+                                            Text(
+                                              loc.translate('newShortButton'),
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.w700,
+                                                color: p.onPrimary,
                                               ),
                                             ),
-                                            child: Center(
-                                              child: Text(
-                                                totalUnread > 9
-                                                    ? '9+'
-                                                    : '$totalUnread',
-                                                style: const TextStyle(
-                                                  color: Colors.white,
-                                                  fontSize: 9,
-                                                  fontWeight: FontWeight.w800,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                  ],
+                                  // Notification Bell
+                                  ValueListenableBuilder<int>(
+                                    valueListenable: _unreadTotalNotifier,
+                                    builder: (context, totalUnread, _) {
+                                      return Stack(
+                                        clipBehavior: Clip.none,
+                                        children: [
+                                          _HeaderIconButton(
+                                            icon: Icons
+                                                .notifications_none_rounded,
+                                            tooltip: loc.schoolAnnouncements,
+                                            onTap: () {
+                                              AnnouncementService.instance
+                                                  .markAllAsRead();
+                                              _unreadAnnouncementsCount = 0;
+                                              _updateUnreadTotal();
+                                              AnnouncementsSheet.show(
+                                                context,
+                                                initialTab: 0,
+                                              );
+                                            },
+                                          ),
+                                          if (totalUnread > 0)
+                                            PositionedDirectional(
+                                              top: -4,
+                                              end: -4,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                  horizontal: 5,
+                                                  vertical: 2,
+                                                ),
+                                                constraints:
+                                                    const BoxConstraints(
+                                                  minWidth: 18,
+                                                  minHeight: 18,
+                                                ),
+                                                decoration: BoxDecoration(
+                                                  color: p.danger,
+                                                  borderRadius:
+                                                      BorderRadius.circular(10),
+                                                  border: Border.all(
+                                                    color: p.canvas,
+                                                    width: 1.5,
+                                                  ),
+                                                ),
+                                                child: Center(
+                                                  child: Text(
+                                                    totalUnread > 9
+                                                        ? '9+'
+                                                        : '$totalUnread',
+                                                    style: const TextStyle(
+                                                      color: Colors.white,
+                                                      fontSize: 9,
+                                                      fontWeight:
+                                                          FontWeight.w800,
+                                                    ),
+                                                  ),
                                                 ),
                                               ),
                                             ),
-                                          ),
+                                        ],
+                                      );
+                                    },
+                                  ),
+                                  const SizedBox(width: 8),
+                                  _HeaderIconButton(
+                                    icon: Icons.settings_outlined,
+                                    tooltip: loc.portalSettings,
+                                    onTap: () => SettingsSheet.show(context),
+                                  ),
+                                ],
+                              ),
+                              if (pageTitle == null) ...[
+                                const SizedBox(height: 6),
+                                Row(
+                                  children: [
+                                    Icon(
+                                      Icons.nights_stay_outlined,
+                                      size: 13,
+                                      color: p.gold,
+                                    ),
+                                    const SizedBox(width: 5),
+                                    Expanded(
+                                      child: Text(
+                                        '${HijriDateHelper.format(DateTime.now(), loc)} • ${loc.formatTodayDateBanner()}',
+                                        style: TextStyle(
+                                          fontSize: 11.5,
+                                          color: p.inkSecondary,
+                                          fontWeight: FontWeight.w500,
                                         ),
-                                    ],
-                                  );
-                                },
-                              ),
-                              const SizedBox(width: 8),
-                              _HeaderIconButton(
-                                icon: Icons.settings_outlined,
-                                tooltip: loc.portalSettings,
-                                onTap: () => SettingsSheet.show(context),
-                              ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
                             ],
                           ),
                         );

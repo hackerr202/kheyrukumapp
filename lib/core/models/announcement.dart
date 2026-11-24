@@ -50,7 +50,7 @@ class Announcement {
       'is_pinned': isPinned,
       'attachment_url': attachmentUrl,
       'attachment_name': attachmentName,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 }

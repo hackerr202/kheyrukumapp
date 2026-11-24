@@ -16,6 +16,7 @@ import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/json_parsers.dart';
+import '../../../core/utils/surah_names.dart';
 import '../../../widgets/add_student_dialog.dart';
 import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
@@ -1133,7 +1134,10 @@ class _HomeTabState extends State<HomeTab> {
                           child: Text(
                             loc.tr('juzSurahAyahSummary', {
                               'juz': '${activeChild.currentJuz}',
-                              'surah': '${activeChild.currentSurah}',
+                              'surah': SurahNames.formatted(
+                                activeChild.currentSurah,
+                                languageCode: loc.locale.languageCode,
+                              ),
                               'ayah': '${activeChild.currentAyah}',
                             }),
                             style: TextStyle(

@@ -499,7 +499,7 @@ CREATE OR REPLACE FUNCTION public.generate_invitation_code(
 RETURNS JSONB
 LANGUAGE plpgsql
 SECURITY DEFINER
-SET search_path = public, pg_temp
+SET search_path = public, extensions, pg_temp
 AS $$
 DECLARE
     v_code TEXT;

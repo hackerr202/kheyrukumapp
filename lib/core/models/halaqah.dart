@@ -48,7 +48,7 @@ class Halaqah {
       'schedule': schedule,
       'description': description,
       'student_count': studentCount,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 

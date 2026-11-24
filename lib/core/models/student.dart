@@ -95,7 +95,7 @@ class Student {
       'monthly_fee_amount': monthlyFeeAmount,
       'date_of_birth': dateOfBirth?.toIso8601String(),
       'gender': gender,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 

@@ -1040,7 +1040,7 @@ class MessagingService {
       'participant_ids': convo.participantIds,
       'participant_names': convo.participantNames,
       'last_message': convo.lastMessage,
-      'last_message_time': convo.lastMessageTime.toIso8601String(),
+      'last_message_time': convo.lastMessageTime.toUtc().toIso8601String(),
       'group_type': convo.groupType,
       'unread_count': convo.unreadCount,
       'is_pinned': convo.isPinned,

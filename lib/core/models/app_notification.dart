@@ -37,7 +37,7 @@ class AppNotification {
       'title': title,
       'body': body,
       'type': type,
-      'created_at': createdAt.toIso8601String(),
+      'created_at': createdAt.toUtc().toIso8601String(),
       'is_read': isRead,
       'data': data,
     };

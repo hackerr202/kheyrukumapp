@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../utils/json_parsers.dart';
 import '../utils/uuid_v4.dart';
 import 'connectivity_service.dart';
 import 'local_storage_service.dart';
@@ -133,8 +134,7 @@ class OfflineMutation {
       mediaPayloadField: json['media_payload_field']?.toString(),
       mediaMimeType: json['media_mime_type']?.toString(),
       displayLabel: json['display_label']?.toString(),
-      createdAt: DateTime.tryParse(json['created_at']?.toString() ?? '') ??
-          DateTime.now().toUtc(),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
       retryCount: (json['retry_count'] as num?)?.toInt() ?? 0,
       status: (json['status'] ?? 'pending').toString(),
       lastError: json['last_error']?.toString(),
