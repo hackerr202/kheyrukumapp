@@ -360,7 +360,12 @@ class PushNotificationService {
   Future<bool> promptAndSyncNotifications() async {
     _permissionsRequested = false;
     await requestNotificationPermissions();
-    await syncRoleSubscription(null);
+    await registerDeviceToken();
+    final cachedRole =
+        await LocalStorageService.instance.getString(_cachedRoleKey);
+    if (cachedRole != null && cachedRole.isNotEmpty) {
+      await syncRoleSubscription(cachedRole);
+    }
     return await areNotificationsEnabled();
   }
 

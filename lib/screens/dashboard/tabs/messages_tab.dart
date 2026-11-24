@@ -895,24 +895,28 @@ class _MessagesTabState extends State<MessagesTab> {
                           firstHalaqah.name,
                           halaqahId: firstHalaqah.id,
                         )
-                      : const [];
-                  final parentIds = circleStudents.isNotEmpty
-                      ? circleStudents
-                          .map((s) => s.parentId ?? '')
-                          .where((id) => id.isNotEmpty)
-                          .toSet()
-                          .toList()
-                      : registeredParents.map((par) => par['id']!).toList();
-                  final parentNames = circleStudents.isNotEmpty
-                      ? parentIds.map((pid) {
-                          final match = circleStudents
-                              .where((s) => s.parentId == pid)
+                      : null;
+                  final List<String> parentIds =
+                      circleStudents != null && circleStudents.isNotEmpty
+                          ? circleStudents
+                              .map((s) => s.parentId ?? '')
+                              .where((id) => id.isNotEmpty)
+                              .toSet()
+                              .toList()
+                          : registeredParents.map((par) => par['id']!).toList();
+                  final List<String> parentNames =
+                      circleStudents != null && circleStudents.isNotEmpty
+                          ? parentIds.map((pid) {
+                              final match = circleStudents
+                                  .where((s) => s.parentId == pid)
+                                  .toList();
+                              return match.isNotEmpty
+                                  ? match.first.parentName
+                                  : 'Parent';
+                            }).toList()
+                          : registeredParents
+                              .map((par) => par['name']!)
                               .toList();
-                          return match.isNotEmpty
-                              ? match.first.parentName
-                              : 'Parent';
-                        }).toList()
-                      : registeredParents.map((par) => par['name']!).toList();
 
                   final groupName = firstHalaqah != null
                       ? '${firstHalaqah.name} Parents Group'
