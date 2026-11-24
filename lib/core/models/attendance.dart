@@ -44,10 +44,13 @@ class AttendanceRecord {
     return {
       'id': id,
       'student_id': studentId,
+      'student_name': studentName,
+      'halaqah_id': halaqahId,
       'date': date.toIso8601String().substring(0, 10),
       'status': status,
       'teacher_remarks': teacherRemarks,
       'marked_by': markedBy,
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 

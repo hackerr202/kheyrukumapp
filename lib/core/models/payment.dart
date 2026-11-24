@@ -70,7 +70,10 @@ class MonthlyPayment {
     return {
       'id': id,
       'parent_id': parentId,
+      'parent_name': parentName,
+      'parent_email': parentEmail,
       'student_id': studentId,
+      'student_name': studentName,
       'month': month,
       'amount': amount,
       'due_date': dueDate.toIso8601String(),

@@ -1,11 +1,14 @@
 import 'package:flutter/foundation.dart';
 import '../models/halaqah.dart';
 import '../utils/json_parsers.dart';
+import 'auth_session_service.dart';
+import 'connectivity_service.dart';
 import 'local_storage_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
 
-/// Singleton Service managing dynamic Halaqahs (Study Circles).
+/// Singleton Service managing dynamic Halaqahs (Study Circles) with
+/// user-scoped offline caching and network-safe cloud operations.
 class HalaqahService {
   HalaqahService._();
   static final HalaqahService instance = HalaqahService._();
@@ -17,12 +20,29 @@ class HalaqahService {
 
   List<Halaqah> get halaqahs => List.unmodifiable(_halaqahs);
 
+  String get _uid => AuthSessionService.instance.userId.isNotEmpty
+      ? AuthSessionService.instance.userId
+      : (SupabaseService.instance.currentUser?.id ?? '');
+
+  Future<void> _saveToCache() async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
+    await LocalStorageService.instance.saveUserJsonList(
+      uid,
+      'halaqahs',
+      jsonList,
+    );
+  }
+
   Future<void> _loadFromCache() async {
     if (_cacheLoaded) return;
+    final uid = _uid;
+    if (uid.isEmpty) return;
     _cacheLoaded = true;
     try {
       final cached =
-          await LocalStorageService.instance.getJsonList('cached_halaqahs');
+          await LocalStorageService.instance.getUserJsonList(uid, 'halaqahs');
       if (cached.isNotEmpty && _halaqahs.isEmpty) {
         _halaqahs.clear();
         for (final item in cached) {
@@ -30,18 +50,20 @@ class HalaqahService {
         }
         halaqahsNotifier.value = List.from(_halaqahs);
         debugPrint(
-            '[HalaqahService] Loaded ${_halaqahs.length} halaqahs from offline cache.');
+          '[HalaqahService] Loaded ${_halaqahs.length} halaqahs from user offline cache.',
+        );
       }
     } catch (e) {
       debugPrint('[HalaqahService] Cache load error: $e');
     }
   }
 
-  /// Initialize from cache first and fetch authoritative halaqahs from Supabase.
+  /// Initialize from user-scoped cache first and fetch authoritative halaqahs from Supabase.
   Future<void> fetchHalaqahs() async {
     await _loadFromCache();
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
+    if (!ConnectivityService.instance.isOnline) return;
 
     try {
       final res = await client
@@ -70,23 +92,25 @@ class HalaqahService {
           _halaqahs.add(halaqah);
         }
         halaqahsNotifier.value = List.from(_halaqahs);
-
-        final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-        await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+        await _saveToCache();
       }
     } catch (e) {
       debugPrint('[HalaqahService] Supabase fetch halaqahs error: $e');
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+      }
     }
   }
 
   static bool _isValidUuid(String? str) {
     if (str == null) return false;
     final uuidRegex = RegExp(
-        r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$');
+      r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
+    );
     return uuidRegex.hasMatch(str.trim());
   }
 
-  /// Admin creates a brand new Halaqah in Supabase first (no silent fake IDs).
+  /// Admin creates a brand new Halaqah in Supabase (online required).
   Future<Halaqah> createHalaqah({
     required String name,
     String? teacherId,
@@ -94,6 +118,11 @@ class HalaqahService {
     String? schedule,
     String? description,
   }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
+
     final cleanSchedule = (schedule != null && schedule.isNotEmpty)
         ? schedule.trim()
         : 'Daily Recitation Session';
@@ -104,7 +133,8 @@ class HalaqahService {
 
     final client = SupabaseService.instance.client;
     if (client == null) {
-      throw Exception('Unable to connect to server. Please check your connection.');
+      throw Exception(
+          'Unable to connect to server. Please check your connection.');
     }
 
     final Map<String, dynamic> payload = {
@@ -125,7 +155,8 @@ class HalaqahService {
     final halaqah = Halaqah(
       id: finalId,
       name: name.trim(),
-      teacherId: (teacherId != null && _isValidUuid(teacherId)) ? teacherId : null,
+      teacherId:
+          (teacherId != null && _isValidUuid(teacherId)) ? teacherId : null,
       teacherName: cleanTeacherName,
       schedule: cleanSchedule,
       description: cleanDescription,
@@ -136,15 +167,18 @@ class HalaqahService {
     _halaqahs.removeWhere((h) => h.id == halaqah.id);
     _halaqahs.add(halaqah);
     halaqahsNotifier.value = List.from(_halaqahs);
-
-    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await _saveToCache();
 
     return halaqah;
   }
 
-  /// Admin updates an existing Halaqah (cloud first, rethrows on error).
+  /// Admin updates an existing Halaqah (online required).
   Future<void> updateHalaqah(Halaqah updated) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
+
     final client = SupabaseService.instance.client;
     if (client == null || !_isValidUuid(updated.id)) {
       throw Exception('Cannot update study circle: invalid connection or ID.');
@@ -166,13 +200,16 @@ class HalaqahService {
       _halaqahs[index] = updated;
       halaqahsNotifier.value = List.from(_halaqahs);
     }
-
-    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await _saveToCache();
   }
 
-  /// Admin deletes a Halaqah (cloud first, throws clean error on failure).
+  /// Admin deletes a Halaqah (online required).
   Future<void> deleteHalaqah(String halaqahId) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
+
     final client = SupabaseService.instance.client;
     if (client == null || !_isValidUuid(halaqahId)) {
       throw Exception('Cannot delete study circle: invalid connection or ID.');
@@ -182,12 +219,10 @@ class HalaqahService {
 
     _halaqahs.removeWhere((h) => h.id == halaqahId);
     halaqahsNotifier.value = List.from(_halaqahs);
-
-    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await _saveToCache();
   }
 
-  /// Assign teacher to a halaqah (or unassign when [halaqahId] is empty)
+  /// Assign teacher to a halaqah (or unassign when [halaqahId] is empty).
   Future<bool> assignTeacher({
     required String halaqahId,
     required String teacherId,
@@ -195,6 +230,10 @@ class HalaqahService {
   }) async {
     if (halaqahId.trim().isEmpty) {
       return unassignTeacher(teacherId);
+    }
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
     }
 
     final targetIdx = _halaqahs.indexWhere((h) => h.id == halaqahId);
@@ -212,8 +251,8 @@ class HalaqahService {
           },
         );
         if (rpcRes is Map && rpcRes['success'] == false) {
-          throw Exception(
-              rpcRes['message']?.toString() ?? 'Failed to assign study circle.');
+          throw Exception(rpcRes['message']?.toString() ??
+              'Failed to assign study circle.');
         }
       } catch (e) {
         final msg = e.toString().toLowerCase();
@@ -266,15 +305,18 @@ class HalaqahService {
       }
     }
     halaqahsNotifier.value = List.from(_halaqahs);
-
-    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await _saveToCache();
     await fetchHalaqahs();
     return true;
   }
 
-  /// Remove a teacher from their assigned study circle
+  /// Remove a teacher from their assigned study circle.
   Future<bool> unassignTeacher(String teacherId) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
+
     final client = SupabaseService.instance.client;
     if (client != null && _isValidUuid(teacherId)) {
       try {
@@ -326,22 +368,24 @@ class HalaqahService {
       }
     }
     halaqahsNotifier.value = List.from(_halaqahs);
-
-    final jsonList = _halaqahs.map((h) => h.toJson()).toList();
-    await LocalStorageService.instance.saveJsonList('cached_halaqahs', jsonList);
+    await _saveToCache();
     await fetchHalaqahs();
     return true;
   }
 
-  /// Clear cached halaqahs on sign-out
+  /// Clear cached halaqahs on sign-out.
   Future<void> clearOnLogout() async {
+    final uid = _uid;
     _halaqahs.clear();
     _cacheLoaded = false;
     halaqahsNotifier.value = [];
+    if (uid.isNotEmpty) {
+      await LocalStorageService.instance.removeUserCache(uid, 'halaqahs');
+    }
     await LocalStorageService.instance.remove('cached_halaqahs');
   }
 
-  /// Get halaqah name by id
+  /// Get halaqah name by id.
   String getHalaqahName(String? halaqahId) {
     if (halaqahId == null) return 'Unassigned';
     final match = _halaqahs.where((h) => h.id == halaqahId);

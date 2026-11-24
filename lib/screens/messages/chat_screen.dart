@@ -13,11 +13,14 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/messaging_service.dart';
+import '../../core/services/offline_sync_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/islamic_pattern_painter.dart';
+import '../../widgets/offline_status_banner.dart';
 import '../../widgets/pro_ui_kit.dart';
 
 /// Flagship Direct & Circle Chat Screen:
@@ -187,10 +190,16 @@ class _ChatScreenState extends State<ChatScreen>
     String? attachmentUrl,
     String? attachmentName,
     int? audioDurationSeconds,
+    String? localMediaPath,
+    String? storageBucket,
+    String? storagePath,
+    String? mediaMimeType,
     bool showErrorSnackBar = true,
   }) async {
     final text = contentOverride ?? _msgCtrl.text.trim();
-    if (text.isEmpty && attachmentUrl == null) return false;
+    if (text.isEmpty && attachmentUrl == null && localMediaPath == null) {
+      return false;
+    }
     if (contentOverride == null) _msgCtrl.clear();
 
     try {
@@ -204,6 +213,10 @@ class _ChatScreenState extends State<ChatScreen>
         attachmentUrl: attachmentUrl,
         attachmentName: attachmentName,
         audioDurationSeconds: audioDurationSeconds,
+        localMediaPath: localMediaPath,
+        storageBucket: storageBucket,
+        storagePath: storagePath,
+        mediaMimeType: mediaMimeType,
       );
 
       Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
@@ -398,7 +411,37 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       final bytes = await file.readAsBytes();
-      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+      final ms = DateTime.now().millisecondsSinceEpoch;
+      final fileName = 'voice_$ms.m4a';
+      final targetPath = 'voice/${widget.conversationId}/$fileName';
+
+      Future<void> stageAndQueueOfflineVoice() async {
+        final stagedPath = await OfflineSyncService.instance.stageMediaFile(
+          sourcePath: filePath,
+          fileName: fileName,
+        );
+        final queued = await _sendMessage(
+          type: 'voice',
+          contentOverride: 'Voice message (${_formatDuration(duration)})',
+          attachmentName: fileName,
+          audioDurationSeconds: duration,
+          localMediaPath: stagedPath,
+          storageBucket: StorageService.voiceMessagesBucket,
+          storagePath: targetPath,
+          mediaMimeType: 'audio/m4a',
+          showErrorSnackBar: false,
+        );
+        if (queued) {
+          uploadAndSendSucceeded = true;
+          _failedRecordingPath = null;
+          _failedRecordingDuration = 0;
+        }
+      }
+
+      if (!ConnectivityService.instance.isOnline) {
+        await stageAndQueueOfflineVoice();
+        return;
+      }
 
       final audioUrl = await StorageService.uploadVoiceNote(
         fileName: fileName,
@@ -423,6 +466,11 @@ class _ChatScreenState extends State<ChatScreen>
         }
       }
 
+      if (!await ConnectivityService.instance.checkNow()) {
+        await stageAndQueueOfflineVoice();
+        return;
+      }
+
       _retainFailedVoiceRecording(
         filePath,
         duration,
@@ -430,6 +478,34 @@ class _ChatScreenState extends State<ChatScreen>
       );
     } catch (e) {
       debugPrint('[ChatScreen] Error sending voice note: $e');
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        try {
+          final ms = DateTime.now().millisecondsSinceEpoch;
+          final fileName = 'voice_$ms.m4a';
+          final stagedPath = await OfflineSyncService.instance.stageMediaFile(
+            sourcePath: filePath,
+            fileName: fileName,
+          );
+          final queued = await _sendMessage(
+            type: 'voice',
+            contentOverride: 'Voice message (${_formatDuration(duration)})',
+            attachmentName: fileName,
+            audioDurationSeconds: duration,
+            localMediaPath: stagedPath,
+            storageBucket: StorageService.voiceMessagesBucket,
+            storagePath: 'voice/${widget.conversationId}/$fileName',
+            mediaMimeType: 'audio/m4a',
+            showErrorSnackBar: false,
+          );
+          if (queued) {
+            uploadAndSendSucceeded = true;
+            _failedRecordingPath = null;
+            _failedRecordingDuration = 0;
+            return;
+          }
+        } catch (_) {}
+      }
       _retainFailedVoiceRecording(
         filePath,
         duration,
@@ -506,13 +582,30 @@ class _ChatScreenState extends State<ChatScreen>
     }
 
     try {
-      final resolvedUrl = await StorageService.resolveSignedUrl(url);
-      if (!mounted) return;
-      if (resolvedUrl == null || resolvedUrl.isEmpty) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not access voice note audio.')),
-        );
-        return;
+      final localPath = StorageService.extractLocalPath(url);
+      Source audioSource;
+      if (localPath != null) {
+        if (!await File(localPath).exists()) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('Offline voice recording file not found.'),
+              ),
+            );
+          }
+          return;
+        }
+        audioSource = DeviceFileSource(localPath);
+      } else {
+        final resolvedUrl = await StorageService.resolveSignedUrl(url);
+        if (!mounted) return;
+        if (resolvedUrl == null || resolvedUrl.isEmpty) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Could not access voice note audio.')),
+          );
+          return;
+        }
+        audioSource = UrlSource(resolvedUrl);
       }
 
       if (_currentlyPlayingId == msg.id) {
@@ -521,7 +614,7 @@ class _ChatScreenState extends State<ChatScreen>
         } else if (_playerState == PlayerState.paused) {
           await _audioPlayer.resume();
         } else {
-          await _audioPlayer.play(UrlSource(resolvedUrl));
+          await _audioPlayer.play(audioSource);
         }
       } else {
         await _audioPlayer.stop();
@@ -533,7 +626,7 @@ class _ChatScreenState extends State<ChatScreen>
             _playbackDuration = Duration(seconds: msg.audioDurationSeconds!);
           }
         });
-        await _audioPlayer.play(UrlSource(resolvedUrl));
+        await _audioPlayer.play(audioSource);
       }
     } catch (e) {
       debugPrint('[ChatScreen] Error playing voice note: $e');
@@ -585,6 +678,33 @@ class _ChatScreenState extends State<ChatScreen>
 
       final bytes = await picked.readAsBytes();
       final fileName = picked.name;
+      final cleanName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+      final ms = DateTime.now().millisecondsSinceEpoch;
+      final targetPath = 'chat/${widget.conversationId}/${ms}_$cleanName';
+
+      Future<void> stageAndQueueOfflineImage() async {
+        final stagedPath = await OfflineSyncService.instance.stageMediaBytes(
+          bytes: bytes,
+          fileName: cleanName,
+        );
+        await _sendMessage(
+          type: 'image',
+          contentOverride: fileName,
+          attachmentName: fileName,
+          localMediaPath: stagedPath,
+          storageBucket: StorageService.chatAttachmentsBucket,
+          storagePath: targetPath,
+        );
+      }
+
+      if (!ConnectivityService.instance.isOnline) {
+        await stageAndQueueOfflineImage();
+        if (mounted) {
+          setState(() => _isUploadingAttachment = false);
+        }
+        return;
+      }
+
       final publicUrl = await StorageService.uploadChatAttachment(
         fileName: fileName,
         bytes: bytes,
@@ -592,16 +712,21 @@ class _ChatScreenState extends State<ChatScreen>
       );
 
       if (!mounted) return;
-      setState(() => _isUploadingAttachment = false);
-
       if (publicUrl != null) {
+        setState(() => _isUploadingAttachment = false);
         await _sendMessage(
           type: 'image',
           contentOverride: fileName,
           attachmentUrl: publicUrl,
           attachmentName: fileName,
         );
+      } else if (!await ConnectivityService.instance.checkNow()) {
+        await stageAndQueueOfflineImage();
+        if (mounted) {
+          setState(() => _isUploadingAttachment = false);
+        }
       } else {
+        setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(
             content: Text('Failed to upload image to cloud storage.'),
@@ -609,6 +734,9 @@ class _ChatScreenState extends State<ChatScreen>
         );
       }
     } catch (e) {
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+      }
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1172,6 +1300,7 @@ class _ChatScreenState extends State<ChatScreen>
           ),
           Column(
             children: [
+              const OfflineStatusBanner(),
               Expanded(
                 child: StreamBuilder<List<ChatMessage>>(
                   stream: _messagesStream,
@@ -1531,10 +1660,23 @@ class _ChatScreenState extends State<ChatScreen>
                   ),
                   if (isMe) ...[
                     const SizedBox(width: 4),
-                    Icon(
-                      Icons.done_all_rounded,
-                      size: 14,
-                      color: AppColors.goldWarm,
+                    ValueListenableBuilder<List<OfflineMutation>>(
+                      valueListenable:
+                          OfflineSyncService.instance.mutationsNotifier,
+                      builder: (context, _, __) {
+                        final isPending = OfflineSyncService.instance
+                            .isRecordPending(
+                          OfflineEntityTypes.chatMessage,
+                          msg.id,
+                        );
+                        return Icon(
+                          isPending
+                              ? Icons.schedule_rounded
+                              : Icons.done_all_rounded,
+                          size: 14,
+                          color: isPending ? timeColor : AppColors.goldWarm,
+                        );
+                      },
                     ),
                   ],
                 ],

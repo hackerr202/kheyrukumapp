@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/islamic_pattern_painter.dart';
@@ -111,9 +112,19 @@ class _SplashScreenState extends State<SplashScreen>
       return;
     }
 
-    final activeSession = await AuthSessionService.instance
-        .syncFromSupabaseProfile()
-        .timeout(const Duration(seconds: 6), onTimeout: () => false);
+    bool activeSession;
+    if (!ConnectivityService.instance.isOnline) {
+      activeSession =
+          await AuthSessionService.instance.loadCachedProfileForCurrentUser();
+    } else {
+      activeSession = await AuthSessionService.instance
+          .syncFromSupabaseProfile()
+          .timeout(
+            const Duration(seconds: 5),
+            onTimeout: () =>
+                AuthSessionService.instance.loadCachedProfileForCurrentUser(),
+          );
+    }
 
     if (!mounted) return;
     final targetRoute = (activeSession && SupabaseService.instance.isAuthenticated)

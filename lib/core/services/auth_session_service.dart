@@ -1,5 +1,8 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'connectivity_service.dart';
+import 'local_storage_service.dart';
+import 'offline_sync_service.dart';
 import 'push_notification_service.dart';
 import 'storage_service.dart';
 import 'supabase_service.dart';
@@ -39,9 +42,72 @@ class AuthSessionService {
   bool get isAuthenticated =>
       _userId.isNotEmpty || SupabaseService.instance.isAuthenticated;
 
-  /// Synchronize identity and role strictly from Supabase `public.profiles`.
-  /// Returns `true` when an active (non-suspended) user session is ready, or
-  /// `false` if unauthenticated / suspended / profile missing.
+  Future<void> _saveCachedProfile({bool isSuspended = false}) async {
+    if (_userId.isEmpty) return;
+    await LocalStorageService.instance.saveUserJsonMap(_userId, 'profile', {
+      'id': _userId,
+      'full_name': _userName,
+      'email': _userEmail,
+      'phone': _userPhone,
+      'avatar_url': _avatarUrl,
+      'role': roleNotifier.value,
+      'halaqah_id': _assignedHalaqahId,
+      'halaqah_name': _assignedHalaqahName,
+      'is_suspended': isSuspended,
+      'cached_at': DateTime.now().toUtc().toIso8601String(),
+    });
+  }
+
+  /// Restores user session metadata from encrypted-path user-scoped cache when
+  /// offline or experiencing startup timeout. Blocks locally cached suspended users.
+  Future<bool> loadCachedProfileForCurrentUser() async {
+    final user = SupabaseService.instance.currentUser;
+    if (user == null) {
+      clearSession();
+      return false;
+    }
+
+    final cached =
+        await LocalStorageService.instance.getUserJsonMap(user.id, 'profile');
+    if (cached == null) return false;
+
+    if (cached['is_suspended'] == true) {
+      await _wipeSuspendedUser(user.id);
+      return false;
+    }
+
+    _userId = cached['id']?.toString() ?? user.id;
+    _userName = cached['full_name']?.toString() ?? _userName;
+    _userEmail = cached['email']?.toString() ?? user.email ?? _userEmail;
+    _userPhone = cached['phone']?.toString() ?? _userPhone;
+    _avatarUrl = cached['avatar_url']?.toString();
+    final role = (cached['role'] ?? 'parent').toString().toLowerCase().trim();
+    roleNotifier.value =
+        ['superadmin', 'admin', 'teacher', 'parent'].contains(role)
+            ? role
+            : 'parent';
+    _assignedHalaqahId = cached['halaqah_id']?.toString() ?? '';
+    _assignedHalaqahName = cached['halaqah_name']?.toString() ?? '';
+
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    roleNotifier.notifyListeners();
+    return true;
+  }
+
+  Future<void> _wipeSuspendedUser(String uid) async {
+    clearSession();
+    try {
+      await OfflineSyncService.instance.clearForUser(uid);
+      await LocalStorageService.instance.clearUserCaches(uid);
+    } catch (_) {}
+    try {
+      await SupabaseService.instance.signOut();
+    } catch (_) {}
+  }
+
+  /// Synchronize identity and role from Supabase `public.profiles`, or
+  /// cleanly fall back to cached user profile when offline.
+  /// Always revokes access immediately if `is_suspended == true`.
   Future<bool> syncFromSupabaseProfile() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
@@ -52,16 +118,24 @@ class AuthSessionService {
     _userId = user.id;
     _userEmail = user.email ?? _userEmail;
 
+    if (!ConnectivityService.instance.isOnline) {
+      return await loadCachedProfileForCurrentUser();
+    }
+
     try {
       final profile = await SupabaseService.instance.getUserProfile();
       if (profile == null) {
-        debugPrint('[AuthSessionService] No Supabase profile row found for $_userId');
+        if (!ConnectivityService.instance.isOnline ||
+            !await ConnectivityService.instance.checkNow()) {
+          return await loadCachedProfileForCurrentUser();
+        }
+        debugPrint(
+            '[AuthSessionService] No Supabase profile row found for $_userId');
         return false;
       }
 
       if (profile['is_suspended'] == true) {
-        clearSession();
-        await SupabaseService.instance.signOut();
+        await _wipeSuspendedUser(user.id);
         return false;
       }
 
@@ -70,7 +144,8 @@ class AuthSessionService {
       _userEmail = profile['email']?.toString() ?? _userEmail;
       _userPhone = profile['phone']?.toString() ?? _userPhone;
       _avatarUrl = profile['avatar_url']?.toString();
-      final role = (profile['role'] ?? 'parent').toString().toLowerCase().trim();
+      final role =
+          (profile['role'] ?? 'parent').toString().toLowerCase().trim();
       roleNotifier.value =
           ['superadmin', 'admin', 'teacher', 'parent'].contains(role)
               ? role
@@ -99,9 +174,13 @@ class AuthSessionService {
             _assignedHalaqahName = halaqah['name']?.toString() ?? '';
           }
         } catch (e) {
-          debugPrint('[AuthSessionService] Error looking up teacher halaqah: $e');
+          debugPrint(
+              '[AuthSessionService] Error looking up teacher halaqah: $e');
         }
       }
+
+      await _saveCachedProfile(isSuspended: false);
+
       // Always notify listeners even if the role string remained identical (e.g. account switch).
       // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
       roleNotifier.notifyListeners();
@@ -116,6 +195,10 @@ class AuthSessionService {
       return true;
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        return await loadCachedProfileForCurrentUser();
+      }
       return false;
     }
   }
@@ -205,6 +288,7 @@ class AuthSessionService {
     }).eq('id', uid);
 
     updateDetails(name: cleanName, phone: cleanPhone);
+    await _saveCachedProfile(isSuspended: false);
   }
 
   /// Update or remove the signed-in user's avatar URL in `public.profiles`
@@ -226,10 +310,15 @@ class AuthSessionService {
     _avatarUrl = avatarUrl;
     // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     roleNotifier.notifyListeners();
+    await _saveCachedProfile(isSuspended: false);
   }
 
   /// Update the signed-in user's Supabase Auth password.
   Future<void> changePassword(String newPassword) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     if (newPassword.length < 6) {
       throw Exception('Password must be at least 6 characters.');
     }

@@ -66,6 +66,7 @@ class WeeklyReport {
     return {
       'id': id,
       'student_id': studentId,
+      'student_name': studentName,
       'week_start_date': weekStartDate.toIso8601String().substring(0, 10),
       'week_end_date': weekEndDate.toIso8601String().substring(0, 10),
       'sabaq': sabaq,
@@ -77,6 +78,7 @@ class WeeklyReport {
       'mistakes_count': mistakesCount,
       'teacher_remarks': teacherRemarks,
       'teacher_name': teacherName,
+      'created_at': createdAt.toUtc().toIso8601String(),
     };
   }
 }

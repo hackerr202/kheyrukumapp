@@ -1,14 +1,18 @@
 import 'dart:async';
-import 'dart:math';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/chat_message.dart';
+import '../utils/json_parsers.dart';
+import '../utils/uuid_v4.dart';
 import 'auth_session_service.dart';
+import 'connectivity_service.dart';
 import 'local_storage_service.dart';
+import 'offline_sync_service.dart';
 import 'push_notification_service.dart';
 import 'supabase_service.dart';
 
-/// Full-featured real-time Messaging Service with offline sync & targeted push notifications.
+/// Full-featured real-time Messaging Service with user-scoped offline caching,
+/// durable outbox replay (including staged voice notes & images), and targeted push.
 class MessagingService {
   MessagingService._();
 
@@ -33,12 +37,22 @@ class MessagingService {
 
   List<Conversation> get allConversations => List.unmodifiable(_conversations);
 
+  String get _uid => AuthSessionService.instance.userId.isNotEmpty
+      ? AuthSessionService.instance.userId
+      : (SupabaseService.instance.currentUser?.id ?? '');
+
   Future<void> refreshAndSubscribe() async {
     await _loadFromCache();
     await _initCloudSync();
   }
 
+  /// Explicit message refresh for a single conversation (used after batch sync).
+  Future<void> refreshConversationMessages(String conversationId) async {
+    await _fetchMessagesFromCloud(conversationId);
+  }
+
   Future<void> clearOnLogout() async {
+    final uid = _uid;
     final client = SupabaseService.instance.client;
     final msgCh = _realtimeMessagesSubscription;
     final convoCh = _realtimeConvosSubscription;
@@ -75,26 +89,101 @@ class MessagingService {
     if (!_conversationsController.isClosed) {
       _conversationsController.add([]);
     }
+    if (uid.isNotEmpty) {
+      await LocalStorageService.instance.removeUserCache(uid, 'conversations');
+    }
     await LocalStorageService.instance.remove('cached_conversations');
     await LocalStorageService.instance.removeByPrefix('cache_msgs_');
   }
 
+  Future<void> _saveConversationsCache() async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    final jsonList = _conversations.map((c) => c.toJson()).toList();
+    await LocalStorageService.instance
+        .saveUserJsonList(uid, 'conversations', jsonList);
+  }
+
+  void _applyPendingConversationPreviews() {
+    final pendingMsgs = OfflineSyncService.instance
+        .pendingMutationsForEntity(OfflineEntityTypes.chatMessage);
+    for (final mut in pendingMsgs) {
+      final p = mut.payload;
+      final convoId = p['conversation_id']?.toString() ?? '';
+      if (convoId.isEmpty) continue;
+      final idx = _conversations.indexWhere((c) => c.id == convoId);
+      if (idx == -1) continue;
+      final existing = _conversations[idx];
+      final msgTime =
+          JsonParsers.asDateTime(p['created_at'], mut.createdAt.toLocal());
+      final preview =
+          p['_preview_text']?.toString() ?? p['content']?.toString() ?? '';
+      if (msgTime.isAfter(existing.lastMessageTime) ||
+          msgTime.isAtSameMomentAs(existing.lastMessageTime)) {
+        _conversations[idx] = Conversation(
+          id: existing.id,
+          title: existing.title,
+          isGroup: existing.isGroup,
+          participantIds: existing.participantIds,
+          participantNames: existing.participantNames,
+          lastMessage: preview,
+          lastMessageTime: msgTime,
+          halaqahId: existing.halaqahId,
+          groupType: existing.groupType,
+          unreadCount: existing.unreadCount,
+          isPinned: existing.isPinned,
+        );
+      }
+    }
+  }
+
+  void _applyPendingMessageOverlays(String conversationId) {
+    final pendingMsgs = OfflineSyncService.instance
+        .pendingMutationsForEntity(OfflineEntityTypes.chatMessage);
+    final list = _messagesMap.putIfAbsent(conversationId, () => []);
+    for (final mut in pendingMsgs) {
+      final p = mut.payload;
+      if (p['conversation_id']?.toString() != conversationId) continue;
+      final msgId = p['id']?.toString() ?? mut.id;
+      final localAttach = (mut.localMediaPath != null &&
+              mut.localMediaPath!.trim().isNotEmpty)
+          ? 'local://${mut.localMediaPath}'
+          : p['attachment_url']?.toString();
+      final overlayMsg = ChatMessage.fromJson({
+        ...p,
+        'id': msgId,
+        'attachment_url': localAttach,
+      });
+      final existingIdx = list.indexWhere((m) => m.id == msgId);
+      if (existingIdx != -1) {
+        list[existingIdx] = overlayMsg;
+      } else {
+        list.add(overlayMsg);
+      }
+    }
+    list.sort((a, b) => a.timestamp.compareTo(b.timestamp));
+  }
+
   Future<void> _loadFromCache() async {
     if (_cacheLoaded) return;
+    final uid = _uid;
+    if (uid.isEmpty) return;
     _cacheLoaded = true;
     try {
-      final cachedConvos =
-          await LocalStorageService.instance.getJsonList('cached_conversations');
+      final cachedConvos = await LocalStorageService.instance
+          .getUserJsonList(uid, 'conversations');
       if (cachedConvos.isNotEmpty && _conversations.isEmpty) {
         _conversations.clear();
         for (final json in cachedConvos) {
           _conversations.add(Conversation.fromJson(json));
         }
+        _applyPendingConversationPreviews();
         if (!_conversationsController.isClosed) {
           _conversationsController.add(List.from(_conversations));
         }
         debugPrint(
-            '[MessagingService] Loaded ${_conversations.length} conversations from offline cache.');
+          '[MessagingService] Loaded ${_conversations.length} conversations from user offline cache.',
+        );
       }
     } catch (e) {
       debugPrint('[MessagingService] Cache load error: $e');
@@ -166,16 +255,21 @@ class MessagingService {
           .subscribe();
 
       debugPrint(
-          '[MessagingService] Supabase Realtime messaging channel subscribed.');
+        '[MessagingService] Supabase Realtime messaging channel subscribed.',
+      );
     } catch (e) {
       debugPrint('[MessagingService] Cloud sync note: $e');
     }
   }
 
-  /// Fetch conversations from Supabase (clears stale cache when cloud returns empty).
+  /// Fetch conversations from Supabase (preserves pending offline previews).
   Future<void> fetchConversationsFromCloud() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
+    if (!ConnectivityService.instance.isOnline) {
+      errorNotifier.value = null;
+      return;
+    }
 
     isLoadingNotifier.value = true;
     errorNotifier.value = null;
@@ -192,26 +286,31 @@ class MessagingService {
           if (item is Map) {
             try {
               parsed.add(
-                  Conversation.fromJson(Map<String, dynamic>.from(item)));
+                Conversation.fromJson(Map<String, dynamic>.from(item)),
+              );
             } catch (rowErr) {
               debugPrint(
-                  '[MessagingService] Skipped malformed conversation row: $rowErr');
+                '[MessagingService] Skipped malformed conversation row: $rowErr',
+              );
             }
           }
         }
         _conversations
           ..clear()
           ..addAll(parsed);
+        _applyPendingConversationPreviews();
         if (!_conversationsController.isClosed) {
           _conversationsController.add(List.from(_conversations));
         }
-
-        final jsonList = _conversations.map((c) => c.toJson()).toList();
-        await LocalStorageService.instance
-            .saveJsonList('cached_conversations', jsonList);
+        await _saveConversationsCache();
       }
     } catch (e) {
-      errorNotifier.value = SupabaseService.cleanErrorMessage(e);
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        errorNotifier.value = null;
+      } else {
+        errorNotifier.value = SupabaseService.cleanErrorMessage(e);
+      }
       debugPrint('[MessagingService] fetchConversationsFromCloud error: $e');
     } finally {
       isLoadingNotifier.value = false;
@@ -269,6 +368,7 @@ class MessagingService {
       if (!_conversationsController.isClosed) {
         _conversationsController.add(List.from(_conversations));
       }
+      await _saveConversationsCache();
 
       String notifBody = msg.content;
       if (msg.messageType == 'voice') {
@@ -346,8 +446,12 @@ class MessagingService {
     return convo.title.isNotEmpty ? convo.title : 'Direct Chat';
   }
 
-  /// Fetch contacts the signed-in user is permitted to message.
+  /// Fetch contacts the signed-in user is permitted to message (online required).
   Future<List<Map<String, dynamic>>> fetchMessageableContacts() async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) {
       throw Exception('Please sign in to load contacts.');
@@ -379,14 +483,14 @@ class MessagingService {
     if (!_conversationsController.isClosed) {
       _conversationsController.add(List.from(_conversations));
     }
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
+    await _saveConversationsCache();
   }
 
-  /// Get conversations filtered for current user role and ID
-  List<Conversation> getConversationsForUser(String userId,
-      {String role = 'admin'}) {
+  /// Get conversations filtered for current user role and ID.
+  List<Conversation> getConversationsForUser(
+    String userId, {
+    String role = 'admin',
+  }) {
     if (role == 'admin' || role == 'superadmin') return _conversations;
     return _conversations.where((c) {
       if (userId.isNotEmpty && c.participantIds.contains(userId)) return true;
@@ -397,7 +501,7 @@ class MessagingService {
     }).toList();
   }
 
-  /// Stream messages for a specific conversation with offline-first loading
+  /// Stream messages for a specific conversation with user-scoped offline-first loading.
   Stream<List<ChatMessage>> streamMessages(String conversationId) {
     if (!_chatControllers.containsKey(conversationId) ||
         _chatControllers[conversationId]!.isClosed) {
@@ -406,11 +510,11 @@ class MessagingService {
     }
 
     _loadMessagesFromCache(conversationId).then((cached) {
-      final current = _messagesMap[conversationId] ?? cached;
-      _messagesMap[conversationId] = current;
+      _messagesMap[conversationId] = cached;
+      _applyPendingMessageOverlays(conversationId);
       final ctrl = _chatControllers[conversationId];
       if (ctrl != null && !ctrl.isClosed) {
-        ctrl.add(List.from(current));
+        ctrl.add(List.from(_messagesMap[conversationId]!));
       }
     });
 
@@ -424,10 +528,13 @@ class MessagingService {
   }
 
   Future<List<ChatMessage>> _loadMessagesFromCache(
-      String conversationId) async {
+    String conversationId,
+  ) async {
+    final uid = _uid;
+    if (uid.isEmpty) return [];
     try {
       final cached = await LocalStorageService.instance
-          .getJsonList('cache_msgs_$conversationId');
+          .getUserJsonList(uid, 'msgs_$conversationId');
       return cached.map((j) => ChatMessage.fromJson(j)).toList();
     } catch (_) {
       return [];
@@ -435,13 +542,16 @@ class MessagingService {
   }
 
   Future<void> _saveMessagesToCache(String conversationId) async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
     try {
       final msgs = _messagesMap[conversationId] ?? [];
       final jsonList = msgs.map((m) => m.toJson()).toList();
       await LocalStorageService.instance
-          .saveJsonList('cache_msgs_$conversationId', jsonList);
+          .saveUserJsonList(uid, 'msgs_$conversationId', jsonList);
     } catch (e) {
-      debugPrint('[MessagingService] Error saving cache for $conversationId: $e');
+      debugPrint(
+          '[MessagingService] Error saving cache for $conversationId: $e');
     }
   }
 
@@ -452,6 +562,7 @@ class MessagingService {
         !_isValidUuid(conversationId)) {
       return;
     }
+    if (!ConnectivityService.instance.isOnline) return;
 
     try {
       final res = await client
@@ -467,28 +578,37 @@ class MessagingService {
           if (item is Map) {
             try {
               cloudMsgs.add(
-                  ChatMessage.fromJson(Map<String, dynamic>.from(item)));
+                ChatMessage.fromJson(Map<String, dynamic>.from(item)),
+              );
             } catch (rowErr) {
               debugPrint(
-                  '[MessagingService] Skipped malformed message row: $rowErr');
+                '[MessagingService] Skipped malformed message row: $rowErr',
+              );
             }
           }
         }
         final ordered = cloudMsgs.reversed.toList();
         _messagesMap[conversationId] = ordered;
+        _applyPendingMessageOverlays(conversationId);
+
         final ctrl = _chatControllers[conversationId];
         if (ctrl != null && !ctrl.isClosed) {
-          ctrl.add(List.from(ordered));
+          ctrl.add(List.from(_messagesMap[conversationId]!));
         }
         await _saveMessagesToCache(conversationId);
       }
     } catch (e) {
-      errorNotifier.value = SupabaseService.cleanErrorMessage(e);
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+      } else {
+        errorNotifier.value = SupabaseService.cleanErrorMessage(e);
+      }
       debugPrint('[MessagingService] fetchMessagesFromCloud error: $e');
     }
   }
 
-  /// Send a message (cloud first; rolls back and throws on failure so UI knows & no phantom push fires)
+  /// Send a text or media message (online-first, automatically queues offline
+  /// with genuine UUID v4 and durable staged media paths).
   Future<ChatMessage> sendMessage({
     required String conversationId,
     required String senderId,
@@ -499,8 +619,11 @@ class MessagingService {
     String? attachmentUrl,
     String? attachmentName,
     int? audioDurationSeconds,
+    String? localMediaPath,
+    String? storageBucket,
+    String? storagePath,
+    String? mediaMimeType,
   }) async {
-    final client = SupabaseService.instance.client;
     final effectiveSenderId = (senderId.isNotEmpty && _isValidUuid(senderId))
         ? senderId
         : (SupabaseService.instance.currentUser?.id ??
@@ -509,108 +632,176 @@ class MessagingService {
                 ? AuthSessionService.instance.userId
                 : null));
 
-    if (client == null ||
-        effectiveSenderId == null ||
-        !_isValidUuid(conversationId)) {
-      throw Exception('Cannot send message: invalid session or server connection.');
+    if (effectiveSenderId == null || !_isValidUuid(conversationId)) {
+      throw Exception('Cannot send message: invalid session or conversation.');
     }
 
+    final createdAt = DateTime.now();
+    final createdAtIso = createdAt.toUtc().toIso8601String();
+    final trimmedContent = content.trim();
+
     final msg = ChatMessage(
-      id: _generateUuidV4(),
+      id: UuidV4.generate(),
       conversationId: conversationId,
       senderId: effectiveSenderId,
       senderName: senderName,
       senderRole: senderRole,
-      content: content.trim(),
-      timestamp: DateTime.now(),
+      content: trimmedContent,
+      timestamp: createdAt,
       isRead: false,
       messageType: messageType,
-      attachmentUrl: attachmentUrl,
+      attachmentUrl: localMediaPath != null
+          ? 'local://$localMediaPath'
+          : attachmentUrl,
       attachmentName: attachmentName,
       audioDurationSeconds: audioDurationSeconds,
     );
 
-    String displayPreview = content.trim();
+    String displayPreview = trimmedContent;
     if (messageType == 'voice') displayPreview = '🎤 Voice message';
     if (messageType == 'image') displayPreview = '📷 Photo';
+    if (messageType == 'video') displayPreview = '🎥 Video';
     if (messageType == 'document') displayPreview = '📎 Document';
 
-    await client.from('messages').insert({
-      'id': msg.id,
-      'conversation_id': conversationId,
-      'sender_id': effectiveSenderId,
-      'sender_name': senderName,
-      'sender_role': senderRole,
-      'content': content.trim(),
-      'message_type': messageType,
-      'attachment_url': attachmentUrl,
-      'attachment_name': attachmentName,
-      'audio_duration': audioDurationSeconds,
-      'created_at': msg.timestamp.toUtc().toIso8601String(),
-      'is_read': false,
-    });
+    Future<ChatMessage> applyLocally({required bool queueOffline}) async {
+      final list = _messagesMap.putIfAbsent(conversationId, () => []);
+      if (!list.any((m) => m.id == msg.id)) {
+        list.add(msg);
+      }
+      final ctrl = _chatControllers[conversationId];
+      if (ctrl != null && !ctrl.isClosed) {
+        ctrl.add(List.from(list));
+      }
+      await _saveMessagesToCache(conversationId);
 
-    await client.from('conversations').update({
-      'last_message': displayPreview,
-      'last_message_time': msg.timestamp.toUtc().toIso8601String(),
-    }).eq('id', conversationId);
-
-    // Update memory & offline cache only after cloud persistence succeeds
-    _messagesMap.putIfAbsent(conversationId, () => []).add(msg);
-    final ctrl = _chatControllers[conversationId];
-    if (ctrl != null && !ctrl.isClosed) {
-      ctrl.add(List.from(_messagesMap[conversationId]!));
-    }
-    await _saveMessagesToCache(conversationId);
-
-    final idx = _conversations.indexWhere((c) => c.id == conversationId);
-    if (idx != -1) {
-      final existing = _conversations[idx];
-      _conversations[idx] = Conversation(
-        id: existing.id,
-        title: existing.title,
-        isGroup: existing.isGroup,
-        participantIds: existing.participantIds,
-        participantNames: existing.participantNames,
-        lastMessage: displayPreview,
-        lastMessageTime: msg.timestamp,
-        halaqahId: existing.halaqahId,
-        groupType: existing.groupType,
-        unreadCount: existing.unreadCount,
-        isPinned: existing.isPinned,
-      );
-      if (!_conversationsController.isClosed) {
-        _conversationsController.add(List.from(_conversations));
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx != -1) {
+        final existing = _conversations[idx];
+        _conversations[idx] = Conversation(
+          id: existing.id,
+          title: existing.title,
+          isGroup: existing.isGroup,
+          participantIds: existing.participantIds,
+          participantNames: existing.participantNames,
+          lastMessage: displayPreview,
+          lastMessageTime: msg.timestamp,
+          halaqahId: existing.halaqahId,
+          groupType: existing.groupType,
+          unreadCount: existing.unreadCount,
+          isPinned: existing.isPinned,
+        );
+        if (!_conversationsController.isClosed) {
+          _conversationsController.add(List.from(_conversations));
+        }
+        await _saveConversationsCache();
       }
 
-      final jsonList = _conversations.map((c) => c.toJson()).toList();
-      await LocalStorageService.instance
-          .saveJsonList('cached_conversations', jsonList);
-
-      final convo = _conversations[idx];
-      final recipientIds = convo.participantIds
-          .where((id) => _isValidUuid(id) && id != effectiveSenderId)
-          .toList();
-      if (recipientIds.isNotEmpty) {
-        PushNotificationService.instance.dispatchPushToUsers(
-          userIds: recipientIds,
-          title: senderName,
-          body: displayPreview,
-          type: 'message',
-          data: {'conversation_id': conversationId},
+      if (queueOffline) {
+        await OfflineSyncService.instance.enqueue(
+          entityType: OfflineEntityTypes.chatMessage,
+          operation: 'upsert',
+          id: msg.id,
+          payload: {
+            'id': msg.id,
+            'conversation_id': conversationId,
+            'sender_id': effectiveSenderId,
+            'sender_name': senderName,
+            'sender_role': senderRole,
+            'content': trimmedContent,
+            'message_type': messageType,
+            'attachment_url': attachmentUrl,
+            'attachment_name': attachmentName,
+            'audio_duration': audioDurationSeconds,
+            'created_at': createdAtIso,
+            'is_read': false,
+            '_preview_text': displayPreview,
+          },
+          localMediaPath: localMediaPath,
+          storageBucket: storageBucket,
+          storagePath: storagePath,
+          mediaPayloadField:
+              localMediaPath != null ? 'attachment_url' : null,
+          mediaMimeType: mediaMimeType,
+          displayLabel: displayPreview.length > 42
+              ? '${displayPreview.substring(0, 42)}...'
+              : displayPreview,
+          triggerImmediateSync: false,
         );
       }
+
+      return msg;
     }
 
-    return msg;
+    final client = SupabaseService.instance.client;
+    if (localMediaPath != null ||
+        !ConnectivityService.instance.isOnline ||
+        client == null) {
+      return await applyLocally(queueOffline: true);
+    }
+
+    try {
+      await client.from('messages').upsert(
+        {
+          'id': msg.id,
+          'conversation_id': conversationId,
+          'sender_id': effectiveSenderId,
+          'sender_name': senderName,
+          'sender_role': senderRole,
+          'content': trimmedContent,
+          'message_type': messageType,
+          'attachment_url': attachmentUrl,
+          'attachment_name': attachmentName,
+          'audio_duration': audioDurationSeconds,
+          'created_at': createdAtIso,
+          'is_read': false,
+        },
+        onConflict: 'id',
+      );
+
+      await client.from('conversations').update({
+        'last_message': displayPreview,
+        'last_message_time': createdAtIso,
+      }).eq('id', conversationId);
+
+      final savedMsg = await applyLocally(queueOffline: false);
+
+      final idx = _conversations.indexWhere((c) => c.id == conversationId);
+      if (idx != -1) {
+        final convo = _conversations[idx];
+        final recipientIds = convo.participantIds
+            .where((id) => _isValidUuid(id) && id != effectiveSenderId)
+            .toList();
+        if (recipientIds.isNotEmpty) {
+          PushNotificationService.instance.dispatchPushToUsers(
+            userIds: recipientIds,
+            title: senderName,
+            body: displayPreview,
+            type: 'message',
+            data: {'conversation_id': conversationId},
+          );
+        }
+      }
+
+      return savedMsg;
+    } catch (e) {
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        return await applyLocally(queueOffline: true);
+      }
+      rethrow;
+    }
   }
 
-  /// Edit a sent message (cloud first)
+  /// Edit a sent message (online required).
   Future<bool> editMessage({
     required String conversationId,
     required String messageId,
     required String newContent,
   }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final list = _messagesMap[conversationId];
     if (list == null) return false;
 
@@ -660,13 +851,14 @@ class MessagingService {
         if (!_conversationsController.isClosed) {
           _conversationsController.add(List.from(_conversations));
         }
+        await _saveConversationsCache();
       }
     }
 
     return true;
   }
 
-  /// Delete a message (cloud first)
+  /// Delete a message (discards pending outbox item if still offline, otherwise online delete).
   Future<bool> deleteMessage({
     required String conversationId,
     required String messageId,
@@ -677,12 +869,20 @@ class MessagingService {
     final index = list.indexWhere((m) => m.id == messageId);
     if (index == -1) return false;
 
-    final client = SupabaseService.instance.client;
-    if (client == null || !_isValidUuid(messageId)) {
-      throw Exception('Cannot delete message: server offline or invalid ID.');
+    if (OfflineSyncService.instance
+        .isRecordPending(OfflineEntityTypes.chatMessage, messageId)) {
+      await OfflineSyncService.instance.discardMutation(messageId);
+    } else {
+      if (!ConnectivityService.instance.isOnline &&
+          !await ConnectivityService.instance.checkNow()) {
+        throw const OfflineActionException();
+      }
+      final client = SupabaseService.instance.client;
+      if (client == null || !_isValidUuid(messageId)) {
+        throw Exception('Cannot delete message: server offline or invalid ID.');
+      }
+      await client.from('messages').delete().eq('id', messageId);
     }
-
-    await client.from('messages').delete().eq('id', messageId);
 
     list.removeAt(index);
     final ctrl = _chatControllers[conversationId];
@@ -702,8 +902,9 @@ class MessagingService {
         participantIds: existingConvo.participantIds,
         participantNames: existingConvo.participantNames,
         lastMessage: newLastMsg,
-        lastMessageTime:
-            list.isNotEmpty ? list.last.timestamp : existingConvo.lastMessageTime,
+        lastMessageTime: list.isNotEmpty
+            ? list.last.timestamp
+            : existingConvo.lastMessageTime,
         halaqahId: existingConvo.halaqahId,
         groupType: existingConvo.groupType,
         unreadCount: existingConvo.unreadCount,
@@ -712,26 +913,13 @@ class MessagingService {
       if (!_conversationsController.isClosed) {
         _conversationsController.add(List.from(_conversations));
       }
+      await _saveConversationsCache();
     }
 
     return true;
   }
 
-  static String _generateUuidV4() {
-    final random = Random.secure();
-    final values = List<int>.generate(16, (i) => random.nextInt(256));
-    values[6] = (values[6] & 0x0f) | 0x40;
-    values[8] = (values[8] & 0x3f) | 0x80;
-    final hex = values.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
-    return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-${hex.substring(12, 16)}-${hex.substring(16, 20)}-${hex.substring(20)}';
-  }
-
-  static bool _isValidUuid(String str) {
-    final uuidRegex = RegExp(
-        r'^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$',
-        caseSensitive: false);
-    return uuidRegex.hasMatch(str);
-  }
+  static bool _isValidUuid(String str) => UuidV4.isValid(str);
 
   static String _escapeIlikePattern(String raw) {
     return raw
@@ -795,11 +983,13 @@ class MessagingService {
           rpcRes['success'] == true &&
           rpcRes['conversation'] is Map) {
         return Conversation.fromJson(
-            Map<String, dynamic>.from(rpcRes['conversation'] as Map));
+          Map<String, dynamic>.from(rpcRes['conversation'] as Map),
+        );
       }
       if (rpcRes is Map && rpcRes['success'] == false) {
         throw Exception(
-            rpcRes['message']?.toString() ?? 'Could not create conversation.');
+          rpcRes['message']?.toString() ?? 'Could not create conversation.',
+        );
       }
     } catch (e) {
       final msg = e.toString().toLowerCase();
@@ -817,9 +1007,7 @@ class MessagingService {
     if (!_conversationsController.isClosed) {
       _conversationsController.add(List.from(_conversations));
     }
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
+    await _saveConversationsCache();
   }
 
   Future<Conversation> _startOrReuseDirectChat({
@@ -833,15 +1021,27 @@ class MessagingService {
     required String groupType,
     String? initialMessage,
   }) async {
-    if (!_isValidUuid(otherUserId)) {
-      throw Exception('Recipient account could not be found.');
-    }
-
     final validCallerId = _isValidUuid(callerId)
         ? callerId
         : (SupabaseService.instance.currentUser?.id ?? '');
     if (!_isValidUuid(validCallerId)) {
       throw Exception('Please sign in to start a conversation.');
+    }
+    if (!_isValidUuid(otherUserId)) {
+      throw Exception('Recipient account could not be found.');
+    }
+
+    // If offline, return an already-cached direct conversation if present.
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      for (final existing in _conversations) {
+        if (!existing.isGroup &&
+            existing.participantIds.contains(validCallerId) &&
+            existing.participantIds.contains(otherUserId)) {
+          return existing;
+        }
+      }
+      throw const OfflineActionException();
     }
 
     final rpcConvo = await _createDirectConversationViaRpc(
@@ -855,14 +1055,14 @@ class MessagingService {
     if (rpcConvo != null) {
       convo = rpcConvo;
     } else {
-      // Fallback only when create_direct_conversation RPC does not yet exist on DB.
       final fallbackConvo = Conversation(
-        id: _generateUuidV4(),
+        id: UuidV4.generate(),
         title: title,
         isGroup: false,
         participantIds: [validCallerId, otherUserId],
         participantNames: [callerName, otherName],
-        lastMessage: initialMessage ?? 'Conversation started with $otherName.',
+        lastMessage:
+            initialMessage ?? 'Conversation started with $otherName.',
         lastMessageTime: DateTime.now(),
         halaqahId: halaqahId,
         groupType: groupType,
@@ -886,8 +1086,7 @@ class MessagingService {
     return convo;
   }
 
-  /// Start or open a direct 1-on-1 chat with any eligible contact returned by
-  /// `get_messageable_contacts()`.
+  /// Start or open a direct 1-on-1 chat with any eligible contact.
   Future<Conversation> startDirectChatWithContact({
     required String otherUserId,
     required String otherName,
@@ -918,7 +1117,7 @@ class MessagingService {
     );
   }
 
-  /// Teacher starts a direct 1-on-1 chat with a parent of his class students
+  /// Teacher starts a direct 1-on-1 chat with a parent of his class students.
   Future<Conversation> startTeacherChatWithParent({
     required String teacherId,
     required String teacherName,
@@ -1002,13 +1201,17 @@ class MessagingService {
     }
   }
 
-  /// Admin creates a new group conversation with parents
+  /// Admin creates a new group conversation with parents (online required).
   Future<Conversation> createGroup({
     required String title,
     required List<String> parentIds,
     required List<String> parentNames,
     String? halaqahId,
   }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final currentUserId = SupabaseService.instance.currentUser?.id ??
         AuthSessionService.instance.userId;
     final adminId = currentUserId.isNotEmpty
@@ -1021,10 +1224,12 @@ class MessagingService {
     final validParentIds = <String>[];
     final validParentNames = <String>[];
     for (var i = 0; i < parentIds.length; i++) {
-      if (_isValidUuid(parentIds[i]) && !validParentIds.contains(parentIds[i])) {
+      if (_isValidUuid(parentIds[i]) &&
+          !validParentIds.contains(parentIds[i])) {
         validParentIds.add(parentIds[i]);
         validParentNames.add(
-            i < parentNames.length ? parentNames[i] : 'Parent');
+          i < parentNames.length ? parentNames[i] : 'Parent',
+        );
       }
     }
 
@@ -1033,7 +1238,7 @@ class MessagingService {
         : 'Admin Director';
 
     final convo = Conversation(
-      id: _generateUuidV4(),
+      id: UuidV4.generate(),
       title: title,
       isGroup: true,
       participantIds: [adminId, ...validParentIds],
@@ -1060,7 +1265,7 @@ class MessagingService {
     return convo;
   }
 
-  /// Admin starts a 1-on-1 direct conversation with an individual parent
+  /// Admin starts a 1-on-1 direct conversation with an individual parent.
   Future<Conversation> startDirectChatWithParent({
     required String parentId,
     required String parentName,
@@ -1087,7 +1292,7 @@ class MessagingService {
     );
   }
 
-  /// Parent starts conversation with Admin or child's halaqah Teacher
+  /// Parent starts conversation with Admin or child's halaqah Teacher.
   Future<Conversation> startParentChat({
     required String parentId,
     required String parentName,
@@ -1110,6 +1315,9 @@ class MessagingService {
     }
 
     if (!_isValidUuid(resolvedTargetId)) {
+      if (!ConnectivityService.instance.isOnline) {
+        throw const OfflineActionException();
+      }
       throw Exception(
         targetRole == 'admin'
             ? 'No active Center Director account is available right now.'
@@ -1117,15 +1325,13 @@ class MessagingService {
       );
     }
 
-    final title = targetRole == 'admin' ? targetName : targetName;
-
     return _startOrReuseDirectChat(
       callerId: parentId,
       callerName: parentName,
       callerRole: 'parent',
       otherUserId: resolvedTargetId,
       otherName: targetName,
-      title: title,
+      title: targetName,
       halaqahId: halaqahId,
       groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
       initialMessage: initialMessage,

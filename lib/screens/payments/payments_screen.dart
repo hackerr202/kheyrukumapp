@@ -1584,27 +1584,26 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
     final receipt = _selectedReceipt;
     if (receipt == null) return;
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     setState(() => _isUploading = true);
     try {
       final bytes = await receipt.readAsBytes();
-      final uploadedUrl = await PaymentService.instance.uploadReceipt(
+      final syncedOnline =
+          await PaymentService.instance.submitPaymentReceiptOfflineAware(
         paymentId: widget.payment.id,
+        receiptBytes: bytes,
         fileName: receipt.name,
-        bytes: bytes,
-      );
-      if (uploadedUrl == null || uploadedUrl.isEmpty) {
-        throw Exception('Failed to upload receipt image to cloud storage.');
-      }
-      await PaymentService.instance.submitPaymentReceipt(
-        paymentId: widget.payment.id,
-        receiptUrl: uploadedUrl,
         customNote: '$_selectedMethod — ${_noteCtrl.text.trim()}',
       );
       if (!mounted) return;
       Navigator.pop(context);
       widget.hostMessenger.showSnackBar(
-        const SnackBar(
-          content: Text('Receipt submitted successfully. Admin will verify.'),
+        SnackBar(
+          content: Text(
+            syncedOnline
+                ? 'Receipt submitted successfully. Admin will verify.'
+                : loc.savedOfflineQueued,
+          ),
         ),
       );
     } catch (e) {

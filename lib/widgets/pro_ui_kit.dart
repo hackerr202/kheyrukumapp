@@ -1,3 +1,5 @@
+import 'dart:io';
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../core/services/storage_service.dart';
 import '../core/theme/app_colors.dart';
@@ -364,7 +366,9 @@ class _ProSignedImageState extends State<ProSignedImage> {
   }
 
   void _initFuture() {
-    if (StorageService.getCachedSignedUrl(widget.mediaRef) == null) {
+    if (StorageService.isLocalMediaRef(widget.mediaRef)) {
+      _resolveFuture = null;
+    } else if (StorageService.getCachedSignedUrl(widget.mediaRef) == null) {
       _resolveFuture = StorageService.resolveSignedUrl(widget.mediaRef);
     } else {
       _resolveFuture = null;
@@ -398,8 +402,32 @@ class _ProSignedImageState extends State<ProSignedImage> {
     );
   }
 
+  Widget _buildLocalFileImage(String filePath) {
+    if (kIsWeb) {
+      return widget.errorWidget ?? const SizedBox.shrink();
+    }
+    final cWidth = _boundedCacheDim(widget.width);
+    final cHeight = _boundedCacheDim(widget.height);
+    return Image.file(
+      File(filePath),
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      cacheWidth: cWidth ?? (cHeight == null ? 1080 : null),
+      cacheHeight: cHeight,
+      gaplessPlayback: true,
+      errorBuilder: (_, __, ___) =>
+          widget.errorWidget ?? const SizedBox.shrink(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final localPath = StorageService.extractLocalPath(widget.mediaRef);
+    if (localPath != null) {
+      return _buildLocalFileImage(localPath);
+    }
+
     final cachedUrl = StorageService.getCachedSignedUrl(widget.mediaRef);
     if (cachedUrl != null) {
       return _buildNetworkImage(cachedUrl);

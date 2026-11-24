@@ -9,8 +9,10 @@ import '../../../core/services/announcement_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/homework_service.dart';
+import '../../../core/services/local_storage_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/notification_center_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/payment_service.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../core/services/storage_service.dart';
@@ -18,6 +20,7 @@ import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/theme/app_theme.dart';
+import '../../../widgets/offline_status_banner.dart';
 import '../../../widgets/pro_ui_kit.dart';
 
 /// Executive Account & Portal Settings screen / sheet body:
@@ -258,11 +261,49 @@ class _SettingsTabState extends State<SettingsTab> {
   Future<void> _confirmAndSignOut() async {
     final p = AppColors.of(context);
     final loc = AppLocalizations.of(context);
+    final unsyncedCount =
+        OfflineSyncService.instance.statusNotifier.value.totalActionableCount;
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: Text(loc.signOut),
-        content: Text(loc.signOutConfirm),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(loc.signOutConfirm),
+            if (unsyncedCount > 0) ...[
+              const SizedBox(height: 12),
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(10),
+                decoration: BoxDecoration(
+                  color: p.warning.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: p.warning.withOpacity(0.4)),
+                ),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(Icons.warning_amber_rounded,
+                        size: 18, color: p.warning),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        '${loc.signOutUnsyncedWarning} ($unsyncedCount)',
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: p.ink,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx, false),
@@ -285,6 +326,9 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _handleSignOut() async {
+    final uid = AuthSessionService.instance.userId.isNotEmpty
+        ? AuthSessionService.instance.userId
+        : (SupabaseService.instance.currentUser?.id ?? '');
     try {
       await PushNotificationService.instance.unregisterOnLogout();
     } catch (_) {}
@@ -292,6 +336,7 @@ class _SettingsTabState extends State<SettingsTab> {
     try {
       AuthSessionService.instance.clearSession();
       await Future.wait([
+        OfflineSyncService.instance.clearForUser(uid),
         PaymentService.instance.clearOnLogout(),
         AnnouncementService.instance.clearOnLogout(),
         NotificationCenterService.instance.clearOnLogout(),
@@ -301,6 +346,9 @@ class _SettingsTabState extends State<SettingsTab> {
         AbsenceService.instance.clearOnLogout(),
         MessagingService.instance.clearOnLogout(),
       ]);
+      if (uid.isNotEmpty) {
+        await LocalStorageService.instance.clearUserCaches(uid);
+      }
     } catch (_) {} finally {
       try {
         await SupabaseService.instance.signOut();
@@ -786,6 +834,32 @@ class _SettingsTabState extends State<SettingsTab> {
                                     ),
                                 ],
                               ),
+                            ),
+                            Divider(
+                              height: 1,
+                              indent: 58,
+                              color: p.border.withOpacity(0.65),
+                            ),
+                            ValueListenableBuilder<OfflineSyncStatus>(
+                              valueListenable:
+                                  OfflineSyncService.instance.statusNotifier,
+                              builder: (context, syncStatus, _) {
+                                final subtitle = syncStatus.totalActionableCount > 0
+                                    ? '${syncStatus.totalActionableCount} ${loc.offlinePendingChanges}'
+                                    : loc.syncQueueSubtitle;
+                                return _SettingsRowTile(
+                                  icon: Icons.cloud_sync_rounded,
+                                  iconColor: syncStatus.failedCount > 0
+                                      ? p.danger
+                                      : (syncStatus.pendingCount > 0
+                                          ? p.warning
+                                          : p.primary),
+                                  title: loc.syncAndOfflineStorage,
+                                  subtitle: subtitle,
+                                  p: p,
+                                  onTap: () => OfflineSyncQueueSheet.show(context),
+                                );
+                              },
                             ),
                             Divider(
                               height: 1,

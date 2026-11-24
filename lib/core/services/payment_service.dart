@@ -4,14 +4,17 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/payment.dart';
 import '../utils/json_parsers.dart';
 import 'auth_session_service.dart';
+import 'connectivity_service.dart';
 import 'local_storage_service.dart';
 import 'notification_center_service.dart';
+import 'offline_sync_service.dart';
 import 'push_notification_service.dart';
 import 'storage_service.dart';
 import 'supabase_service.dart';
 
-/// Payment & Tuition Service backed by the Supabase `monthly_payments` table.
-/// Restricted strictly to Super Administrators (`isSuperAdmin`) and owning parents.
+/// Payment & Tuition Service backed by Supabase `monthly_payments`
+/// with user-scoped offline caching, offline receipt staging/queuing,
+/// and strict online-only guards on admin approvals & rejections.
 class PaymentService {
   PaymentService._();
 
@@ -23,6 +26,7 @@ class PaymentService {
       '*, student:students!student_id(full_name), parent:profiles!parent_id(full_name, email)';
 
   final List<MonthlyPayment> _payments = [];
+  bool _cacheLoaded = false;
   final StreamController<List<MonthlyPayment>> _paymentsController =
       StreamController<List<MonthlyPayment>>.broadcast();
   RealtimeChannel? _channel;
@@ -30,13 +34,86 @@ class PaymentService {
   Stream<List<MonthlyPayment>> get paymentsStream => _paymentsController.stream;
   List<MonthlyPayment> get allPayments => List.unmodifiable(_payments);
 
+  String get _uid => AuthSessionService.instance.userId.isNotEmpty
+      ? AuthSessionService.instance.userId
+      : (SupabaseService.instance.currentUser?.id ?? '');
+
   void _emit() {
     if (!_paymentsController.isClosed) {
       _paymentsController.add(List.from(_payments));
     }
   }
 
+  Future<void> _saveToCache() async {
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    await LocalStorageService.instance.saveUserJsonList(
+      uid,
+      'payments',
+      _payments.map((p) => p.toJson()).toList(),
+    );
+  }
+
+  void _applyPendingPaymentOverlays() {
+    final pending = OfflineSyncService.instance
+        .pendingMutationsForEntity(OfflineEntityTypes.paymentReceipt);
+    for (final mut in pending) {
+      final p = mut.payload;
+      final paymentId = p['id']?.toString() ?? mut.id;
+      final idx = _payments.indexWhere((row) => row.id == paymentId);
+      if (idx == -1) continue;
+      final existing = _payments[idx];
+      final localReceipt = (mut.localMediaPath != null &&
+              mut.localMediaPath!.trim().isNotEmpty)
+          ? 'local://${mut.localMediaPath}'
+          : (p['receipt_url']?.toString() ?? existing.receiptUrl);
+      _payments[idx] = MonthlyPayment(
+        id: existing.id,
+        parentId: existing.parentId,
+        parentName: existing.parentName,
+        parentEmail: existing.parentEmail,
+        studentId: existing.studentId,
+        studentName: existing.studentName,
+        month: existing.month,
+        amount: existing.amount,
+        dueDate: existing.dueDate,
+        feeStartDate: existing.feeStartDate,
+        status: p['status']?.toString() ?? 'submitted',
+        receiptUrl: localReceipt,
+        receiptLocalMock: existing.receiptLocalMock,
+        rejectionReason: null,
+        submittedAt:
+            JsonParsers.asNullableDateTime(p['submitted_at']) ?? mut.createdAt,
+        reviewedAt: existing.reviewedAt,
+        reviewedBy: existing.reviewedBy,
+        notes: p['notes']?.toString() ?? existing.notes,
+      );
+    }
+  }
+
+  Future<void> _loadFromCache() async {
+    if (_cacheLoaded) return;
+    if (!AuthSessionService.instance.canAccessPayments) return;
+    final uid = _uid;
+    if (uid.isEmpty) return;
+    _cacheLoaded = true;
+    try {
+      final cached =
+          await LocalStorageService.instance.getUserJsonList(uid, 'payments');
+      if (cached.isNotEmpty && _payments.isEmpty) {
+        for (final item in cached) {
+          _payments.add(MonthlyPayment.fromJson(item));
+        }
+      }
+      _applyPendingPaymentOverlays();
+      _emit();
+    } catch (e) {
+      debugPrint('[PaymentService] Cache load note: $e');
+    }
+  }
+
   Future<void> refreshAndSubscribe() async {
+    await _loadFromCache();
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
     await refresh();
@@ -61,6 +138,7 @@ class PaymentService {
   }
 
   Future<void> clearOnLogout() async {
+    final uid = _uid;
     final client = SupabaseService.instance.client;
     final ch = _channel;
     _channel = null;
@@ -72,13 +150,17 @@ class PaymentService {
       }
     }
     _payments.clear();
+    _cacheLoaded = false;
     _emit();
+    if (uid.isNotEmpty) {
+      await LocalStorageService.instance.removeUserCache(uid, 'payments');
+    }
     await LocalStorageService.instance.remove('cached_payments');
   }
 
-  /// Reload all payments visible to the current user (RLS restricts parents to own rows
-  /// and excludes standard admins completely).
+  /// Reload all payments visible to the current user (preserving pending offline receipts).
   Future<void> refresh() async {
+    await _loadFromCache();
     if (!AuthSessionService.instance.canAccessPayments) {
       _payments.clear();
       _emit();
@@ -86,6 +168,7 @@ class PaymentService {
     }
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
+    if (!ConnectivityService.instance.isOnline) return;
     try {
       final res = await client
           .from('monthly_payments')
@@ -95,11 +178,18 @@ class PaymentService {
       if (res is List) {
         _payments
           ..clear()
-          ..addAll(res.map((e) => _fromRow(Map<String, dynamic>.from(e as Map))));
+          ..addAll(
+            res.map((e) => _fromRow(Map<String, dynamic>.from(e as Map))),
+          );
+        _applyPendingPaymentOverlays();
         _emit();
+        await _saveToCache();
       }
     } catch (e) {
       debugPrint('[PaymentService] Failed to load payments: $e');
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+      }
     }
   }
 
@@ -128,6 +218,7 @@ class PaymentService {
       final id = oldRow['id']?.toString();
       _payments.removeWhere((p) => p.id == id);
       _emit();
+      await _saveToCache();
       return;
     }
 
@@ -144,7 +235,9 @@ class PaymentService {
     final month = newRow['month_year']?.toString() ?? '';
     final amount = newRow['amount']?.toString() ?? '';
 
-    if (!isSuperAdmin && AuthSessionService.instance.isParent && parentId == userId) {
+    if (!isSuperAdmin &&
+        AuthSessionService.instance.isParent &&
+        parentId == userId) {
       if (payload.eventType == PostgresChangeEvent.insert) {
         _notify(
           'Monthly Tuition Due 💳',
@@ -191,7 +284,7 @@ class PaymentService {
     }
   }
 
-  /// Superadmin issues a monthly tuition fee invoice for a student
+  /// Superadmin issues a monthly tuition fee invoice for a student (online required).
   Future<MonthlyPayment?> createPaymentInvoice({
     required String studentId,
     required String studentName,
@@ -204,6 +297,10 @@ class PaymentService {
     required DateTime feeStartDate,
   }) async {
     _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
     if (parentId.isEmpty) {
@@ -229,6 +326,7 @@ class PaymentService {
     _payments.removeWhere((p) => p.id == payment.id);
     _payments.insert(0, payment);
     _emit();
+    await _saveToCache();
 
     try {
       await client.from('notifications').insert({
@@ -264,9 +362,11 @@ class PaymentService {
     return payment;
   }
 
-  /// Get payments for a specific parent
-  List<MonthlyPayment> getPaymentsForParent(String parentId,
-      {String? parentEmail}) {
+  /// Get payments for a specific parent.
+  List<MonthlyPayment> getPaymentsForParent(
+    String parentId, {
+    String? parentEmail,
+  }) {
     return _payments.where((p) {
       if (p.parentId == parentId) return true;
       if (parentEmail != null &&
@@ -297,7 +397,128 @@ class PaymentService {
     );
   }
 
-  /// Parent submits an uploaded receipt for verification (routes push strictly to superadmins)
+  /// Offline-aware receipt upload & submission:
+  /// Returns `true` if uploaded and committed online immediately, or `false` if staged
+  /// locally and queued for durable auto-sync when connectivity returns.
+  Future<bool> submitPaymentReceiptOfflineAware({
+    required String paymentId,
+    required Uint8List receiptBytes,
+    required String fileName,
+    String? customNote,
+  }) async {
+    final cleanName = fileName.replaceAll(RegExp(r'[^a-zA-Z0-9._-]'), '_');
+    final ownerId = SupabaseService.instance.currentUser?.id ??
+        AuthSessionService.instance.userId;
+    final cleanOwner = ownerId.isNotEmpty ? ownerId : 'unknown';
+    final ms = DateTime.now().millisecondsSinceEpoch;
+    final targetStoragePath = '$cleanOwner/$paymentId/${ms}_$cleanName';
+    final cleanNote = (customNote == null || customNote.trim().isEmpty)
+        ? 'Receipt uploaded by parent. Awaiting superadmin verification.'
+        : customNote.trim();
+    final now = DateTime.now();
+    final nowIso = now.toUtc().toIso8601String();
+
+    final idx = _payments.indexWhere((p) => p.id == paymentId);
+    final existing = idx != -1 ? _payments[idx] : null;
+
+    Future<void> applyLocally({
+      required String resolvedReceiptUrl,
+      required bool queueOffline,
+      String? stagedPath,
+    }) async {
+      if (idx != -1 && existing != null) {
+        _payments[idx] = MonthlyPayment(
+          id: existing.id,
+          parentId: existing.parentId,
+          parentName: existing.parentName,
+          parentEmail: existing.parentEmail,
+          studentId: existing.studentId,
+          studentName: existing.studentName,
+          month: existing.month,
+          amount: existing.amount,
+          dueDate: existing.dueDate,
+          feeStartDate: existing.feeStartDate,
+          status: 'submitted',
+          receiptUrl: resolvedReceiptUrl,
+          receiptLocalMock: existing.receiptLocalMock,
+          rejectionReason: null,
+          submittedAt: now,
+          reviewedAt: existing.reviewedAt,
+          reviewedBy: existing.reviewedBy,
+          notes: cleanNote,
+        );
+        _emit();
+        await _saveToCache();
+      }
+
+      if (queueOffline) {
+        await OfflineSyncService.instance.enqueue(
+          entityType: OfflineEntityTypes.paymentReceipt,
+          operation: 'update',
+          id: paymentId,
+          payload: {
+            'id': paymentId,
+            'status': 'submitted',
+            'submitted_at': nowIso,
+            'notes': cleanNote,
+            'rejection_reason': null,
+          },
+          localMediaPath: stagedPath,
+          storageBucket: receiptsBucket,
+          storagePath: targetStoragePath,
+          mediaPayloadField: 'receipt_url',
+          displayLabel: 'Receipt: ${existing?.month ?? "Tuition"}',
+          triggerImmediateSync: false,
+        );
+      }
+    }
+
+    Future<bool> stageAndQueue() async {
+      final stagedPath = await OfflineSyncService.instance.stageMediaBytes(
+        bytes: receiptBytes,
+        fileName: cleanName,
+      );
+      await applyLocally(
+        resolvedReceiptUrl: 'local://$stagedPath',
+        queueOffline: true,
+        stagedPath: stagedPath,
+      );
+      return false;
+    }
+
+    final client = SupabaseService.instance.client;
+    if (!ConnectivityService.instance.isOnline || client == null) {
+      return await stageAndQueue();
+    }
+
+    try {
+      final uploadedUrl = await StorageService.uploadFile(
+        bucket: receiptsBucket,
+        path: targetStoragePath,
+        bytes: receiptBytes,
+        upsert: true,
+        throwOnError: true,
+      );
+      if (uploadedUrl == null || uploadedUrl.isEmpty) {
+        throw Exception('Receipt upload failed.');
+      }
+
+      await submitPaymentReceipt(
+        paymentId: paymentId,
+        receiptUrl: uploadedUrl,
+        customNote: cleanNote,
+      );
+      return true;
+    } catch (e) {
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        return await stageAndQueue();
+      }
+      rethrow;
+    }
+  }
+
+  /// Parent submits an uploaded receipt URL for verification (routes push strictly to superadmins).
   Future<void> submitPaymentReceipt({
     required String paymentId,
     required String receiptUrl,
@@ -346,9 +567,16 @@ class PaymentService {
     }
   }
 
-  /// Superadmin approves the payment
-  Future<void> approvePayment({required String paymentId, String? adminName}) async {
+  /// Superadmin approves the payment (strictly online-only).
+  Future<void> approvePayment({
+    required String paymentId,
+    String? adminName,
+  }) async {
     _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
     final matching = _payments.where((p) => p.id == paymentId);
@@ -374,13 +602,17 @@ class PaymentService {
     }
   }
 
-  /// Superadmin rejects the payment with a mandatory reason
+  /// Superadmin rejects the payment with a mandatory reason (strictly online-only).
   Future<void> rejectPayment({
     required String paymentId,
     required String reason,
     String? adminName,
   }) async {
     _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
     final matching = _payments.where((p) => p.id == paymentId);
@@ -406,9 +638,13 @@ class PaymentService {
     }
   }
 
-  /// Superadmin sends a tuition reminder announcement to parents
+  /// Superadmin sends a tuition reminder announcement to parents (online-only).
   Future<void> sendMonthlyTuitionReminder(String month) async {
     _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client == null) {
       throw Exception('Unable to connect to server.');
@@ -423,9 +659,13 @@ class PaymentService {
     });
   }
 
-  /// Superadmin marks an overdue payment and records an in-app alert
+  /// Superadmin marks an overdue payment and records an in-app alert (online-only).
   Future<void> sendOverdueAlertToAdmin(MonthlyPayment payment) async {
     _requireSuperAdmin();
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      throw const OfflineActionException();
+    }
     final client = SupabaseService.instance.client;
     if (client != null && payment.isPending) {
       await client
@@ -446,6 +686,7 @@ class PaymentService {
   /// Invoke the idempotent PostgreSQL monthly reminder dispatcher (Superadmin only).
   Future<int> checkAndSendMonthlyFeeReminders() async {
     if (!AuthSessionService.instance.isSuperAdmin) return 0;
+    if (!ConnectivityService.instance.isOnline) return 0;
     final client = SupabaseService.instance.client;
     if (client == null) return 0;
 

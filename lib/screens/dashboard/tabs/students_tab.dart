@@ -10,6 +10,7 @@ import '../../../core/services/absence_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/messaging_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
@@ -623,13 +624,39 @@ class _StudentsTabState extends State<StudentsTab> {
               ],
             ),
             const SizedBox(height: 14),
-            Text(
-              'Attendance for ${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
-              style: TextStyle(
-                fontSize: 11.5,
-                fontWeight: FontWeight.w600,
-                color: p.inkSecondary,
-              ),
+            Row(
+              children: [
+                Text(
+                  'Attendance for ${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    fontWeight: FontWeight.w600,
+                    color: p.inkSecondary,
+                  ),
+                ),
+                if (todayAtt != null)
+                  ValueListenableBuilder<List<OfflineMutation>>(
+                    valueListenable:
+                        OfflineSyncService.instance.mutationsNotifier,
+                    builder: (context, _, __) {
+                      final isPending = OfflineSyncService.instance
+                          .isRecordPending(
+                        OfflineEntityTypes.attendance,
+                        todayAtt.id,
+                      );
+                      if (!isPending) return const SizedBox.shrink();
+                      return Padding(
+                        padding:
+                            const EdgeInsetsDirectional.only(start: 6),
+                        child: Icon(
+                          Icons.schedule_rounded,
+                          size: 14,
+                          color: p.warning,
+                        ),
+                      );
+                    },
+                  ),
+              ],
             ),
             const SizedBox(height: 8),
             Row(

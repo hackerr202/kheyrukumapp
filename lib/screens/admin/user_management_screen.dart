@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/halaqah_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
@@ -151,6 +152,19 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
     if (!mounted || confirm != true) return;
 
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).internetRequiredAction),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+      return;
+    }
+
     setState(() {
       user['is_suspended'] = newStatus;
     });
@@ -242,6 +256,19 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     );
 
     if (!mounted || confirm != true) return;
+
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(AppLocalizations.of(context).internetRequiredAction),
+            backgroundColor: p.danger,
+          ),
+        );
+      }
+      return;
+    }
 
     setState(() {
       if (listType == 'teacher') {
@@ -642,6 +669,19 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                   ? null
                   : () async {
                       final messenger = ScaffoldMessenger.of(context);
+                      final offlineMsg =
+                          AppLocalizations.of(context).internetRequiredAction;
+                      if (!ConnectivityService.instance.isOnline &&
+                          !await ConnectivityService.instance.checkNow()) {
+                        messenger.showSnackBar(
+                          SnackBar(
+                            content: Text(offlineMsg),
+                            backgroundColor: p.danger,
+                          ),
+                        );
+                        return;
+                      }
+                      if (!ctx.mounted) return;
                       Navigator.pop(ctx);
                       try {
                         final client = SupabaseService.instance.client;

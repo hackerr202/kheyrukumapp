@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import '../models/invitation_code.dart';
+import 'connectivity_service.dart';
 
 /// Service class to manage Supabase Cloud initialization, authentication,
 /// email verification, and the Admin Invitation Code registration workflow for Kheyrukum.
@@ -74,6 +75,9 @@ class SupabaseService {
       return res;
     } catch (e) {
       debugPrint('[SupabaseService] Failed to load profile: $e');
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+      }
       return null;
     }
   }
@@ -273,6 +277,14 @@ class SupabaseService {
     required String password,
     String? phone,
   }) async {
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      return {
+        'success': false,
+        'message': 'Internet connection required for registration.',
+      };
+    }
+
     if (!await ensureInitialized()) {
       return {'success': false, 'message': 'Unable to connect to Supabase: ${_initializationError ?? "offline"}'};
     }
@@ -441,6 +453,14 @@ class SupabaseService {
     final cleanRole = role.toLowerCase().trim();
     if (cleanRole != 'teacher' && cleanRole != 'parent') {
       return {'success': false, 'message': 'Role must be teacher or parent.'};
+    }
+
+    if (!ConnectivityService.instance.isOnline &&
+        !await ConnectivityService.instance.checkNow()) {
+      return {
+        'success': false,
+        'message': 'Internet connection required to generate invitation codes.',
+      };
     }
 
     if (!await ensureInitialized() || client == null) {

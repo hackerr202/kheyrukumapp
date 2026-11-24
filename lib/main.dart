@@ -7,6 +7,7 @@ import 'package:flutter_localizations/flutter_localizations.dart';
 import 'core/localization/app_localizations.dart';
 import 'core/localization/locale_notifier.dart';
 import 'core/routes/app_routes.dart';
+import 'core/services/connectivity_service.dart';
 import 'core/services/local_storage_service.dart';
 import 'core/services/push_notification_service.dart';
 import 'core/services/supabase_service.dart';
@@ -30,6 +31,12 @@ void main() async {
     await LocalStorageService.instance.initialize();
   } catch (e) {
     debugPrint('[main] LocalStorage initialization note: $e');
+  }
+
+  try {
+    await ConnectivityService.instance.initialize();
+  } catch (e) {
+    debugPrint('[main] Connectivity initialization note: $e');
   }
 
   try {

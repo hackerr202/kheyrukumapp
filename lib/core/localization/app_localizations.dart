@@ -262,6 +262,32 @@ class AppLocalizations {
       'appVersion': 'Version 2.0 • Production Build',
       'signOut': 'Sign Out',
       'signOutConfirm': 'Are you sure you want to sign out of your account?',
+
+      // Offline-First & Auto-Sync
+      'offlineModeViewingSaved': 'Offline mode — viewing saved data',
+      'offlinePendingChanges': 'changes saved locally',
+      'offlineWillSync': 'Will sync automatically',
+      'syncingPendingChanges': 'Syncing pending changes...',
+      'failedSyncTapToReview': 'changes couldn\'t sync — Tap to review',
+      'allChangesSynced': 'All changes synced',
+      'syncAndOfflineStorage': 'Sync & Offline Storage',
+      'syncQueueSubtitle': 'Pending offline writes & media uploads',
+      'syncNow': 'Sync Now',
+      'retryAll': 'Retry All',
+      'discard': 'Discard',
+      'noPendingChanges': 'No Pending Changes',
+      'allCaughtUpMessage':
+          'All saved attendance, reports, messages, and receipts are synced with the cloud.',
+      'lastSynced': 'Last synced',
+      'neverSynced': 'Not yet synced in this session',
+      'statusOnline': 'Online',
+      'statusOffline': 'Offline',
+      'internetRequiredAction': 'Internet connection required for this action.',
+      'signOutUnsyncedWarning':
+          'You have unsynced offline changes that will be permanently lost if you sign out before reconnecting.',
+      'savedOfflineQueued':
+          'Saved offline — will sync automatically when connected.',
+      'syncingStatus': 'Syncing',
     },
 
     // =========================================================================
@@ -500,6 +526,32 @@ class AppLocalizations {
       'appVersion': 'الإصدار 2.0 • نسخة الإنتاج',
       'signOut': 'تسجيل الخروج',
       'signOutConfirm': 'هل أنت متأكد من رغبتك في تسجيل الخروج من حسابك؟',
+
+      // Offline-First & Auto-Sync
+      'offlineModeViewingSaved': 'وضع عدم الاتصال — عرض البيانات المحفوظة',
+      'offlinePendingChanges': 'تغييرات محفوظة محلياً',
+      'offlineWillSync': 'ستتم المزامنة تلقائياً',
+      'syncingPendingChanges': 'جارٍ مزامنة التغييرات المعلقة...',
+      'failedSyncTapToReview': 'تغييرات تعذرت مزامنتها — اضغط للمراجعة',
+      'allChangesSynced': 'تمت مزامنة جميع التغييرات',
+      'syncAndOfflineStorage': 'المزامنة والتخزين دون اتصال',
+      'syncQueueSubtitle': 'العمليات والوسائط المعلقة للمزامنة',
+      'syncNow': 'مزامنة الآن',
+      'retryAll': 'إعادة المحاولة للكل',
+      'discard': 'تجاهل',
+      'noPendingChanges': 'لا توجد تغييرات معلقة',
+      'allCaughtUpMessage':
+          'جميع سجلات الحضور والتقارير والرسائل والإيصالات متزامنة مع السحابة.',
+      'lastSynced': 'آخر مزامنة',
+      'neverSynced': 'لم تتم المزامنة بعد في هذه الجلسة',
+      'statusOnline': 'متصل',
+      'statusOffline': 'غير متصل',
+      'internetRequiredAction': 'يلزم الاتصال بالإنترنت لتنفيذ هذا الإجراء.',
+      'signOutUnsyncedWarning':
+          'لديك تغييرات غير متزامنة ستفقد نهائياً إذا سجلت الخروج قبل إعادة الاتصال بالإنترنت.',
+      'savedOfflineQueued':
+          'تم الحفظ دون اتصال — ستتم المزامنة تلقائياً عند توفر الإنترنت.',
+      'syncingStatus': 'جارٍ المزامنة',
     },
 
     // =========================================================================
@@ -737,6 +789,32 @@ class AppLocalizations {
       'appVersion': 'ስሪት 2.0 • ዋና እትም',
       'signOut': 'ውጣ',
       'signOutConfirm': 'እርግጠኛ ነዎት ከመለያዎ መውጣት ይፈልጋሉ?',
+
+      // Offline-First & Auto-Sync
+      'offlineModeViewingSaved': 'ከመስመር ውጭ — የተቀመጠ መረጃ በማየት ላይ',
+      'offlinePendingChanges': 'ለውጦች በመሣሪያው ላይ ተቀምጠዋል',
+      'offlineWillSync': 'በራስ-ሰር ይመሳሰላል',
+      'syncingPendingChanges': 'በመጠባበቅ ላይ ያሉ ለውጦችን በማመሳሰል ላይ...',
+      'failedSyncTapToReview': 'ያልተመሳሰሉ ለውጦች — ለመገምገም ይንኩ',
+      'allChangesSynced': 'ሁሉም ለውጦች ተመሳስለዋል',
+      'syncAndOfflineStorage': 'ማመሳሰል እና ከመስመር ውጭ ማከማቻ',
+      'syncQueueSubtitle': 'በመጠባበቅ ላይ ያሉ ከመስመር ውጭ ለውጦች',
+      'syncNow': 'አሁን አመሳስል',
+      'retryAll': 'ሁሉንም እንደገና ሞክር',
+      'discard': 'አስወግድ',
+      'noPendingChanges': 'ምንም በመጠባበቅ ላይ ያለ ለውጥ የለም',
+      'allCaughtUpMessage':
+          'ሁሉም መገኘት፣ ሪፖርቶች፣ መልዕክቶች እና ደረሰኞች ከደመና ጋር ተመሳስለዋል።',
+      'lastSynced': 'መጨረሻ የተመሳሰለበት',
+      'neverSynced': 'በዚህ ክፍለ ጊዜ ገና አልተመሳሰለም',
+      'statusOnline': 'በመስመር ላይ',
+      'statusOffline': 'ከመስመር ውጭ',
+      'internetRequiredAction': 'ለዚህ ተግባር የኢንተርኔት ግንኙነት ያስፈልጋል።',
+      'signOutUnsyncedWarning':
+          'ወደ መስመር ከመመለስዎ በፊት ከወጡ በቋሚነት የሚጠፉ ያልተመሳሰሉ ከመስመር ውጭ ለውጦች አሉዎት።',
+      'savedOfflineQueued':
+          'ከመስመር ውጭ ተቀምጧል — ግንኙነት ሲመለስ በራስ-ሰር ይመሳሰላል።',
+      'syncingStatus': 'በማመሳሰል ላይ',
     },
   };
 
@@ -975,6 +1053,29 @@ class AppLocalizations {
   String get appVersion => translate('appVersion');
   String get signOut => translate('signOut');
   String get signOutConfirm => translate('signOutConfirm');
+
+  // Offline-First & Auto-Sync
+  String get offlineModeViewingSaved => translate('offlineModeViewingSaved');
+  String get offlinePendingChanges => translate('offlinePendingChanges');
+  String get offlineWillSync => translate('offlineWillSync');
+  String get syncingPendingChanges => translate('syncingPendingChanges');
+  String get failedSyncTapToReview => translate('failedSyncTapToReview');
+  String get allChangesSynced => translate('allChangesSynced');
+  String get syncAndOfflineStorage => translate('syncAndOfflineStorage');
+  String get syncQueueSubtitle => translate('syncQueueSubtitle');
+  String get syncNow => translate('syncNow');
+  String get retryAll => translate('retryAll');
+  String get discard => translate('discard');
+  String get noPendingChanges => translate('noPendingChanges');
+  String get allCaughtUpMessage => translate('allCaughtUpMessage');
+  String get lastSynced => translate('lastSynced');
+  String get neverSynced => translate('neverSynced');
+  String get statusOnline => translate('statusOnline');
+  String get statusOffline => translate('statusOffline');
+  String get internetRequiredAction => translate('internetRequiredAction');
+  String get signOutUnsyncedWarning => translate('signOutUnsyncedWarning');
+  String get savedOfflineQueued => translate('savedOfflineQueued');
+  String get syncingStatus => translate('syncingStatus');
 }
 
 class _AppLocalizationsDelegate

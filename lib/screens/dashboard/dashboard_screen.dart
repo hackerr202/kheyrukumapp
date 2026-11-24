@@ -8,18 +8,22 @@ import '../../core/routes/app_routes.dart';
 import '../../core/services/absence_service.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
+import '../../core/services/connectivity_service.dart';
 import '../../core/services/halaqah_service.dart';
 import '../../core/services/homework_service.dart';
 import '../../core/services/messaging_service.dart';
 import '../../core/services/notification_center_service.dart';
+import '../../core/services/offline_sync_service.dart';
 import '../../core/services/payment_service.dart';
 import '../../core/services/prayer_reminder_service.dart';
 import '../../core/services/push_notification_service.dart';
 import '../../core/services/student_service.dart';
+import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/announcement_banner.dart';
 import '../../widgets/kheyrukum_nav_bar.dart';
+import '../../widgets/offline_status_banner.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../announcements/announcements_sheet.dart';
 import '../settings/settings_sheet.dart';
@@ -50,6 +54,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Map<String, String>>? _prayerSub;
   StreamSubscription<List<Conversation>>? _conversationsSub;
   StreamSubscription<Map<String, dynamic>>? _notifTapSub;
+  StreamSubscription<void>? _reconnectedSub;
 
   int get _totalUnreadCount =>
       _unreadAnnouncementsCount + _unreadNotificationsCount;
@@ -58,7 +63,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   void initState() {
     super.initState();
 
-    _bootstrapCloudServices();
+    _initOfflineAndCloudServices();
     _recomputeUnreadMessages();
     PushNotificationService.instance.requestNotificationPermissions();
 
@@ -131,6 +136,63 @@ class _DashboardScreenState extends State<DashboardScreen> {
     }
   }
 
+  Future<void> _initOfflineAndCloudServices() async {
+    final uid = AuthSessionService.instance.userId.isNotEmpty
+        ? AuthSessionService.instance.userId
+        : (SupabaseService.instance.currentUser?.id ?? '');
+
+    await NotificationCenterService.instance.loadForCurrentUser();
+
+    if (uid.isNotEmpty) {
+      OfflineSyncService.instance.onBatchSynced = (syncedTypes) {
+        if (!mounted) return;
+        unawaited(() async {
+          if (syncedTypes.contains(OfflineEntityTypes.student) ||
+              syncedTypes.contains(OfflineEntityTypes.attendance) ||
+              syncedTypes.contains(OfflineEntityTypes.weeklyReport)) {
+            await StudentService.instance.refreshAll();
+          }
+          if (syncedTypes.contains(OfflineEntityTypes.homeworkAssignment) ||
+              syncedTypes.contains(OfflineEntityTypes.homeworkSubmission)) {
+            await HomeworkService.instance.refreshAll();
+          }
+          if (syncedTypes.contains(OfflineEntityTypes.absenceRequest)) {
+            await AbsenceService.instance.refreshAll();
+          }
+          if (syncedTypes.contains(OfflineEntityTypes.chatMessage)) {
+            await MessagingService.instance.refreshAndSubscribe();
+          }
+          if (syncedTypes.contains(OfflineEntityTypes.paymentReceipt)) {
+            await PaymentService.instance.refresh();
+          }
+          if (syncedTypes.contains(OfflineEntityTypes.announcement)) {
+            await AnnouncementService.instance.fetchFromCloud();
+          }
+          _recomputeUnreadMessages();
+        }());
+      };
+
+      await OfflineSyncService.instance.initializeForUser(uid);
+    }
+
+    _reconnectedSub?.cancel();
+    _reconnectedSub = ConnectivityService.instance.onReconnected.listen((_) {
+      unawaited(() async {
+        final active =
+            await AuthSessionService.instance.syncFromSupabaseProfile();
+        if (!active && mounted && SupabaseService.instance.currentUser == null) {
+          Navigator.of(context, rootNavigator: true)
+              .pushNamedAndRemoveUntil(AppRoutes.auth, (_) => false);
+          return;
+        }
+        await OfflineSyncService.instance.syncPendingMutations();
+        await _bootstrapCloudServices();
+      }());
+    });
+
+    await _bootstrapCloudServices();
+  }
+
   Future<void> _bootstrapCloudServices() async {
     await AuthSessionService.instance.syncFromSupabaseProfile();
     await Future.wait([
@@ -142,7 +204,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       PaymentService.instance.refreshAndSubscribe(),
       PushNotificationService.instance.registerDeviceToken(),
     ]);
-    AnnouncementService.instance.refreshAndSubscribe();
+    await AnnouncementService.instance.refreshAndSubscribe();
     _recomputeUnreadMessages();
   }
 
@@ -192,6 +254,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _prayerSub?.cancel();
     _conversationsSub?.cancel();
     _notifTapSub?.cancel();
+    _reconnectedSub?.cancel();
     super.dispose();
   }
 
@@ -446,6 +509,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         );
                       },
                     ),
+
+                    const OfflineStatusBanner(),
 
                     // Preserves tab scroll positions & live streams smoothly
                     Expanded(

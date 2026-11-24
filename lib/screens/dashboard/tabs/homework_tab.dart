@@ -5,6 +5,7 @@ import '../../../core/models/homework.dart';
 import '../../../core/models/student.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/homework_service.dart';
+import '../../../core/services/offline_sync_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -288,10 +289,34 @@ class _HomeworkTabState extends State<HomeworkTab> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                ProStatusPill(
-                  label: assignment.isOverdue ? loc.overdue : 'Active',
-                  color: assignment.isOverdue ? p.danger : p.success,
-                  showDot: true,
+                ValueListenableBuilder<List<OfflineMutation>>(
+                  valueListenable:
+                      OfflineSyncService.instance.mutationsNotifier,
+                  builder: (context, _, __) {
+                    final isPending =
+                        OfflineSyncService.instance.isRecordPending(
+                      OfflineEntityTypes.homeworkAssignment,
+                      assignment.id,
+                    );
+                    return Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (isPending) ...[
+                          Icon(
+                            Icons.schedule_rounded,
+                            size: 15,
+                            color: p.warning,
+                          ),
+                          const SizedBox(width: 6),
+                        ],
+                        ProStatusPill(
+                          label: assignment.isOverdue ? loc.overdue : 'Active',
+                          color: assignment.isOverdue ? p.danger : p.success,
+                          showDot: true,
+                        ),
+                      ],
+                    );
+                  },
                 ),
               ],
             ),
@@ -833,11 +858,42 @@ class _HomeworkTabState extends State<HomeworkTab> {
                   ),
                 ),
                 const SizedBox(width: 8),
-                ProStatusPill(
-                  label: statusLabel,
-                  color: statusColor,
-                  showDot: true,
-                ),
+                if (sub != null)
+                  ValueListenableBuilder<List<OfflineMutation>>(
+                    valueListenable:
+                        OfflineSyncService.instance.mutationsNotifier,
+                    builder: (context, _, __) {
+                      final isPending =
+                          OfflineSyncService.instance.isRecordPending(
+                        OfflineEntityTypes.homeworkSubmission,
+                        sub.id,
+                      );
+                      return Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          if (isPending) ...[
+                            Icon(
+                              Icons.schedule_rounded,
+                              size: 15,
+                              color: p.warning,
+                            ),
+                            const SizedBox(width: 6),
+                          ],
+                          ProStatusPill(
+                            label: statusLabel,
+                            color: statusColor,
+                            showDot: true,
+                          ),
+                        ],
+                      );
+                    },
+                  )
+                else
+                  ProStatusPill(
+                    label: statusLabel,
+                    color: statusColor,
+                    showDot: true,
+                  ),
               ],
             ),
             const SizedBox(height: 10),

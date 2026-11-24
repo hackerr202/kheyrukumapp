@@ -1,5 +1,4 @@
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/foundation.dart';
 import 'package:mime/mime.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
@@ -55,11 +54,26 @@ class StorageService {
   }) =>
       'storage://$bucket/$path';
 
-  /// Returns true if [raw] is either an HTTP(S) URL or a `storage://bucket/path` ref.
+  /// Returns true if [raw] points to a locally staged offline file (`local://...`).
+  static bool isLocalMediaRef(String? raw) {
+    if (raw == null) return false;
+    return raw.trim().startsWith('local://');
+  }
+
+  /// Extracts the filesystem path from a `local://<path>` reference.
+  static String? extractLocalPath(String? raw) {
+    if (!isLocalMediaRef(raw)) return null;
+    final path = raw!.trim().substring('local://'.length);
+    return path.isEmpty ? null : path;
+  }
+
+  /// Returns true if [raw] is an HTTP(S) URL, `storage://bucket/path` ref, or `local://` ref.
   static bool isValidMediaRef(String? raw) {
     if (raw == null) return false;
     final trimmed = raw.trim();
-    return trimmed.startsWith('http') || trimmed.startsWith('storage://');
+    return trimmed.startsWith('http') ||
+        trimmed.startsWith('storage://') ||
+        trimmed.startsWith('local://');
   }
 
   /// Clears cached signed URLs (should be called when signing out).
@@ -146,7 +160,7 @@ class StorageService {
   }) async {
     if (rawUrlOrRef == null) return null;
     final trimmed = rawUrlOrRef.trim();
-    if (trimmed.isEmpty) return null;
+    if (trimmed.isEmpty || isLocalMediaRef(trimmed)) return null;
 
     final parsed = _parseStorageRef(trimmed);
     if (parsed == null) {
@@ -202,11 +216,15 @@ class StorageService {
     required List<int> bytes,
     String? mimeType,
     bool upsert = false,
+    bool throwOnError = false,
   }) async {
     try {
       final client = SupabaseService.instance.client;
       if (client == null) {
         debugPrint('[StorageService] Supabase client is not initialized.');
+        if (throwOnError) {
+          throw StateError('Supabase client is not initialized.');
+        }
         return null;
       }
 
@@ -230,6 +248,7 @@ class StorageService {
       return ref;
     } catch (e) {
       debugPrint('[StorageService] Upload failed for $bucket/$path: $e');
+      if (throwOnError) rethrow;
       return null;
     }
   }
