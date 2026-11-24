@@ -38,6 +38,8 @@ class ConnectivityService with WidgetsBindingObserver {
   bool _checking = false;
   StreamSubscription<List<ConnectivityResult>>? _connectivitySub;
   Timer? _debouncedProbeTimer;
+  Timer? _streamDebounceTimer;
+  DateTime? _lastReconnectedAt;
 
   /// Initialize connectivity listeners and perform an initial reachability check.
   Future<void> initialize() async {
@@ -53,7 +55,17 @@ class ConnectivityService with WidgetsBindingObserver {
     try {
       _connectivitySub =
           Connectivity().onConnectivityChanged.listen((results) {
-        unawaited(_evaluateConnectivityResults(results));
+        final hasInterface =
+            results.isNotEmpty && results.any((r) => r != ConnectivityResult.none);
+        if (!hasInterface) {
+          _streamDebounceTimer?.cancel();
+          _setOnlineState(false);
+          return;
+        }
+        _streamDebounceTimer?.cancel();
+        _streamDebounceTimer = Timer(const Duration(seconds: 3), () {
+          unawaited(_evaluateConnectivityResults(results));
+        });
       });
     } catch (e) {
       debugPrint('[ConnectivityService] Stream setup note: $e');
@@ -137,7 +149,12 @@ class ConnectivityService with WidgetsBindingObserver {
         '[ConnectivityService] Connectivity changed: ${nextOnline ? "ONLINE" : "OFFLINE"}',
       );
       if (!previous && nextOnline && !_reconnectedController.isClosed) {
-        _reconnectedController.add(null);
+        final now = DateTime.now();
+        if (_lastReconnectedAt == null ||
+            now.difference(_lastReconnectedAt!) >= const Duration(seconds: 3)) {
+          _lastReconnectedAt = now;
+          _reconnectedController.add(null);
+        }
       }
     }
   }

@@ -30,6 +30,7 @@ class PaymentService {
   final StreamController<List<MonthlyPayment>> _paymentsController =
       StreamController<List<MonthlyPayment>>.broadcast();
   RealtimeChannel? _channel;
+  Timer? _realtimeDebounce;
 
   Stream<List<MonthlyPayment>> get paymentsStream => _paymentsController.stream;
   List<MonthlyPayment> get allPayments => List.unmodifiable(_payments);
@@ -140,6 +141,8 @@ class PaymentService {
   Future<void> clearOnLogout() async {
     final uid = _uid;
     final client = SupabaseService.instance.client;
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = null;
     final ch = _channel;
     _channel = null;
     if (ch != null) {
@@ -208,6 +211,15 @@ class PaymentService {
     return MonthlyPayment.fromJson(json);
   }
 
+  void _scheduleRefresh() {
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        refresh();
+      }
+    });
+  }
+
   Future<void> _handleRealtimeChange(PostgresChangePayload payload) async {
     final userId = AuthSessionService.instance.userId;
     final isSuperAdmin = AuthSessionService.instance.isSuperAdmin;
@@ -226,7 +238,7 @@ class PaymentService {
     final newStatus = newRow['status']?.toString();
     final parentId = newRow['parent_id']?.toString();
 
-    await refresh();
+    _scheduleRefresh();
 
     if (oldStatus == newStatus &&
         payload.eventType == PostgresChangeEvent.update) {

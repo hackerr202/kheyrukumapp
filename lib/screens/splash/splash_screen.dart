@@ -1,10 +1,11 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/connectivity_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/islamic_pattern_painter.dart';
 import 'widgets/kheyrukum_logo_painter.dart';
 
@@ -277,9 +278,10 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                                 const SizedBox(height: 6),
                                 Text(
-                                  'Kheyrukum Islamic Center',
+                                  AppLocalizations.of(context).appName,
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: TextStyle(
+                                    fontFamily: AppTheme.primaryFontFamily,
                                     fontSize: 20,
                                     fontWeight: FontWeight.w800,
                                     color: AppColors.goldWarm,
@@ -303,7 +305,8 @@ class _SplashScreenState extends State<SplashScreen>
                                     'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
                                     textAlign: TextAlign.center,
                                     textDirection: TextDirection.rtl,
-                                    style: GoogleFonts.amiri(
+                                    style: TextStyle(
+                                      fontFamily: AppTheme.amiriFontFamily,
                                       fontSize: 19,
                                       fontWeight: FontWeight.w700,
                                       color: Colors.white.withOpacity(0.95),
@@ -313,9 +316,10 @@ class _SplashScreenState extends State<SplashScreen>
                                 ),
                                 const SizedBox(height: 12),
                                 Text(
-                                  'Parent & Teacher Quranic Collaborative Portal',
+                                  AppLocalizations.of(context).portalTagline,
                                   textAlign: TextAlign.center,
-                                  style: GoogleFonts.plusJakartaSans(
+                                  style: TextStyle(
+                                    fontFamily: AppTheme.primaryFontFamily,
                                     fontSize: 12,
                                     fontWeight: FontWeight.w500,
                                     color: Colors.white.withOpacity(0.75),

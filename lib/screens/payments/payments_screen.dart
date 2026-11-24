@@ -16,11 +16,11 @@ import '../../widgets/pro_ui_kit.dart';
 import '../messages/chat_screen.dart';
 
 class _CenterPaymentChannel {
-  final String label;
+  final String labelKey;
   final String accountNumber;
 
   const _CenterPaymentChannel({
-    required this.label,
+    required this.labelKey,
     required this.accountNumber,
   });
 }
@@ -28,22 +28,14 @@ class _CenterPaymentChannel {
 /// Centralized school payment destination config for Superadmin/center administration.
 const List<_CenterPaymentChannel> _kCenterPaymentChannels = [
   _CenterPaymentChannel(
-    label: 'Commercial Bank of Ethiopia (CBE)',
+    labelKey: 'cbeBankName',
     accountNumber: '1000123456789',
   ),
   _CenterPaymentChannel(
-    label: 'Telebirr Mobile Account',
+    labelKey: 'telebirrAccountLabel',
     accountNumber: '+251 91 123 4567',
   ),
 ];
-
-String _formatMonthYear(DateTime dt) {
-  const months = [
-    'January', 'February', 'March', 'April', 'May', 'June',
-    'July', 'August', 'September', 'October', 'November', 'December',
-  ];
-  return '${months[dt.month - 1]} ${dt.year}';
-}
 
 /// Flagship Tuition & Fee Management Screen:
 /// - Parents: View active monthly due, copy configured center bank/mobile accounts, upload real receipt screenshots, track status.
@@ -130,8 +122,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   size: 20, color: p.gold),
               tooltip: loc.sendMonthlyReminders,
               onPressed: () {
-                PaymentService.instance
-                    .sendMonthlyTuitionReminder(_formatMonthYear(DateTime.now()));
+                PaymentService.instance.sendMonthlyTuitionReminder(
+                  loc.formatMonthYear(DateTime.now()),
+                );
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
                     content: Text(loc.monthlyFeeReminder),
@@ -210,7 +203,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          'Payment Verification Rejected',
+                          AppLocalizations.of(context)
+                              .translate('paymentVerificationRejectedTitle'),
                           style: TextStyle(
                             color: p.danger,
                             fontWeight: FontWeight.w700,
@@ -219,7 +213,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          'Reason: "${rejectedPayment.rejectionReason}"',
+                          AppLocalizations.of(context).tr('reasonLabelValue', {
+                            'reason': '${rejectedPayment.rejectionReason}',
+                          }),
                           style: TextStyle(
                             color: p.ink,
                             fontSize: 12.5,
@@ -231,7 +227,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           onPressed: () =>
                               _showUploadReceiptDialog(context, rejectedPayment!),
                           icon: const Icon(Icons.upload_file_rounded, size: 16),
-                          label: const Text('Re-upload Valid Receipt'),
+                          label: Text(AppLocalizations.of(context)
+                              .translate('reuploadValidReceiptAction')),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: p.danger,
                             foregroundColor: Colors.white,
@@ -258,9 +255,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'MONTHLY TUITION',
-                              style: TextStyle(
+                            Text(
+                              AppLocalizations.of(context)
+                                  .translate('monthlyTuitionHeader'),
+                              style: const TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.0,
@@ -277,7 +275,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                               ),
                             ),
                             Text(
-                              'Student: ${activePayment.studentName}',
+                              AppLocalizations.of(context)
+                                  .tr('studentLineLabel', {
+                                'name': activePayment.studentName,
+                              }),
                               style: TextStyle(
                                 fontSize: 12,
                                 color: Colors.white.withOpacity(0.78),
@@ -305,7 +306,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                       const SizedBox(width: 8),
                       Text(
-                        '/ Monthly Fee',
+                        AppLocalizations.of(context)
+                            .translate('perMonthlyFeeSuffix'),
                         style: TextStyle(
                           fontSize: 12.5,
                           color: Colors.white.withOpacity(0.75),
@@ -328,7 +330,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Verified & approved by ${activePayment.reviewedBy ?? "Administration"}.',
+                              AppLocalizations.of(context)
+                                  .tr('verifiedApprovedByLine', {
+                                'name': activePayment.reviewedBy ??
+                                    AppLocalizations.of(context)
+                                        .centerAdministrationTitle,
+                              }),
                               style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
@@ -346,15 +353,16 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         color: Colors.white.withOpacity(0.14),
                         borderRadius: BorderRadius.circular(12),
                       ),
-                      child: const Row(
+                      child: Row(
                         children: [
-                          Icon(Icons.hourglass_top_rounded,
+                          const Icon(Icons.hourglass_top_rounded,
                               color: AppColors.goldWarm, size: 18),
-                          SizedBox(width: 8),
+                          const SizedBox(width: 8),
                           Expanded(
                             child: Text(
-                              'Receipt uploaded. Administration is verifying your payment.',
-                              style: TextStyle(
+                              AppLocalizations.of(context)
+                                  .translate('receiptUploadedVerifyingMsg'),
+                              style: const TextStyle(
                                 color: Colors.white,
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -371,7 +379,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         onPressed: () =>
                             _showUploadReceiptDialog(context, activePayment!),
                         icon: const Icon(Icons.cloud_upload_rounded, size: 18),
-                        label: const Text('Upload Payment Receipt Screenshot'),
+                        label: Text(AppLocalizations.of(context)
+                            .translate('uploadReceiptScreenshotAction')),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: AppColors.goldWarm,
                           foregroundColor: const Color(0xFF102322),
@@ -383,11 +392,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               ),
             )
           else
-            const ProEmptyState(
+            ProEmptyState(
               icon: Icons.receipt_long_outlined,
-              title: 'No Tuition Due At This Time',
+              title:
+                  AppLocalizations.of(context).translate('noTuitionDueTitle'),
               message:
-                  'When center administration issues monthly tuition fees for your student, your invoices will appear here.',
+                  AppLocalizations.of(context).translate('noTuitionDueDesc'),
             ),
 
           const SizedBox(height: 20),
@@ -421,7 +431,8 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   _buildCopyableAccountRow(
                     context: context,
                     p: p,
-                    label: _kCenterPaymentChannels[i].label,
+                    label: AppLocalizations.of(context)
+                        .translate(_kCenterPaymentChannels[i].labelKey),
                     accountNumber: _kCenterPaymentChannels[i].accountNumber,
                   ),
                 ],
@@ -432,7 +443,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           const SizedBox(height: 24),
 
           if (payments.isNotEmpty) ...[
-            ProSectionHeader(title: 'Payment History (${payments.length})'),
+            ProSectionHeader(
+              title: AppLocalizations.of(context).tr('paymentHistoryCount', {
+                'count': '${payments.length}',
+              }),
+            ),
             const SizedBox(height: 12),
             ...payments.map((pay) => _buildPaymentItemCard(pay, p)),
           ],
@@ -446,6 +461,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   // ===========================================================================
   Widget _buildAdminView(
       BuildContext context, List<MonthlyPayment> payments, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final pendingReview = payments.where((pay) => pay.isSubmitted).toList();
     final overdueList = payments.where((pay) => pay.isOverdue).toList();
     final approvedList = payments.where((pay) => pay.isApproved).toList();
@@ -468,7 +484,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             children: [
               _buildAdminStatCard(
                 p: p,
-                title: 'To Review',
+                title: loc.translate('toReviewTab'),
                 value: '${pendingReview.length}',
                 icon: Icons.pending_actions_rounded,
                 color: p.info,
@@ -476,7 +492,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               const SizedBox(width: 10),
               _buildAdminStatCard(
                 p: p,
-                title: 'Overdue',
+                title: loc.overdue,
                 value: '${overdueList.length}',
                 icon: Icons.warning_amber_rounded,
                 color: p.danger,
@@ -484,7 +500,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               const SizedBox(width: 10),
               _buildAdminStatCard(
                 p: p,
-                title: 'Approved',
+                title: loc.approved,
                 value: '${approvedList.length}',
                 icon: Icons.check_circle_rounded,
                 color: p.success,
@@ -495,8 +511,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
           if (pendingReview.isNotEmpty) ...[
             ProSectionHeader(
-              title: 'Receipts Awaiting Review (${pendingReview.length})',
-              trailing: ProStatusPill(label: 'Action Required', color: p.info),
+              title: loc.tr('receiptsAwaitingReviewTitle', {
+                'count': '${pendingReview.length}',
+              }),
+              trailing: ProStatusPill(
+                  label: loc.translate('actionRequiredTag'), color: p.info),
             ),
             const SizedBox(height: 12),
             ...pendingReview
@@ -506,8 +525,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
           if (overdueList.isNotEmpty) ...[
             ProSectionHeader(
-              title: 'Overdue Accounts (${overdueList.length})',
-              trailing: ProStatusPill(label: 'Past Due', color: p.danger),
+              title: loc.tr('overdueAccountsTitle', {
+                'count': '${overdueList.length}',
+              }),
+              trailing: ProStatusPill(
+                  label: loc.translate('pastDueTag'), color: p.danger),
             ),
             const SizedBox(height: 12),
             ...overdueList.map((pay) => _buildOverdueAccountCard(pay, p)),
@@ -515,10 +537,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           ],
 
           ProSectionHeader(
-            title: 'Tuition Records (${payments.length})',
+            title: loc.tr('tuitionRecordsTitle', {
+              'count': '${payments.length}',
+            }),
             trailing: TextButton(
               onPressed: () => _showIssueInvoiceDialog(context),
-              child: const Text('+ Issue Tuition'),
+              child: Text(loc.translate('plusIssueTuition')),
             ),
           ),
           const SizedBox(height: 10),
@@ -526,10 +550,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           if (payments.isEmpty)
             ProEmptyState(
               icon: Icons.payments_outlined,
-              title: 'No Tuition Fees Issued Yet',
-              message:
-                  'Issue monthly tuition fees to enrolled students so parents can make payments and upload receipts.',
-              actionLabel: 'Issue First Tuition Fee',
+              title: loc.translate('noTuitionIssuedTitle'),
+              message: loc.translate('noTuitionIssuedDesc'),
+              actionLabel: loc.translate('issueFirstTuitionAction'),
               onAction: () => _showIssueInvoiceDialog(context),
             )
           else ...[
@@ -555,6 +578,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildPendingReviewCard(MonthlyPayment payment, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ProCard(
@@ -578,7 +602,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Parent: ${payment.parentName}',
+                        loc.tr('parentContactLine', {
+                          'name': payment.parentName,
+                          'contact': '',
+                        }),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       ),
                     ],
@@ -612,7 +639,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     const SizedBox(width: 8),
                     Expanded(
                       child: Text(
-                        'Receipt Screenshot Attached • Tap to Inspect',
+                        loc.translate('receiptAttachedInspect'),
                         style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -620,7 +647,13 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ),
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded, size: 18, color: p.info),
+                    Icon(
+                      Directionality.of(context) == TextDirection.rtl
+                          ? Icons.chevron_left_rounded
+                          : Icons.chevron_right_rounded,
+                      size: 18,
+                      color: p.info,
+                    ),
                   ],
                 ),
               ),
@@ -633,7 +666,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     onPressed: () => _showRejectDialog(context, payment),
                     icon: Icon(Icons.close_rounded, size: 16, color: p.danger),
                     label: Text(
-                      'Reject',
+                      loc.translate('rejectAction'),
                       style: TextStyle(
                         color: p.danger,
                         fontSize: 12.5,
@@ -655,7 +688,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Payment approved for ${payment.studentName}.',
+                              loc.tr('paymentApprovedForMsg', {
+                                'name': payment.studentName,
+                              }),
                             ),
                             backgroundColor: p.success,
                           ),
@@ -663,7 +698,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       }
                     },
                     icon: const Icon(Icons.check_rounded, size: 16),
-                    label: const Text('Approve'),
+                    label: Text(loc.translate('approveAction')),
                     style: ElevatedButton.styleFrom(
                       backgroundColor: p.success,
                       foregroundColor: Colors.white,
@@ -679,6 +714,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildOverdueAccountCard(MonthlyPayment payment, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ProCard(
@@ -703,13 +739,17 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Parent: ${payment.parentName} (${payment.parentEmail})',
+                        loc.tr('parentEmailLine', {
+                          'name': payment.parentName,
+                          'email': payment.parentEmail,
+                        }),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       ),
                     ],
                   ),
                 ),
-                ProStatusPill(label: 'OVERDUE', color: p.danger),
+                ProStatusPill(
+                    label: loc.translate('overdueUpperTag'), color: p.danger),
               ],
             ),
             const SizedBox(height: 12),
@@ -725,7 +765,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         ScaffoldMessenger.of(context).showSnackBar(
                           SnackBar(
                             content: Text(
-                              'Overdue alert dispatched for ${payment.parentName}.',
+                              loc.tr('overdueAlertDispatchedMsg', {
+                                'name': payment.parentName,
+                              }),
                             ),
                           ),
                         );
@@ -742,7 +784,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     icon: Icon(Icons.notifications_active_rounded,
                         size: 15, color: p.gold),
                     label: Text(
-                      'Send Alert',
+                      loc.translate('sendAlertAction'),
                       style: TextStyle(fontSize: 12, color: p.gold),
                     ),
                   ),
@@ -756,7 +798,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${payment.studentName} has no linked parent account yet.',
+                                loc.tr('noLinkedParentMsg', {
+                                  'name': payment.studentName,
+                                }),
                               ),
                             ),
                           );
@@ -784,7 +828,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     icon: Icon(Icons.chat_bubble_outline_rounded,
                         size: 15, color: p.primary),
                     label: Text(
-                      'Message Parent',
+                      loc.translate('messageParentAction'),
                       style: TextStyle(fontSize: 12, color: p.primary),
                     ),
                   ),
@@ -798,6 +842,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildPaymentItemCard(MonthlyPayment payment, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
       child: ProCard(
@@ -827,7 +872,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Amount: \$${payment.amount.toStringAsFixed(0)}',
+                  loc.tr('amountLineLabel', {
+                    'amount': payment.amount.toStringAsFixed(0),
+                  }),
                   style: TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w600,
@@ -849,7 +896,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                               size: 14, color: p.primary),
                           const SizedBox(width: 4),
                           Text(
-                            'View Receipt',
+                            loc.translate('viewReceiptAction'),
                             style: TextStyle(
                               fontSize: 12,
                               color: p.primary,
@@ -865,7 +912,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             if (payment.isRejected && payment.rejectionReason != null) ...[
               const SizedBox(height: 6),
               Text(
-                'Rejection Reason: "${payment.rejectionReason}"',
+                loc.tr('rejectionReasonQuote', {
+                  'reason': '${payment.rejectionReason}',
+                }),
                 style: TextStyle(
                   fontSize: 11.5,
                   color: p.danger,
@@ -885,6 +934,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     required String label,
     required String accountNumber,
   }) {
+    final loc = AppLocalizations.of(context);
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 11),
       decoration: BoxDecoration(
@@ -920,7 +970,11 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             onTap: () {
               Clipboard.setData(ClipboardData(text: accountNumber));
               ScaffoldMessenger.of(context).showSnackBar(
-                SnackBar(content: Text('$label copied to clipboard.')),
+                SnackBar(
+                  content: Text(
+                    loc.tr('copiedLabelMsg', {'label': label}),
+                  ),
+                ),
               );
             },
             borderRadius: BorderRadius.circular(10),
@@ -936,7 +990,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   Icon(Icons.copy_rounded, size: 14, color: p.primary),
                   const SizedBox(width: 5),
                   Text(
-                    'Copy',
+                    loc.copyAction,
                     style: TextStyle(
                       fontSize: 11.5,
                       fontWeight: FontWeight.w700,
@@ -1019,14 +1073,14 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   Widget _buildStatusBadge(String status, AppPalette p, {bool onHero = false}) {
+    final loc = AppLocalizations.of(context);
     Color color = p.gold;
-    String label = status.toUpperCase();
+    final label = loc.localizedPaymentStatus(status);
 
     if (status == 'approved') {
       color = onHero ? const Color(0xFF4ADE80) : p.success;
     } else if (status == 'submitted') {
       color = onHero ? AppColors.goldWarm : p.info;
-      label = 'IN REVIEW';
     } else if (status == 'rejected' || status == 'overdue') {
       color = onHero ? const Color(0xFFFCA5A5) : p.danger;
     }
@@ -1038,19 +1092,18 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   // DIALOGS
   // ===========================================================================
   void _showIssueInvoiceDialog(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     final students = StudentService.instance.allStudents;
     if (students.isEmpty) {
       showDialog(
         context: context,
         builder: (ctx) => AlertDialog(
-          title: const Text('No Students Enrolled'),
-          content: const Text(
-            'Please add at least one student in the Students tab before issuing tuition fees.',
-          ),
+          title: Text(loc.translate('noStudentsEnrolledAlertTitle')),
+          content: Text(loc.translate('addOneStudentBeforeTuitionMsg')),
           actions: [
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Understood'),
+              child: Text(loc.understood),
             ),
           ],
         ),
@@ -1081,6 +1134,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   void _showReceiptInspectorDialog(
       BuildContext context, MonthlyPayment payment) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final hasValidUrl = StorageService.isValidMediaRef(payment.receiptUrl);
 
     showDialog(
@@ -1089,7 +1143,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         title: Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            const Text('Receipt Inspector'),
+            Flexible(
+              child: Text(loc.translate('receiptInspectorTitle')),
+            ),
             IconButton(
               icon: const Icon(Icons.close_rounded, size: 20),
               onPressed: () => Navigator.pop(ctx),
@@ -1131,7 +1187,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                                       color: p.inkMuted, size: 32),
                                   const SizedBox(height: 6),
                                   Text(
-                                    'Could not load receipt image',
+                                    loc.translate('couldNotLoadReceiptImage'),
                                     style: TextStyle(
                                         fontSize: 12, color: p.inkMuted),
                                   ),
@@ -1150,15 +1206,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                               color: Colors.black.withOpacity(0.65),
                               borderRadius: BorderRadius.circular(8),
                             ),
-                            child: const Row(
+                            child: Row(
                               mainAxisSize: MainAxisSize.min,
                               children: [
-                                Icon(Icons.zoom_in_rounded,
+                                const Icon(Icons.zoom_in_rounded,
                                     size: 13, color: Colors.white),
-                                SizedBox(width: 4),
+                                const SizedBox(width: 4),
                                 Text(
-                                  'Tap to Zoom',
-                                  style: TextStyle(
+                                  loc.translate('tapToZoomHint'),
+                                  style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 10.5,
                                     fontWeight: FontWeight.w700,
@@ -1187,7 +1243,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                         size: 28, color: p.primary),
                     const SizedBox(height: 6),
                     Text(
-                      'PAYMENT SUMMARY',
+                      loc.translate('paymentSummaryHeader'),
                       style: TextStyle(
                         fontSize: 11,
                         fontWeight: FontWeight.w800,
@@ -1196,20 +1252,25 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                       ),
                     ),
                     const Divider(height: 18),
-                    _buildReceiptRow(p, 'Beneficiary', 'Kheyrukum Center'),
-                    _buildReceiptRow(p, 'Payer Name', payment.parentName),
-                    _buildReceiptRow(p, 'Student', payment.studentName),
-                    _buildReceiptRow(p, 'Month', payment.month),
                     _buildReceiptRow(
-                        p, 'Amount', '\$${payment.amount.toStringAsFixed(2)}'),
-                    _buildReceiptRow(p, 'Status', payment.status.toUpperCase()),
+                        p, loc.translate('beneficiaryLabel'), loc.appName),
+                    _buildReceiptRow(
+                        p, loc.translate('payerNameLabel'), payment.parentName),
+                    _buildReceiptRow(
+                        p, loc.roleStudent, payment.studentName),
+                    _buildReceiptRow(
+                        p, loc.translate('monthShort'), payment.month),
+                    _buildReceiptRow(p, loc.translate('amountShort'),
+                        '\$${payment.amount.toStringAsFixed(2)}'),
+                    _buildReceiptRow(p, loc.translate('statusFieldLabel'),
+                        loc.localizedPaymentStatus(payment.status)),
                   ],
                 ),
               ),
               if (payment.notes != null && payment.notes!.isNotEmpty) ...[
                 const SizedBox(height: 10),
                 Text(
-                  'Parent Note: "${payment.notes}"',
+                  loc.tr('parentNoteQuote', {'note': payment.notes!}),
                   style: TextStyle(
                     fontSize: 11.5,
                     fontStyle: FontStyle.italic,
@@ -1229,7 +1290,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 _showRejectDialog(hostCtx, payment);
               },
               child: Text(
-                'Reject with Reason',
+                loc.translate('rejectWithReasonAction'),
                 style: TextStyle(color: p.danger),
               ),
             ),
@@ -1243,8 +1304,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   if (mounted) {
                     messenger.showSnackBar(
                       SnackBar(
-                        content:
-                            Text('Payment approved for ${payment.studentName}.'),
+                        content: Text(loc.tr('paymentApprovedForMsg', {
+                          'name': payment.studentName,
+                        })),
                         backgroundColor: p.success,
                       ),
                     );
@@ -1264,12 +1326,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                 backgroundColor: p.success,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Approve Payment'),
+              child: Text(loc.approvePayment),
             ),
           ] else
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Close'),
+              child: Text(loc.close),
             ),
         ],
       ),
@@ -1277,6 +1339,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   void _openFullScreenReceipt(String url) {
+    final loc = AppLocalizations.of(context);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -1287,8 +1350,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               icon: const Icon(Icons.close_rounded, color: Colors.white),
               onPressed: () => Navigator.pop(context),
             ),
-            title: const Text('Receipt Image',
-                style: TextStyle(color: Colors.white)),
+            title: Text(
+              loc.translate('receiptImageTitle'),
+              style: const TextStyle(color: Colors.white),
+            ),
           ),
           body: Center(
             child: InteractiveViewer(
@@ -1360,15 +1425,24 @@ class _IssueFeeDialog extends StatefulWidget {
 class _IssueFeeDialogState extends State<_IssueFeeDialog> {
   late Student _selectedStudent;
   DateTime _feeStartDate = DateTime.now();
-  late final TextEditingController _monthCtrl;
+  final _monthCtrl = TextEditingController();
   final _amountCtrl = TextEditingController(text: '50');
   bool _isSaving = false;
+  bool _didInitLocalizedDefaults = false;
 
   @override
   void initState() {
     super.initState();
     _selectedStudent = widget.students.first;
-    _monthCtrl = TextEditingController(text: _formatMonthYear(DateTime.now()));
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _monthCtrl.text = AppLocalizations.of(context).formatMonthYear(DateTime.now());
+    }
   }
 
   @override
@@ -1380,12 +1454,13 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
 
   Future<void> _submit() async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final month = _monthCtrl.text.trim();
     final amt = double.tryParse(_amountCtrl.text.trim());
     if (month.isEmpty) {
       widget.hostMessenger.showSnackBar(
         SnackBar(
-          content: const Text('Please enter the tuition month label.'),
+          content: Text(loc.translate('enterTuitionMonthError')),
           backgroundColor: p.danger,
         ),
       );
@@ -1394,7 +1469,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
     if (amt == null || amt <= 0) {
       widget.hostMessenger.showSnackBar(
         SnackBar(
-          content: const Text('Please enter a valid tuition fee amount (> 0).'),
+          content: Text(loc.translate('enterValidTuitionAmountError')),
           backgroundColor: p.danger,
         ),
       );
@@ -1418,7 +1493,9 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
       Navigator.pop(context);
       widget.hostMessenger.showSnackBar(
         SnackBar(
-          content: Text('Tuition issued for ${_selectedStudent.fullName}.'),
+          content: Text(loc.tr('tuitionIssuedForMsg', {
+            'name': _selectedStudent.fullName,
+          })),
         ),
       );
     } catch (e) {
@@ -1438,7 +1515,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
     final loc = AppLocalizations.of(context);
-    final currentMonthExample = _formatMonthYear(DateTime.now());
+    final currentMonthExample = loc.formatMonthYear(DateTime.now());
     return AlertDialog(
       title: Text(loc.issueFee),
       content: SingleChildScrollView(
@@ -1569,10 +1646,20 @@ class _UploadReceiptDialog extends StatefulWidget {
 
 class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
   String _selectedMethod = 'Commercial Bank of Ethiopia (CBE)';
-  final _noteCtrl =
-      TextEditingController(text: 'Payment completed via mobile banking.');
+  final _noteCtrl = TextEditingController();
   XFile? _selectedReceipt;
   bool _isUploading = false;
+  bool _didInitLocalizedDefaults = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _noteCtrl.text =
+          AppLocalizations.of(context).translate('defaultReceiptNote');
+    }
+  }
 
   @override
   void dispose() {
@@ -1601,7 +1688,7 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
         SnackBar(
           content: Text(
             syncedOnline
-                ? 'Receipt submitted successfully. Admin will verify.'
+                ? loc.translate('receiptSubmittedSuccessMsg')
                 : loc.savedOfflineQueued,
           ),
         ),
@@ -1622,21 +1709,27 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final receipt = _selectedReceipt;
 
     return AlertDialog(
-      title: const Text('Upload Payment Receipt'),
+      title: Text(loc.translate('uploadPaymentReceiptTitle')),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Student: ${widget.payment.studentName} (${widget.payment.month})',
+              loc.tr('studentMonthLine', {
+                'name': widget.payment.studentName,
+                'month': widget.payment.month,
+              }),
               style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
             Text(
-              'Amount Due: \$${widget.payment.amount.toStringAsFixed(0)}',
+              loc.tr('amountDueLine', {
+                'amount': widget.payment.amount.toStringAsFixed(0),
+              }),
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
@@ -1647,18 +1740,18 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
             DropdownButtonFormField<String>(
               value: _selectedMethod,
               isExpanded: true,
-              items: const [
+              items: [
                 DropdownMenuItem(
                   value: 'Commercial Bank of Ethiopia (CBE)',
-                  child: Text('CBE Mobile Banking'),
+                  child: Text(loc.translate('cbeMobileBanking')),
                 ),
                 DropdownMenuItem(
                   value: 'Telebirr',
-                  child: Text('Telebirr Mobile'),
+                  child: Text(loc.translate('telebirrMobile')),
                 ),
                 DropdownMenuItem(
                   value: 'Cash Deposit',
-                  child: Text('Cash Slip'),
+                  child: Text(loc.translate('cashSlipLabel')),
                 ),
               ],
               onChanged: _isUploading
@@ -1668,7 +1761,8 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
                         setState(() => _selectedMethod = val);
                       }
                     },
-              decoration: const InputDecoration(labelText: 'Payment Channel'),
+              decoration:
+                  InputDecoration(labelText: loc.translate('paymentChannelLabel')),
             ),
             const SizedBox(height: 12),
             InkWell(
@@ -1704,8 +1798,8 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
                     const SizedBox(height: 6),
                     Text(
                       receipt != null
-                          ? 'Selected: ${receipt.name}'
-                          : 'Tap to Pick Receipt Screenshot',
+                          ? loc.tr('selectedFileLabel', {'name': receipt.name})
+                          : loc.translate('tapPickReceiptHint'),
                       style: TextStyle(
                         fontSize: 12.5,
                         fontWeight: FontWeight.w700,
@@ -1716,8 +1810,8 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
                     const SizedBox(height: 2),
                     Text(
                       receipt != null
-                          ? 'Tap to change image'
-                          : 'Choose payment slip or screenshot from gallery',
+                          ? loc.translate('tapToChangeImage')
+                          : loc.translate('chooseSlipFromGallery'),
                       style: TextStyle(fontSize: 11, color: p.inkMuted),
                       textAlign: TextAlign.center,
                     ),
@@ -1729,8 +1823,8 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
             TextField(
               controller: _noteCtrl,
               enabled: !_isUploading,
-              decoration: const InputDecoration(
-                labelText: 'Transaction Reference / Notes',
+              decoration: InputDecoration(
+                labelText: loc.translate('transactionRefLabel'),
               ),
             ),
           ],
@@ -1739,7 +1833,7 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
       actions: [
         TextButton(
           onPressed: _isUploading ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: (_isUploading || receipt == null) ? null : _submit,
@@ -1752,7 +1846,7 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Submit Receipt'),
+              : Text(loc.translate('submitReceiptAction')),
         ),
       ],
     );
@@ -1773,11 +1867,19 @@ class _RejectReceiptDialog extends StatefulWidget {
 }
 
 class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
-  final _reasonCtrl = TextEditingController(
-    text:
-        'The uploaded screenshot is blurry and the transaction reference number cannot be read. Please re-upload.',
-  );
+  final _reasonCtrl = TextEditingController();
   bool _isSaving = false;
+  bool _didInitLocalizedDefaults = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _reasonCtrl.text =
+          AppLocalizations.of(context).translate('defaultRejectReceiptReason');
+    }
+  }
 
   @override
   void dispose() {
@@ -1789,6 +1891,7 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
     final reason = _reasonCtrl.text.trim();
     if (reason.isEmpty) return;
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     setState(() => _isSaving = true);
     try {
       await PaymentService.instance.rejectPayment(
@@ -1800,7 +1903,9 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
       widget.hostMessenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Payment rejected and reason sent to ${widget.payment.parentName}.',
+            loc.tr('paymentRejectedSentMsg', {
+              'name': widget.payment.parentName,
+            }),
           ),
         ),
       );
@@ -1820,24 +1925,26 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Reject Payment Receipt'),
+      title: Text(loc.translate('rejectPaymentReceiptTitle')),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Specify why ${widget.payment.parentName}\'s receipt is rejected. This reason will be shown to the parent.',
+            loc.tr('specifyRejectionReasonMsg', {
+              'name': widget.payment.parentName,
+            }),
             style: const TextStyle(fontSize: 12.5),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _reasonCtrl,
             maxLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Rejection Reason *',
-              hintText:
-                  'e.g. Blurry screenshot, incorrect amount, missing reference...',
+            decoration: InputDecoration(
+              labelText: loc.translate('rejectionReasonRequiredLabel'),
+              hintText: loc.translate('rejectionReasonHint'),
             ),
           ),
         ],
@@ -1845,7 +1952,7 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSaving ? null : _submit,
@@ -1862,7 +1969,7 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Confirm Rejection'),
+              : Text(loc.translate('confirmRejectionAction')),
         ),
       ],
     );

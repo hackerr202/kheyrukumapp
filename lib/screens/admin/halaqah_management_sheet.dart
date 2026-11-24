@@ -92,10 +92,9 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
               child: Center(
                 child: ProEmptyState(
                   icon: Icons.menu_book_outlined,
-                  title: 'No Study Circles Created Yet',
-                  message:
-                      'Create your first Halaqah circle to assign teachers and enroll students.',
-                  actionLabel: 'Create First Circle',
+                  title: loc.translate('noCirclesCreatedTitle'),
+                  message: loc.translate('createFirstCircleDesc'),
+                  actionLabel: loc.translate('createFirstCircleAction'),
                   onAction: _showAddHalaqahDialog,
                 ),
               ),
@@ -132,19 +131,23 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                         IconButton(
                           icon: Icon(Icons.delete_outline_rounded,
                               size: 19, color: p.danger),
-                          tooltip: 'Delete Circle',
+                          tooltip: loc.translate('deleteCircleTooltip'),
                           onPressed: () {
                             final messenger = ScaffoldMessenger.of(context);
                             showDialog(
                               context: context,
                               builder: (c) => AlertDialog(
-                                title: const Text('Delete Circle?'),
+                                title: Text(
+                                    loc.translate('deleteCircleConfirmTitle')),
                                 content: Text(
-                                    'Are you sure you want to remove "${h.name}"?'),
+                                  loc.tr('deleteCircleConfirmBody', {
+                                    'name': h.name,
+                                  }),
+                                ),
                                 actions: [
                                   TextButton(
                                     onPressed: () => Navigator.pop(c),
-                                    child: const Text('Cancel'),
+                                    child: Text(loc.cancel),
                                   ),
                                   ElevatedButton(
                                     onPressed: () async {
@@ -155,7 +158,10 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                                         messenger.showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                                'Removed circle "${h.name}".'),
+                                              loc.tr('removedCircleMsg', {
+                                                'name': h.name,
+                                              }),
+                                            ),
                                             backgroundColor: p.success,
                                           ),
                                         );
@@ -163,7 +169,11 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                                         messenger.showSnackBar(
                                           SnackBar(
                                             content: Text(
-                                              'Could not delete circle: ${SupabaseService.cleanErrorMessage(e)}',
+                                              loc.tr(
+                                                  'couldNotDeleteCircleMsg', {
+                                                'error': SupabaseService
+                                                    .cleanErrorMessage(e),
+                                              }),
                                             ),
                                             backgroundColor: p.danger,
                                           ),
@@ -174,7 +184,7 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                                       backgroundColor: p.danger,
                                       foregroundColor: Colors.white,
                                     ),
-                                    child: const Text('Delete'),
+                                    child: Text(loc.delete),
                                   ),
                                 ],
                               ),
@@ -189,12 +199,16 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                       runSpacing: 6,
                       children: [
                         ProStatusPill(
-                          label: 'Ustaz: ${h.teacherName}',
+                          label: loc.tr('ustazNameLabel', {
+                            'name': h.teacherName,
+                          }),
                           icon: Icons.person_outline_rounded,
                           color: p.primary,
                         ),
                         ProStatusPill(
-                          label: '$studentCount Students',
+                          label: loc.tr('studentsBadgeLabel', {
+                            'count': '$studentCount',
+                          }),
                           icon: Icons.groups_outlined,
                           color: p.gold,
                         ),
@@ -256,11 +270,22 @@ class _AddHalaqahDialog extends StatefulWidget {
 
 class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
   final _nameCtrl = TextEditingController();
-  final _scheduleCtrl = TextEditingController(text: 'Daily Recitation Session');
+  final _scheduleCtrl = TextEditingController();
   final _descCtrl = TextEditingController();
   String? _selectedTeacherId;
   String? _selectedTeacherName;
   bool _isCreating = false;
+  bool _didInitLocalizedDefaults = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _scheduleCtrl.text =
+          AppLocalizations.of(context).translate('defaultCircleSchedule');
+    }
+  }
 
   @override
   void dispose() {
@@ -272,6 +297,7 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
 
   Future<void> _submit() async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final name = _nameCtrl.text.trim();
     setState(() => _isCreating = true);
     try {
@@ -286,7 +312,7 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
       Navigator.of(context).pop();
       widget.hostMessenger.showSnackBar(
         SnackBar(
-          content: Text('Study Circle "$name" created successfully.'),
+          content: Text(loc.tr('circleCreatedSuccessMsg', {'name': name})),
           backgroundColor: p.success,
         ),
       );
@@ -297,7 +323,9 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
       widget.hostMessenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Failed to create circle: ${SupabaseService.cleanErrorMessage(e)}',
+            loc.tr('failedCreateCircleMsg', {
+              'error': SupabaseService.cleanErrorMessage(e),
+            }),
           ),
           backgroundColor: p.danger,
         ),
@@ -308,13 +336,14 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return AlertDialog(
       title: Row(
         children: [
           Icon(Icons.add_circle_outline_rounded, color: p.primary),
           const SizedBox(width: 8),
-          const Expanded(child: Text('Create Study Circle')),
+          Expanded(child: Text(loc.translate('createStudyCircleTitle'))),
         ],
       ),
       content: SingleChildScrollView(
@@ -325,22 +354,24 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
             TextField(
               controller: _nameCtrl,
               onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Halaqah Name *',
-                hintText: 'e.g. Halaqah Bilal (حلقة بلال)',
-                prefixIcon: Icon(Icons.school_rounded, size: 20),
+              decoration: InputDecoration(
+                labelText: loc.translate('halaqahNameReqLabel'),
+                hintText: loc.translate('halaqahNameHint'),
+                prefixIcon: const Icon(Icons.school_rounded, size: 20),
               ),
             ),
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _selectedTeacherId,
               isExpanded: true,
-              hint: const Text('Assign Teacher (Optional)'),
+              hint: Text(loc.translate('assignTeacherOptionalHint')),
               items: [
-                const DropdownMenuItem<String>(
+                DropdownMenuItem<String>(
                   value: null,
-                  child: Text('Unassigned (Assign later)',
-                      style: TextStyle(fontSize: 12.5)),
+                  child: Text(
+                    loc.translate('unassignedAssignLater'),
+                    style: const TextStyle(fontSize: 12.5),
+                  ),
                 ),
                 ...widget.teachers.map((t) {
                   return DropdownMenuItem<String>(
@@ -366,28 +397,28 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
                   }
                 });
               },
-              decoration: const InputDecoration(
-                labelText: 'Assigned Ustaz',
-                prefixIcon: Icon(Icons.person_rounded, size: 20),
+              decoration: InputDecoration(
+                labelText: loc.translate('assignedUstazTitle'),
+                prefixIcon: const Icon(Icons.person_rounded, size: 20),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _scheduleCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Schedule',
-                hintText: 'e.g. Mon-Fri 4:00 PM - 6:00 PM',
-                prefixIcon: Icon(Icons.access_time_rounded, size: 20),
+              decoration: InputDecoration(
+                labelText: loc.translate('scheduleFieldLabel'),
+                hintText: loc.translate('scheduleHint'),
+                prefixIcon: const Icon(Icons.access_time_rounded, size: 20),
               ),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _descCtrl,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Circle Notes / Curriculum Focus',
-                hintText: 'e.g. Juz Amma memorization and Makharij revision',
-                prefixIcon: Icon(Icons.menu_book_rounded, size: 20),
+              decoration: InputDecoration(
+                labelText: loc.translate('curriculumFocusLabel'),
+                hintText: loc.translate('curriculumFocusHint'),
+                prefixIcon: const Icon(Icons.menu_book_rounded, size: 20),
               ),
             ),
           ],
@@ -396,7 +427,7 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
       actions: [
         TextButton(
           onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed:
@@ -410,7 +441,7 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Create Circle'),
+              : Text(loc.translate('createCircleAction')),
         ),
       ],
     );

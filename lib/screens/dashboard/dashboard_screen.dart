@@ -45,8 +45,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
   int _currentTabIndex = 0;
   int _unreadAnnouncementsCount = 0;
   int _unreadNotificationsCount = NotificationCenterService.instance.unreadCount;
-  int _unreadMessagesCount = 0;
-  Announcement? _activeAlertAnnouncement;
+  late final ValueNotifier<int> _unreadTotalNotifier =
+      ValueNotifier<int>(_unreadNotificationsCount);
+  final ValueNotifier<int> _unreadMessagesNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<Announcement?> _activeAlertNotifier =
+      ValueNotifier<Announcement?>(null);
   Timer? _alertDismissTimer;
   StreamSubscription<Announcement>? _alertSub;
   StreamSubscription<List<Announcement>>? _announcementsSub;
@@ -56,8 +59,10 @@ class _DashboardScreenState extends State<DashboardScreen> {
   StreamSubscription<Map<String, dynamic>>? _notifTapSub;
   StreamSubscription<void>? _reconnectedSub;
 
-  int get _totalUnreadCount =>
-      _unreadAnnouncementsCount + _unreadNotificationsCount;
+  void _updateUnreadTotal() {
+    _unreadTotalNotifier.value =
+        _unreadAnnouncementsCount + _unreadNotificationsCount;
+  }
 
   @override
   void initState() {
@@ -91,14 +96,16 @@ class _DashboardScreenState extends State<DashboardScreen> {
       AnnouncementService.instance.registerKnownIds(list.map((a) => a.id));
       final unread =
           list.where((a) => !AnnouncementService.instance.isRead(a.id)).length;
-      setState(() => _unreadAnnouncementsCount = unread);
+      _unreadAnnouncementsCount = unread;
+      _updateUnreadTotal();
     });
 
     // 3. Stream unread system notifications
     _notifsSub = NotificationCenterService.instance.stream.listen((list) {
       if (!mounted) return;
-      setState(() => _unreadNotificationsCount =
-          NotificationCenterService.instance.unreadCount);
+      _unreadNotificationsCount =
+          NotificationCenterService.instance.unreadCount;
+      _updateUnreadTotal();
     });
 
     // 4. Stream unread chat messages for the Messages tab badge
@@ -112,13 +119,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
     PrayerReminderService.instance.start();
     _prayerSub = PrayerReminderService.instance.onPrayerAlert.listen((alert) {
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       _triggerAlertToast(Announcement(
         id: 'prayer-${DateTime.now().millisecondsSinceEpoch}',
-        title: alert['title'] ?? 'Time for Prayer',
-        content:
-            alert['body'] ?? 'Take a peaceful moment to remember Allah.',
+        title: alert['title'] ?? loc.timeForPrayerDefault,
+        content: alert['body'] ?? loc.prayerReminderBodyDefault,
         targetAudience: 'all',
-        authorName: 'Adhan & Prayer Reminder',
+        authorName: loc.adhanPrayerReminderTitle,
         isPinned: true,
         createdAt: DateTime.now(),
       ));
@@ -132,7 +139,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     );
     final total = convos.fold<int>(0, (sum, c) => sum + c.unreadCount);
     if (mounted) {
-      setState(() => _unreadMessagesCount = total);
+      _unreadMessagesNotifier.value = total;
     }
   }
 
@@ -195,25 +202,32 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   Future<void> _bootstrapCloudServices() async {
     await AuthSessionService.instance.syncFromSupabaseProfile();
+    // Phase A: Critical primary workspace data (circles, students, announcements)
     await Future.wait([
       HalaqahService.instance.fetchHalaqahs(),
       StudentService.instance.refreshAll(),
+      AnnouncementService.instance.refreshAndSubscribe(),
+    ]);
+    if (!mounted) return;
+    // Stagger secondary cloud syncs so mobile 4G sockets & UI frames avoid startup saturation
+    await Future.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    await Future.wait([
       HomeworkService.instance.refreshAll(),
       AbsenceService.instance.refreshAll(),
       MessagingService.instance.refreshAndSubscribe(),
       PaymentService.instance.refreshAndSubscribe(),
       PushNotificationService.instance.registerDeviceToken(),
     ]);
-    await AnnouncementService.instance.refreshAndSubscribe();
     _recomputeUnreadMessages();
   }
 
   void _triggerAlertToast(Announcement announcement) {
     _alertDismissTimer?.cancel();
-    setState(() => _activeAlertAnnouncement = announcement);
+    _activeAlertNotifier.value = announcement;
 
     _alertDismissTimer = Timer(const Duration(seconds: 6), () {
-      if (mounted) setState(() => _activeAlertAnnouncement = null);
+      if (mounted) _activeAlertNotifier.value = null;
     });
   }
 
@@ -255,6 +269,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _conversationsSub?.cancel();
     _notifTapSub?.cancel();
     _reconnectedSub?.cancel();
+    _unreadTotalNotifier.dispose();
+    _unreadMessagesNotifier.dispose();
+    _activeAlertNotifier.dispose();
     super.dispose();
   }
 
@@ -280,35 +297,6 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final p = AppColors.of(context);
         final loc = AppLocalizations.of(context);
 
-        final navItems = [
-          KheyrukumNavItem(
-            icon: Icons.home_outlined,
-            activeIcon: Icons.home_rounded,
-            label: loc.navHome,
-          ),
-          KheyrukumNavItem(
-            icon: Icons.people_outline_rounded,
-            activeIcon: Icons.people_rounded,
-            label: loc.navCircles,
-          ),
-          KheyrukumNavItem(
-            icon: Icons.chat_bubble_outline_rounded,
-            activeIcon: Icons.chat_bubble_rounded,
-            label: loc.navMessages,
-            badgeCount: _unreadMessagesCount,
-          ),
-          KheyrukumNavItem(
-            icon: Icons.auto_stories_outlined,
-            activeIcon: Icons.auto_stories_rounded,
-            label: loc.navResources,
-          ),
-          KheyrukumNavItem(
-            icon: Icons.grid_view_outlined,
-            activeIcon: Icons.grid_view_rounded,
-            label: loc.navMore,
-          ),
-        ];
-
         return Scaffold(
           backgroundColor: p.canvas,
           body: Stack(
@@ -325,8 +313,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       builder: (context, currentRole, _) {
                         final userName = AuthSessionService.instance.userName;
                         final avatarUrl = AuthSessionService.instance.avatarUrl;
-                        final displayName =
-                            userName.isNotEmpty ? userName : 'Administrator';
+                        final displayName = userName.isNotEmpty
+                            ? userName
+                            : loc.administratorTitle;
                         final isSuperAdmin = currentRole == 'superadmin';
                         final isAdmin = currentRole == 'admin' || isSuperAdmin;
                         final roleLabel = isSuperAdmin
@@ -443,60 +432,65 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 ),
                               ],
                               // Notification Bell
-                              Stack(
-                                clipBehavior: Clip.none,
-                                children: [
-                                  _HeaderIconButton(
-                                    icon: Icons.notifications_none_rounded,
-                                    tooltip: loc.schoolAnnouncements,
-                                    onTap: () {
-                                      AnnouncementService.instance
-                                          .markAllAsRead();
-                                      setState(
-                                          () => _unreadAnnouncementsCount = 0);
-                                      AnnouncementsSheet.show(
-                                        context,
-                                        initialTab: 0,
-                                      );
-                                    },
-                                  ),
-                                  if (_totalUnreadCount > 0)
-                                    PositionedDirectional(
-                                      top: -4,
-                                      end: -4,
-                                      child: Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 5,
-                                          vertical: 2,
-                                        ),
-                                        constraints: const BoxConstraints(
-                                          minWidth: 18,
-                                          minHeight: 18,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: p.danger,
-                                          borderRadius:
-                                              BorderRadius.circular(10),
-                                          border: Border.all(
-                                            color: p.canvas,
-                                            width: 1.5,
-                                          ),
-                                        ),
-                                        child: Center(
-                                          child: Text(
-                                            _totalUnreadCount > 9
-                                                ? '9+'
-                                                : '$_totalUnreadCount',
-                                            style: const TextStyle(
-                                              color: Colors.white,
-                                              fontSize: 9,
-                                              fontWeight: FontWeight.w800,
+                              ValueListenableBuilder<int>(
+                                valueListenable: _unreadTotalNotifier,
+                                builder: (context, totalUnread, _) {
+                                  return Stack(
+                                    clipBehavior: Clip.none,
+                                    children: [
+                                      _HeaderIconButton(
+                                        icon: Icons.notifications_none_rounded,
+                                        tooltip: loc.schoolAnnouncements,
+                                        onTap: () {
+                                          AnnouncementService.instance
+                                              .markAllAsRead();
+                                          _unreadAnnouncementsCount = 0;
+                                          _updateUnreadTotal();
+                                          AnnouncementsSheet.show(
+                                            context,
+                                            initialTab: 0,
+                                          );
+                                        },
+                                      ),
+                                      if (totalUnread > 0)
+                                        PositionedDirectional(
+                                          top: -4,
+                                          end: -4,
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(
+                                              horizontal: 5,
+                                              vertical: 2,
+                                            ),
+                                            constraints: const BoxConstraints(
+                                              minWidth: 18,
+                                              minHeight: 18,
+                                            ),
+                                            decoration: BoxDecoration(
+                                              color: p.danger,
+                                              borderRadius:
+                                                  BorderRadius.circular(10),
+                                              border: Border.all(
+                                                color: p.canvas,
+                                                width: 1.5,
+                                              ),
+                                            ),
+                                            child: Center(
+                                              child: Text(
+                                                totalUnread > 9
+                                                    ? '9+'
+                                                    : '$totalUnread',
+                                                style: const TextStyle(
+                                                  color: Colors.white,
+                                                  fontSize: 9,
+                                                  fontWeight: FontWeight.w800,
+                                                ),
+                                              ),
                                             ),
                                           ),
                                         ),
-                                      ),
-                                    ),
-                                ],
+                                    ],
+                                  );
+                                },
                               ),
                               const SizedBox(width: 8),
                               _HeaderIconButton(
@@ -524,22 +518,27 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
 
               // Real-time Incoming Announcement Banner
-              if (_activeAlertAnnouncement != null)
-                Positioned(
-                  top: 0,
-                  left: 0,
-                  right: 0,
-                  child: AnnouncementBanner(
-                    announcement: _activeAlertAnnouncement!,
-                    onTap: () {
-                      setState(() => _activeAlertAnnouncement = null);
-                      AnnouncementsSheet.show(context, initialTab: 1);
-                    },
-                    onDismiss: () {
-                      setState(() => _activeAlertAnnouncement = null);
-                    },
-                  ),
-                ),
+              ValueListenableBuilder<Announcement?>(
+                valueListenable: _activeAlertNotifier,
+                builder: (context, activeAlert, _) {
+                  if (activeAlert == null) return const SizedBox.shrink();
+                  return Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    child: AnnouncementBanner(
+                      announcement: activeAlert,
+                      onTap: () {
+                        _activeAlertNotifier.value = null;
+                        AnnouncementsSheet.show(context, initialTab: 1);
+                      },
+                      onDismiss: () {
+                        _activeAlertNotifier.value = null;
+                      },
+                    ),
+                  );
+                },
+              ),
 
               // Bottom Fade Scrim + Floating Frosted-Glass Pill Dock
               Positioned(
@@ -572,13 +571,46 @@ class _DashboardScreenState extends State<DashboardScreen> {
                       top: false,
                       child: Padding(
                         padding: const EdgeInsets.fromLTRB(16, 16, 16, 10),
-                        child: KheyrukumNavBar(
-                          selectedIndex: _currentTabIndex,
-                          items: navItems,
-                          onTabChanged: (index) {
-                            setState(() {
-                              _currentTabIndex = index;
-                            });
+                        child: ValueListenableBuilder<int>(
+                          valueListenable: _unreadMessagesNotifier,
+                          builder: (context, unreadMessages, _) {
+                            final navItems = [
+                              KheyrukumNavItem(
+                                icon: Icons.home_outlined,
+                                activeIcon: Icons.home_rounded,
+                                label: loc.navHome,
+                              ),
+                              KheyrukumNavItem(
+                                icon: Icons.people_outline_rounded,
+                                activeIcon: Icons.people_rounded,
+                                label: loc.navCircles,
+                              ),
+                              KheyrukumNavItem(
+                                icon: Icons.chat_bubble_outline_rounded,
+                                activeIcon: Icons.chat_bubble_rounded,
+                                label: loc.navMessages,
+                                badgeCount: unreadMessages,
+                              ),
+                              KheyrukumNavItem(
+                                icon: Icons.auto_stories_outlined,
+                                activeIcon: Icons.auto_stories_rounded,
+                                label: loc.navResources,
+                              ),
+                              KheyrukumNavItem(
+                                icon: Icons.grid_view_outlined,
+                                activeIcon: Icons.grid_view_rounded,
+                                label: loc.navMore,
+                              ),
+                            ];
+                            return KheyrukumNavBar(
+                              selectedIndex: _currentTabIndex,
+                              items: navItems,
+                              onTabChanged: (index) {
+                                setState(() {
+                                  _currentTabIndex = index;
+                                });
+                              },
+                            );
                           },
                         ),
                       ),

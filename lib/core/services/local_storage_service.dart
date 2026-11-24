@@ -1,8 +1,17 @@
+import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+
+class _PendingCacheWrite {
+  final String userId;
+  final String entity;
+  final String encodedJson;
+
+  const _PendingCacheWrite(this.userId, this.entity, this.encodedJson);
+}
 
 /// Centralized local persistent storage for offline caching across Kheyrukum:
 /// - App-wide UI preferences (theme, locale, cached role topic)
@@ -14,6 +23,11 @@ class LocalStorageService {
 
   SharedPreferences? _prefs;
   Directory? _cacheDir;
+  final Map<String, _PendingCacheWrite> _pendingWrites = {};
+  final Map<String, Timer> _writeTimers = {};
+
+  String _cacheKey(String userId, String entity) =>
+      '${_sanitizeSegment(userId)}/${_sanitizeSegment(entity)}';
 
   Future<void> initialize() async {
     try {
@@ -88,35 +102,70 @@ class LocalStorageService {
     return [];
   }
 
-  // --- User-scoped atomic JSON cache ---
-  Future<void> saveUserJsonList(
-    String userId,
-    String entity,
-    List<Map<String, dynamic>> items,
-  ) async {
-    if (userId.trim().isEmpty) return;
-    final encoded = jsonEncode(items);
+  // --- User-scoped atomic JSON cache (debounced per key) ---
+  Future<void> _writeEntryNow(_PendingCacheWrite entry) async {
     if (kIsWeb) {
       await saveString(
-        'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
-        encoded,
+        'u_${_sanitizeSegment(entry.userId)}_${_sanitizeSegment(entry.entity)}',
+        entry.encodedJson,
       );
       return;
     }
     try {
-      final file = await _resolveUserCacheFile(userId, entity);
+      final file = await _resolveUserCacheFile(entry.userId, entry.entity);
       if (file == null) return;
       final tmp = File('${file.path}.tmp');
-      await tmp.writeAsString(encoded, flush: true);
+      await tmp.writeAsString(entry.encodedJson, flush: true);
       if (await file.exists()) {
         await file.delete();
       }
       await tmp.rename(file.path);
     } catch (e) {
       debugPrint(
-        '[LocalStorageService] Atomic save error for $userId/$entity: $e',
+        '[LocalStorageService] Atomic save error for ${entry.userId}/${entry.entity}: $e',
       );
     }
+  }
+
+  Future<void> _scheduleUserJsonSave(
+    String userId,
+    String entity,
+    String encoded,
+  ) async {
+    if (userId.trim().isEmpty) return;
+    final key = _cacheKey(userId, entity);
+    _writeTimers.remove(key)?.cancel();
+    _pendingWrites[key] = _PendingCacheWrite(userId, entity, encoded);
+    _writeTimers[key] = Timer(const Duration(milliseconds: 300), () {
+      _writeTimers.remove(key);
+      final pending = _pendingWrites.remove(key);
+      if (pending != null) {
+        unawaited(_writeEntryNow(pending));
+      }
+    });
+  }
+
+  /// Flushes any debounced disk cache writes immediately (e.g. before sign-out wipe).
+  Future<void> flushPendingWrites() async {
+    for (final timer in _writeTimers.values) {
+      timer.cancel();
+    }
+    _writeTimers.clear();
+    if (_pendingWrites.isEmpty) return;
+    final entries = _pendingWrites.values.toList();
+    _pendingWrites.clear();
+    for (final entry in entries) {
+      await _writeEntryNow(entry);
+    }
+  }
+
+  Future<void> saveUserJsonList(
+    String userId,
+    String entity,
+    List<Map<String, dynamic>> items,
+  ) async {
+    if (userId.trim().isEmpty) return;
+    await _scheduleUserJsonSave(userId, entity, jsonEncode(items));
   }
 
   Future<List<Map<String, dynamic>>> getUserJsonList(
@@ -125,15 +174,18 @@ class LocalStorageService {
   ) async {
     if (userId.trim().isEmpty) return [];
     try {
-      String? raw;
-      if (kIsWeb) {
-        raw = await getString(
-          'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
-        );
-      } else {
-        final file = await _resolveUserCacheFile(userId, entity);
-        if (file == null || !await file.exists()) return [];
-        raw = await file.readAsString();
+      final pending = _pendingWrites[_cacheKey(userId, entity)];
+      String? raw = pending?.encodedJson;
+      if (raw == null) {
+        if (kIsWeb) {
+          raw = await getString(
+            'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
+          );
+        } else {
+          final file = await _resolveUserCacheFile(userId, entity);
+          if (file == null || !await file.exists()) return [];
+          raw = await file.readAsString();
+        }
       }
       if (raw == null || raw.isEmpty) return [];
       final decoded = jsonDecode(raw);
@@ -154,28 +206,7 @@ class LocalStorageService {
     Map<String, dynamic> data,
   ) async {
     if (userId.trim().isEmpty) return;
-    final encoded = jsonEncode(data);
-    if (kIsWeb) {
-      await saveString(
-        'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
-        encoded,
-      );
-      return;
-    }
-    try {
-      final file = await _resolveUserCacheFile(userId, entity);
-      if (file == null) return;
-      final tmp = File('${file.path}.tmp');
-      await tmp.writeAsString(encoded, flush: true);
-      if (await file.exists()) {
-        await file.delete();
-      }
-      await tmp.rename(file.path);
-    } catch (e) {
-      debugPrint(
-        '[LocalStorageService] Map save error for $userId/$entity: $e',
-      );
-    }
+    await _scheduleUserJsonSave(userId, entity, jsonEncode(data));
   }
 
   Future<Map<String, dynamic>?> getUserJsonMap(
@@ -184,15 +215,18 @@ class LocalStorageService {
   ) async {
     if (userId.trim().isEmpty) return null;
     try {
-      String? raw;
-      if (kIsWeb) {
-        raw = await getString(
-          'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
-        );
-      } else {
-        final file = await _resolveUserCacheFile(userId, entity);
-        if (file == null || !await file.exists()) return null;
-        raw = await file.readAsString();
+      final pending = _pendingWrites[_cacheKey(userId, entity)];
+      String? raw = pending?.encodedJson;
+      if (raw == null) {
+        if (kIsWeb) {
+          raw = await getString(
+            'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
+          );
+        } else {
+          final file = await _resolveUserCacheFile(userId, entity);
+          if (file == null || !await file.exists()) return null;
+          raw = await file.readAsString();
+        }
       }
       if (raw == null || raw.isEmpty) return null;
       final decoded = jsonDecode(raw);
@@ -209,6 +243,9 @@ class LocalStorageService {
 
   Future<void> removeUserCache(String userId, String entity) async {
     if (userId.trim().isEmpty) return;
+    final key = _cacheKey(userId, entity);
+    _writeTimers.remove(key)?.cancel();
+    _pendingWrites.remove(key);
     if (kIsWeb) {
       await remove(
         'u_${_sanitizeSegment(userId)}_${_sanitizeSegment(entity)}',
@@ -230,6 +267,7 @@ class LocalStorageService {
   /// Deletes all user-scoped cache files + web keys for [userId] and cleans
   /// any legacy unscoped keys so signing out leaves zero cross-account residue.
   Future<void> clearUserCaches(String userId) async {
+    await flushPendingWrites();
     final cleanUid = userId.trim();
     if (cleanUid.isNotEmpty) {
       if (!kIsWeb) {

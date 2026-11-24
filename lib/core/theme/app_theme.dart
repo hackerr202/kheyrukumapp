@@ -10,6 +10,17 @@ import 'app_colors.dart';
 class AppTheme {
   AppTheme._();
 
+  static String? _cachedPrimaryFontFamily;
+  static String? _cachedAmiriFontFamily;
+
+  /// Pre-resolved UI font family (Plus Jakarta Sans) to avoid per-build GoogleFonts allocations.
+  static String get primaryFontFamily => _cachedPrimaryFontFamily ??=
+      GoogleFonts.plusJakartaSans().fontFamily ?? 'PlusJakartaSans';
+
+  /// Pre-resolved Quranic/Arabic Naskh display font family (Amiri).
+  static String get amiriFontFamily =>
+      _cachedAmiriFontFamily ??= GoogleFonts.amiri().fontFamily ?? 'Amiri';
+
   static const String _themeStorageKey = 'app_theme_mode';
 
   /// Reactive theme notifier (defaults to Warm Sanctuary Light Mode)
@@ -93,12 +104,14 @@ class AppTheme {
       required Color color,
       double? letterSpacing,
     }) {
-      return GoogleFonts.plusJakartaSans(
+      return TextStyle(
+        fontFamily: primaryFontFamily,
+        fontFamilyFallback: fallbacks,
         fontSize: fontSize,
         fontWeight: fontWeight,
         color: color,
         letterSpacing: letterSpacing,
-      ).copyWith(fontFamilyFallback: fallbacks);
+      );
     }
 
     final colorScheme = isDark

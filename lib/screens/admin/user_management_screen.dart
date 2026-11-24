@@ -58,12 +58,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
     if (client == null) {
       if (mounted) {
+        final offlineErr = AppLocalizations.of(context)
+            .translate('unableToConnectCenterServerMsg');
         setState(() {
           _teachers = [];
           _parents = [];
           _admins = [];
           _inviteCodes = [];
-          _loadError = 'Unable to connect to center server. Please try again.';
+          _loadError = offlineErr;
           _isLoading = false;
         });
       }
@@ -121,23 +123,30 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   Future<void> _toggleSuspendUser(Map<String, dynamic> user) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final bool currentStatus = user['is_suspended'] == true;
     final bool newStatus = !currentStatus;
-    final String actionWord = newStatus ? 'Suspend' : 'Activate';
+    final String actionWord = newStatus
+        ? loc.translate('suspendWord')
+        : loc.translate('activateWord');
+    final userName = (user['full_name'] ?? '').toString();
 
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('$actionWord ${user['full_name']}?'),
+        title: Text(loc.tr('suspendActivateConfirmTitle', {
+          'action': actionWord,
+          'name': userName,
+        })),
         content: Text(
           newStatus
-              ? 'Suspended users will immediately be prevented from signing in and accessing center data.'
-              : 'The user account will be restored and allowed to log in.',
+              ? loc.translate('suspendWarningMsg')
+              : loc.translate('activateRestoredMsg'),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(loc.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
@@ -157,7 +166,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context).internetRequiredAction),
+            content: Text(loc.internetRequiredAction),
             backgroundColor: p.danger,
           ),
         );
@@ -177,7 +186,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Unable to connect to server.'),
+            content: Text(loc.translate('unableToConnectServer')),
             backgroundColor: p.danger,
           ),
         );
@@ -203,7 +212,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to update user status: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('failedUpdateUserStatusMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
             backgroundColor: p.danger,
           ),
@@ -216,7 +227,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            '${user['full_name']} has been ${newStatus ? 'suspended' : 'reactivated'}.',
+            newStatus
+                ? loc.tr('userSuspendedMsg', {'name': userName})
+                : loc.tr('userReactivatedMsg', {'name': userName}),
           ),
           backgroundColor: newStatus ? p.danger : p.success,
         ),
@@ -226,6 +239,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   Future<void> _removeUser(Map<String, dynamic> user, String listType) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final userName = (user['full_name'] ?? '').toString();
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -233,23 +248,23 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           children: [
             Icon(Icons.delete_forever_rounded, color: p.danger, size: 22),
             const SizedBox(width: 8),
-            const Expanded(child: Text('Remove User Account?')),
+            Expanded(child: Text(loc.translate('removeUserAccountTitle'))),
           ],
         ),
         content: Text(
-          'Are you sure you want to permanently remove "${user['full_name']}"? This cannot be undone.',
+          loc.tr('removeUserAccountBody', {'name': userName}),
         ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('Cancel')),
+              child: Text(loc.cancel)),
           ElevatedButton(
             onPressed: () => Navigator.pop(ctx, true),
             style: ElevatedButton.styleFrom(
               backgroundColor: p.danger,
               foregroundColor: Colors.white,
             ),
-            child: const Text('Remove Permanently'),
+            child: Text(loc.translate('removePermanentlyAction')),
           ),
         ],
       ),
@@ -262,7 +277,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(AppLocalizations.of(context).internetRequiredAction),
+            content: Text(loc.internetRequiredAction),
             backgroundColor: p.danger,
           ),
         );
@@ -294,7 +309,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: const Text('Unable to connect to server.'),
+            content: Text(loc.translate('unableToConnectServer')),
             backgroundColor: p.danger,
           ),
         );
@@ -309,7 +324,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       );
       if (rpcRes is Map && rpcRes['success'] != true) {
         throw Exception(
-            rpcRes['message']?.toString() ?? 'Failed to remove user.');
+          rpcRes['message']?.toString() ?? loc.translate('failedRemoveUserSimple'),
+        );
       }
     } catch (e) {
       final errMsg = e.toString().toLowerCase();
@@ -338,7 +354,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Failed to remove user: ${SupabaseService.cleanErrorMessage(fallbackErr)}',
+                  loc.tr('failedRemoveUserMsg', {
+                    'error': SupabaseService.cleanErrorMessage(fallbackErr),
+                  }),
                 ),
                 backgroundColor: p.danger,
               ),
@@ -360,7 +378,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                'Failed to remove user: ${SupabaseService.cleanErrorMessage(e)}',
+                loc.tr('failedRemoveUserMsg', {
+                  'error': SupabaseService.cleanErrorMessage(e),
+                }),
               ),
               backgroundColor: p.danger,
             ),
@@ -375,7 +395,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Removed ${user['full_name']} from center.'),
+          content: Text(loc.tr('removedUserFromCenterMsg', {'name': userName})),
           backgroundColor: p.danger,
         ),
       );
@@ -384,12 +404,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   Future<void> _showAssignHalaqahDialog(Map<String, dynamic> teacher) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final teacherName = (teacher['full_name'] ?? '').toString();
     final halaqahs = HalaqahService.instance.halaqahs;
     if (halaqahs.isEmpty) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Please create a Study Circle (Halaqah) first.'),
+          SnackBar(
+            content: Text(loc.translate('createCircleFirstMsg')),
           ),
         );
       }
@@ -397,7 +419,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }
 
     String selectedId = '';
-    String selectedName = 'Unassigned';
+    String selectedName = loc.translate('unassignedCircleLabel');
     final currentId = teacher['halaqah_id']?.toString();
     if (currentId != null && currentId.isNotEmpty) {
       final match = halaqahs.where((h) => h.id == currentId);
@@ -411,14 +433,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Assign ${teacher['full_name']}'),
+          title: Text(loc.tr('assignTeacherTitle', {'name': teacherName})),
           content: DropdownButtonFormField<String>(
             value: selectedId,
             isExpanded: true,
             items: [
-              const DropdownMenuItem(
+              DropdownMenuItem(
                 value: '',
-                child: Text('Unassigned (Remove from Circle)'),
+                child: Text(loc.translate('unassignedRemoveFromCircle')),
               ),
               ...halaqahs
                   .map((h) => DropdownMenuItem(value: h.id, child: Text(h.name))),
@@ -428,7 +450,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               if (val.isEmpty) {
                 setDialogState(() {
                   selectedId = '';
-                  selectedName = 'Unassigned';
+                  selectedName = loc.translate('unassignedCircleLabel');
                 });
               } else {
                 final h = halaqahs.firstWhere((e) => e.id == val);
@@ -438,16 +460,17 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 });
               }
             },
-            decoration:
-                const InputDecoration(labelText: 'Study Circle (Halaqah)'),
+            decoration: InputDecoration(
+              labelText: loc.translate('studyCircleHalaqahLabel'),
+            ),
           ),
           actions: [
             TextButton(
                 onPressed: () => Navigator.pop(ctx, false),
-                child: const Text('Cancel')),
+                child: Text(loc.cancel)),
             ElevatedButton(
               onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('Save'),
+              child: Text(loc.save),
             ),
           ],
         ),
@@ -464,7 +487,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         await HalaqahService.instance.assignTeacher(
           halaqahId: selectedId,
           teacherId: teacherId,
-          teacherName: teacher['full_name']?.toString() ?? 'Teacher',
+          teacherName: teacher['full_name']?.toString() ?? loc.roleTeacher,
         );
       }
       await _loadAllUserData();
@@ -473,8 +496,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           SnackBar(
             content: Text(
               selectedId.isEmpty
-                  ? '${teacher['full_name']} unassigned from study circle.'
-                  : '${teacher['full_name']} assigned to $selectedName.',
+                  ? loc.tr('teacherUnassignedCircleMsg', {'name': teacherName})
+                  : loc.tr('teacherAssignedCircleMsg', {
+                      'name': teacherName,
+                      'circle': selectedName,
+                    }),
             ),
             backgroundColor: p.primary,
           ),
@@ -485,7 +511,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to update circle assignment: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('failedUpdateAssignmentMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
             backgroundColor: p.danger,
           ),
@@ -496,6 +524,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
 
   Future<void> _pickAndUploadUserAvatar(Map<String, dynamic> user) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final userName = (user['full_name'] ?? '').toString();
     try {
       final picker = ImagePicker();
       final picked = await picker.pickImage(
@@ -516,7 +546,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       );
 
       if (uploadedUrl == null) {
-        throw Exception('Failed to upload image to storage.');
+        throw Exception(loc.translate('failedUploadImageToStorageMsg'));
       }
 
       final client = SupabaseService.instance.client;
@@ -534,7 +564,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('${user['full_name']} profile photo updated.'),
+            content: Text(loc.tr('profilePhotoUpdatedUserMsg', {'name': userName})),
             backgroundColor: p.success,
           ),
         );
@@ -544,7 +574,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-                'Could not update photo: ${SupabaseService.cleanErrorMessage(e)}'),
+              loc.tr('couldNotUpdatePhotoMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
+            ),
             backgroundColor: p.danger,
           ),
         );
@@ -555,6 +588,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   Future<void> _showChangeRoleDialog(Map<String, dynamic> user) async {
     if (!AuthSessionService.instance.isSuperAdmin) return;
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final userName = (user['full_name'] ?? '').toString();
     final String currentRole =
         (user['role'] ?? 'parent').toString().toLowerCase();
     String selectedRole = currentRole;
@@ -576,7 +611,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               const SizedBox(width: 10),
               Expanded(
                 child: Text(
-                  'Change Role for ${user['full_name']}',
+                  loc.tr('changeRoleForTitle', {'name': userName}),
                   style: TextStyle(
                       fontSize: 16, fontWeight: FontWeight.w700, color: p.ink),
                 ),
@@ -588,29 +623,27 @@ class _UserManagementScreenState extends State<UserManagementScreen>
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Select permissions and access level for this user:',
+                loc.translate('selectPermissionsPrompt'),
                 style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
               ),
               const SizedBox(height: 14),
               RadioListTile<String>(
-                title: const Text('Superadmin (Full Control)',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                subtitle: const Text(
-                    'Full access including payments, fees, and user role promotion',
-                    style: TextStyle(fontSize: 11)),
+                title: Text(loc.translate('superadminFullControlTitle'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text(loc.translate('superadminFullControlDesc'),
+                    style: const TextStyle(fontSize: 11)),
                 value: 'superadmin',
                 groupValue: selectedRole,
                 activeColor: p.gold,
                 onChanged: (v) => setDialogState(() => selectedRole = v!),
               ),
               RadioListTile<String>(
-                title: const Text('Admin (Center Administrator)',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                subtitle: const Text(
-                    'Study circles, students, attendance, homework (No payment access)',
-                    style: TextStyle(fontSize: 11)),
+                title: Text(loc.translate('adminRoleDescTitle'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text(loc.translate('adminRoleDescSubtitle'),
+                    style: const TextStyle(fontSize: 11)),
                 value: 'admin',
                 groupValue: selectedRole,
                 activeColor: p.primary,
@@ -619,12 +652,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     : (v) => setDialogState(() => selectedRole = v!),
               ),
               RadioListTile<String>(
-                title: const Text('Teacher (Ustaz)',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                subtitle: const Text(
-                    'Assigned study circle, attendance, and recitation grading',
-                    style: TextStyle(fontSize: 11)),
+                title: Text(loc.translate('teacherRoleDescTitle'),
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text(loc.translate('teacherRoleDescSubtitle'),
+                    style: const TextStyle(fontSize: 11)),
                 value: 'teacher',
                 groupValue: selectedRole,
                 activeColor: p.primary,
@@ -633,12 +665,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     : (v) => setDialogState(() => selectedRole = v!),
               ),
               RadioListTile<String>(
-                title: const Text('Parent',
-                    style:
-                        TextStyle(fontWeight: FontWeight.w700, fontSize: 13.5)),
-                subtitle: const Text(
-                    'Linked children, weekly reports, and tuition payment',
-                    style: TextStyle(fontSize: 11)),
+                title: Text(loc.roleParent,
+                    style: const TextStyle(
+                        fontWeight: FontWeight.w700, fontSize: 13.5)),
+                subtitle: Text(loc.translate('parentRoleDescSubtitle'),
+                    style: const TextStyle(fontSize: 11)),
                 value: 'parent',
                 groupValue: selectedRole,
                 activeColor: p.info,
@@ -650,7 +681,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 Padding(
                   padding: const EdgeInsets.only(top: 8),
                   child: Text(
-                    'Note: You cannot demote your own active Superadmin account.',
+                    loc.translate('cannotDemoteSelfNote'),
                     style: TextStyle(
                         fontSize: 11,
                         color: p.warning,
@@ -662,15 +693,14 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
+              child: Text(loc.cancel),
             ),
             ElevatedButton(
               onPressed: selectedRole == currentRole
                   ? null
                   : () async {
                       final messenger = ScaffoldMessenger.of(context);
-                      final offlineMsg =
-                          AppLocalizations.of(context).internetRequiredAction;
+                      final offlineMsg = loc.internetRequiredAction;
                       if (!ConnectivityService.instance.isOnline &&
                           !await ConnectivityService.instance.checkNow()) {
                         messenger.showSnackBar(
@@ -686,7 +716,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                       try {
                         final client = SupabaseService.instance.client;
                         if (client == null) {
-                          throw Exception('Server not connected.');
+                          throw Exception(loc.translate('serverNotConnectedMsg'));
                         }
                         await client.rpc('admin_set_user_role', params: {
                           'p_user_id': user['id'],
@@ -697,7 +727,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                  '${user['full_name']} promoted to $selectedRole successfully.'),
+                                loc.tr('userPromotedRoleMsg', {
+                                  'name': userName,
+                                  'role': loc.localizedRoleBadge(selectedRole),
+                                }),
+                              ),
                               backgroundColor: p.success,
                             ),
                           );
@@ -707,7 +741,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                  'Failed to update role: ${SupabaseService.cleanErrorMessage(e)}'),
+                                loc.tr('failedUpdateRoleMsg', {
+                                  'error': SupabaseService.cleanErrorMessage(e),
+                                }),
+                              ),
                               backgroundColor: p.danger,
                             ),
                           );
@@ -718,7 +755,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 backgroundColor: p.primary,
                 foregroundColor: Colors.white,
               ),
-              child: const Text('Update Role'),
+              child: Text(loc.translate('updateRoleAction')),
             ),
           ],
         ),
@@ -729,6 +766,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     if (!AuthSessionService.instance.isAdmin) {
       return Scaffold(
@@ -740,15 +778,15 @@ class _UserManagementScreenState extends State<UserManagementScreen>
             icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('User Management'),
+          title: Text(loc.userManagement),
         ),
-        body: const Center(
+        body: Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: ProEmptyState(
               icon: Icons.lock_outline_rounded,
-              title: 'Access Restricted',
-              message: 'Only center administrators can manage user accounts.',
+              title: loc.translate('accessRestrictedTitle'),
+              message: loc.translate('onlyAdminsManageUsersMsg'),
             ),
           ),
         ),
@@ -847,10 +885,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                     ? Center(
                         child: ProEmptyState(
                           icon: Icons.cloud_off_rounded,
-                          title: 'Could not load users',
+                          title: loc.translate('couldNotLoadUsersTitle'),
                           message: _loadError!,
                           accentColor: p.danger,
-                          actionLabel: 'Retry',
+                          actionLabel: loc.retry,
                           onAction: _loadAllUserData,
                         ),
                       )
@@ -874,6 +912,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     String listType,
     AppPalette p,
   ) {
+    final loc = AppLocalizations.of(context);
     final filtered = users.where((u) {
       final name = (u['full_name'] ?? '').toString().toLowerCase();
       final email = (u['email'] ?? '').toString().toLowerCase();
@@ -884,15 +923,25 @@ class _UserManagementScreenState extends State<UserManagementScreen>
     }).toList();
 
     if (filtered.isEmpty) {
+      final emptyTitle = switch (listType) {
+        'teacher' => loc.translate('noTeachersFoundTitle'),
+        'admin' => loc.translate('noAdminsFoundTitle'),
+        _ => loc.translate('noParentsFoundTitle'),
+      };
+      final emptyMsg = _searchQuery.isNotEmpty
+          ? loc.translate('tryModifyingSearchMsg')
+          : switch (listType) {
+              'teacher' => loc.translate('registeredTeachersAppearMsg'),
+              'admin' => loc.translate('registeredAdminsAppearMsg'),
+              _ => loc.translate('registeredParentsAppearMsg'),
+            };
       return Padding(
         padding: const EdgeInsets.all(24),
         child: Center(
           child: ProEmptyState(
             icon: Icons.person_off_outlined,
-            title: 'No ${listType}s found',
-            message: _searchQuery.isNotEmpty
-                ? 'Try clearing or modifying your search query.'
-                : 'Registered ${listType}s will appear here.',
+            title: emptyTitle,
+            message: emptyMsg,
           ),
         ),
       );
@@ -908,7 +957,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         itemBuilder: (context, index) {
           final user = filtered[index];
           final bool isSuspended = user['is_suspended'] == true;
-          final name = (user['full_name'] ?? 'User').toString();
+          final name =
+              (user['full_name'] ?? loc.translate('userFallback')).toString();
 
           return ProCard(
             padding: const EdgeInsets.all(14),
@@ -948,7 +998,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           ),
                           if (isSuspended) ...[
                             const SizedBox(width: 6),
-                            ProStatusPill(label: 'SUSPENDED', color: p.danger),
+                            ProStatusPill(
+                              label: loc.translate('suspendedTag'),
+                              color: p.danger,
+                            ),
                           ],
                         ],
                       ),
@@ -957,7 +1010,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         (user['phone'] != null &&
                                 user['phone'].toString().isNotEmpty)
                             ? user['phone'].toString()
-                            : (user['email']?.toString() ?? 'No contact info'),
+                            : (user['email']?.toString() ??
+                                loc.translate('noContactInfo')),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       ),
                       const SizedBox(height: 5),
@@ -966,7 +1020,9 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         runSpacing: 4,
                         children: [
                           ProStatusPill(
-                            label: (user['role'] ?? listType).toString().toUpperCase(),
+                            label: loc.localizedRoleBadge(
+                              (user['role'] ?? listType).toString(),
+                            ),
                             color: (user['role'] == 'superadmin' || user['role'] == 'admin')
                                 ? p.gold
                                 : (listType == 'teacher' ? p.primary : p.info),
@@ -983,7 +1039,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                                     ? profileHalaqah
                                     : (matches.isNotEmpty
                                         ? matches.first.name
-                                        : 'Unassigned Circle');
+                                        : loc.translate('unassignedCircleLabel'));
                                 return Text(
                                   assignedName,
                                   style: TextStyle(
@@ -1037,7 +1093,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                                 size: 18, color: p.gold),
                             const SizedBox(width: 10),
                             Text(
-                              'Promote / Change Role',
+                              loc.translate('promoteChangeRoleAction'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: p.gold,
@@ -1055,7 +1111,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                                 size: 18, color: p.primary),
                             const SizedBox(width: 10),
                             Text(
-                              'Update Photo',
+                              loc.translate('updatePhoto'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: p.primary,
@@ -1075,7 +1131,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                                 size: 18, color: p.primary),
                             const SizedBox(width: 10),
                             Text(
-                              'Assign Halaqah',
+                              loc.translate('assignHalaqahAction'),
                               style: TextStyle(
                                 fontSize: 13,
                                 color: p.primary,
@@ -1100,8 +1156,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                           const SizedBox(width: 10),
                           Text(
                             isSuspended
-                                ? 'Reactivate Account'
-                                : 'Suspend Account',
+                                ? loc.translate('reactivateAccountAction')
+                                : loc.translate('suspendAccountAction'),
                             style: TextStyle(
                               fontSize: 13,
                               color: isSuspended ? p.success : p.warning,
@@ -1119,7 +1175,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                               size: 18, color: p.danger),
                           const SizedBox(width: 10),
                           Text(
-                            'Remove User',
+                            loc.translate('removeUser'),
                             style: TextStyle(
                               fontSize: 13,
                               color: p.danger,
@@ -1142,6 +1198,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
   }
 
   Widget _buildInviteCodesList(AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final filtered = _inviteCodes.where((code) {
       if (_searchQuery.isEmpty) return true;
       final codeStr = (code['code'] ?? '').toString().toLowerCase();
@@ -1159,11 +1216,11 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           child: ProEmptyState(
             icon: Icons.vpn_key_off_outlined,
             title: _searchQuery.isNotEmpty
-                ? 'No matching invite codes'
-                : 'No invitation codes active',
+                ? loc.translate('noMatchingInviteCodes')
+                : loc.translate('noInviteCodesActive'),
             message: _searchQuery.isNotEmpty
-                ? 'Try clearing or modifying your search query.'
-                : 'Generate an invite code from the top right button.',
+                ? loc.translate('tryModifyingSearchMsg')
+                : loc.translate('generateInviteTopRightHint'),
           ),
         ),
       );
@@ -1220,26 +1277,30 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                       ),
                       Text(
                         isTeacher
-                            ? 'Teacher Registration'
-                            : 'Parent Registration',
+                            ? loc.translate('teacherRegistrationLabel')
+                            : loc.translate('parentRegistrationLabel'),
                         style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
                       ),
                     ],
                   ),
                 ),
                 ProStatusPill(
-                  label: isUsed ? 'USED' : 'ACTIVE',
+                  label: isUsed
+                      ? loc.translate('usedTag')
+                      : loc.translate('activeTag'),
                   color: isUsed ? p.inkMuted : p.success,
                 ),
                 if (!isUsed && codeStr.isNotEmpty)
                   IconButton(
                     icon: Icon(Icons.copy_rounded, size: 18, color: p.primary),
-                    tooltip: 'Copy Code',
+                    tooltip: loc.copyCodeTooltip,
                     onPressed: () {
                       Clipboard.setData(ClipboardData(text: codeStr));
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Copied "$codeStr" to clipboard.'),
+                          content: Text(
+                            loc.tr('copiedCodeMsg', {'code': codeStr}),
+                          ),
                         ),
                       );
                     },
@@ -1247,7 +1308,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                 IconButton(
                   icon: Icon(Icons.delete_outline_rounded,
                       size: 19, color: p.danger),
-                  tooltip: 'Delete Invite Code',
+                  tooltip: loc.translate('deleteInviteCodeTooltip'),
                   onPressed: () async {
                     final id = code['id'];
                     if (id == null) return;
@@ -1268,7 +1329,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                       });
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: const Text('Failed to delete invite code.'),
+                          content:
+                              Text(loc.translate('failedDeleteInviteCodeMsg')),
                           backgroundColor: p.danger,
                         ),
                       );

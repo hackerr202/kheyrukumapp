@@ -22,7 +22,7 @@ class PostAnnouncementDialog extends StatefulWidget {
 class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   final _titleController = TextEditingController();
   final _contentController = TextEditingController();
-  late final TextEditingController _authorController;
+  final _authorController = TextEditingController();
 
   String _selectedAudience = 'all';
   bool _isPinned = false;
@@ -33,14 +33,19 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   String? _attachmentUrl;
   int? _attachmentSize;
   bool _isUploadingAttachment = false;
+  bool _didInitLocalizedDefaults = false;
 
   @override
-  void initState() {
-    super.initState();
-    final name = AuthSessionService.instance.userName;
-    _authorController = TextEditingController(
-      text: name.isNotEmpty ? '$name (Director)' : 'Center Administration',
-    );
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      final loc = AppLocalizations.of(context);
+      final name = AuthSessionService.instance.userName;
+      _authorController.text = name.isNotEmpty
+          ? '$name (${loc.translate('directorRoleShort')})'
+          : loc.translate('centerAdministrationTitle');
+    }
   }
 
   @override
@@ -84,9 +89,10 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               : null);
 
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       if (fileBytes == null) {
-        setState(
-            () => _errorMessage = 'Could not read selected file from device.');
+        setState(() =>
+            _errorMessage = loc.translate('couldNotReadSelectedFileMsg'));
         return;
       }
 
@@ -112,7 +118,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Attached "$fileName" successfully.'),
+            content: Text(loc.tr('attachedFileSuccessMsg', {'name': fileName})),
             backgroundColor: AppColors.of(context).success,
             duration: const Duration(seconds: 2),
           ),
@@ -120,16 +126,17 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       } else {
         setState(() {
           _isUploadingAttachment = false;
-          _errorMessage =
-              'Cloud upload failed. Please check network connection and try again.';
+          _errorMessage = loc.translate('cloudUploadFailedMsg');
         });
       }
     } catch (e) {
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       setState(() {
         _isUploadingAttachment = false;
-        _errorMessage =
-            'Failed to select file: ${SupabaseService.cleanErrorMessage(e)}';
+        _errorMessage = loc.tr('failedSelectFileMsg', {
+          'error': SupabaseService.cleanErrorMessage(e),
+        });
       });
     }
   }
@@ -145,6 +152,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
       final fileBytes = await picked.readAsBytes();
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       final fileName = picked.name;
 
       setState(() {
@@ -169,7 +177,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
 
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text('Attached photo "$fileName" successfully.'),
+            content:
+                Text(loc.tr('attachedPhotoSuccessMsg', {'name': fileName})),
             backgroundColor: AppColors.of(context).success,
             duration: const Duration(seconds: 2),
           ),
@@ -177,16 +186,17 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       } else {
         setState(() {
           _isUploadingAttachment = false;
-          _errorMessage =
-              'Cloud upload failed. Please check network connection and try again.';
+          _errorMessage = loc.translate('cloudUploadFailedMsg');
         });
       }
     } catch (e) {
       if (!mounted) return;
+      final loc = AppLocalizations.of(context);
       setState(() {
         _isUploadingAttachment = false;
-        _errorMessage =
-            'Failed to pick image: ${SupabaseService.cleanErrorMessage(e)}';
+        _errorMessage = loc.tr('failedPickImageMsg', {
+          'error': SupabaseService.cleanErrorMessage(e),
+        });
       });
     }
   }
@@ -200,12 +210,12 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   }
 
   Future<void> _handleBroadcast() async {
+    final loc = AppLocalizations.of(context);
     final title = _titleController.text.trim();
     final content = _contentController.text.trim();
 
     if (title.isEmpty || content.isEmpty) {
-      setState(
-          () => _errorMessage = 'Please provide both title and circular text.');
+      setState(() => _errorMessage = loc.translate('provideTitleAndContentMsg'));
       return;
     }
 
@@ -233,9 +243,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
         Navigator.of(context).pop(true);
         messenger.showSnackBar(
           SnackBar(
-            content: const Text(
-              'Announcement broadcasted to all users successfully.',
-            ),
+            content: Text(loc.translate('announcementBroadcastedMsg')),
             backgroundColor: successColor,
           ),
         );
@@ -243,7 +251,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
         setState(() {
           _errorMessage = res['error'] ??
               res['message'] ??
-              'Broadcast failed. Please check your connection.';
+              loc.translate('broadcastFailedMsg');
         });
       }
     } catch (e) {
@@ -262,6 +270,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return Dialog(
       backgroundColor: p.surface,
@@ -297,7 +306,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Broadcast Circular',
+                            loc.translate('broadcastCircularTitle'),
                             style: TextStyle(
                               fontSize: 17,
                               fontWeight: FontWeight.w700,
@@ -305,7 +314,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             ),
                           ),
                           Text(
-                            'Push notice to parents & teachers',
+                            loc.translate('pushNoticeSubtitle'),
                             style: TextStyle(
                                 fontSize: 11.5, color: p.inkSecondary),
                           ),
@@ -323,7 +332,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               const SizedBox(height: 18),
 
               Text(
-                'CIRCULAR TITLE',
+                loc.translate('circularTitleHeader'),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -339,14 +348,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   fontWeight: FontWeight.w700,
                   color: p.ink,
                 ),
-                decoration: const InputDecoration(
-                  hintText: 'e.g. Ramadan Recitation Schedule & Timings',
+                decoration: InputDecoration(
+                  hintText: loc.translate('circularTitleHint'),
                 ),
               ),
               const SizedBox(height: 16),
 
               Text(
-                'MESSAGE CONTENT',
+                loc.translate('messageContentHeader'),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -359,14 +368,14 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                 controller: _contentController,
                 maxLines: 4,
                 style: TextStyle(fontSize: 13.5, color: p.ink, height: 1.4),
-                decoration: const InputDecoration(
-                  hintText: 'Write the complete circular text here...',
+                decoration: InputDecoration(
+                  hintText: loc.translate('messageContentHint'),
                 ),
               ),
               const SizedBox(height: 16),
 
               Text(
-                'ATTACHMENT',
+                loc.translate('attachmentHeader'),
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -398,7 +407,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                       const SizedBox(width: 12),
                       Expanded(
                         child: Text(
-                          'Uploading attachment to cloud storage...',
+                          loc.translate('uploadingAttachmentCloudMsg'),
                           style: TextStyle(
                             fontSize: 12.5,
                             color: p.ink,
@@ -444,7 +453,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 Text(
-                                  _attachmentName ?? 'Attached File',
+                                  _attachmentName ??
+                                      loc.translate('attachedFileFallback'),
                                   style: TextStyle(
                                     fontSize: 13,
                                     fontWeight: FontWeight.w700,
@@ -467,7 +477,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                                       const SizedBox(width: 8),
                                     ],
                                     Text(
-                                      'Ready',
+                                      loc.translate('readyStatusTag'),
                                       style: TextStyle(
                                         fontSize: 10.5,
                                         fontWeight: FontWeight.w700,
@@ -483,7 +493,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             icon: Icon(Icons.close_rounded,
                                 size: 18, color: p.danger),
                             onPressed: _removeAttachment,
-                            tooltip: 'Remove Attachment',
+                            tooltip: loc.translate('removeAttachmentTooltip'),
                           ),
                         ],
                       ),
@@ -517,8 +527,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                         onPressed: _pickImageAttachment,
                         icon: Icon(Icons.add_photo_alternate_rounded,
                             size: 19, color: p.primary),
-                        label: const Text('Attach Photo',
-                            style: TextStyle(fontSize: 12.5)),
+                        label: Text(loc.translate('attachPhotoAction'),
+                            style: const TextStyle(fontSize: 12.5)),
                       ),
                     ),
                     const SizedBox(width: 8),
@@ -527,8 +537,8 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                         onPressed: _pickAndUploadAttachment,
                         icon: Icon(Icons.attach_file_rounded,
                             size: 19, color: p.primary),
-                        label: const Text('Attach File',
-                            style: TextStyle(fontSize: 12.5)),
+                        label: Text(loc.translate('attachFileAction'),
+                            style: const TextStyle(fontSize: 12.5)),
                       ),
                     ),
                   ],
@@ -537,7 +547,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               const SizedBox(height: 16),
 
               Text(
-                AppLocalizations.of(context).targetAudience,
+                loc.targetAudience,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -551,21 +561,21 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   _buildAudienceChip(
                     p,
                     'all',
-                    AppLocalizations.of(context).everyone,
+                    loc.everyone,
                     Icons.groups_rounded,
                   ),
                   const SizedBox(width: 8),
                   _buildAudienceChip(
                     p,
                     'parents',
-                    AppLocalizations.of(context).parentsOnly,
+                    loc.parentsOnly,
                     Icons.family_restroom_rounded,
                   ),
                   const SizedBox(width: 8),
                   _buildAudienceChip(
                     p,
                     'teachers',
-                    AppLocalizations.of(context).teachersOnly,
+                    loc.teachersOnly,
                     Icons.school_rounded,
                   ),
                 ],
@@ -589,7 +599,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'Pin this circular to the top of Home screen',
+                          loc.translate('pinCircularLabel'),
                           style: TextStyle(
                             fontSize: 12.5,
                             fontWeight:

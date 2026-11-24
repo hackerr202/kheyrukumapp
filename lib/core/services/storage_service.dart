@@ -152,6 +152,10 @@ class StorageService {
     return null;
   }
 
+  /// Explicit synchronous alias for [getCachedSignedUrl].
+  static String? getCachedSignedUrlSync(String? rawUrlOrRef) =>
+      getCachedSignedUrl(rawUrlOrRef);
+
   /// Resolves a `storage://bucket/path` reference (or legacy Supabase storage URL)
   /// into a short-lived signed URL using an in-memory TTL cache.
   static Future<String?> resolveSignedUrl(

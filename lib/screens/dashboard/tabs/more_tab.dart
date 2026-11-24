@@ -20,6 +20,7 @@ class MoreTab extends StatelessWidget {
 
   void _showTeacherHalaqahDialog(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
     final classStudents = StudentService.instance.getStudentsForHalaqah(
       assignedHalaqah,
@@ -58,7 +59,7 @@ class MoreTab extends StatelessWidget {
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        'Assigned Circle',
+                        loc.assignedCircle,
                         style: TextStyle(
                           fontSize: 16.5,
                           fontWeight: FontWeight.w700,
@@ -85,7 +86,13 @@ class MoreTab extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Ustaz: ${AuthSessionService.instance.userName} • ${classStudents.length} ${classStudents.length == 1 ? 'Student' : 'Students'} Enrolled',
+                loc.tr('ustazStudentsMeta', {
+                  'name': AuthSessionService.instance.userName,
+                  'countLabel': classStudents.length == 1
+                      ? loc.translate('studentCountOne')
+                      : loc.tr('studentCountMany',
+                          {'count': '${classStudents.length}'}),
+                }),
                 style: TextStyle(
                   fontSize: 12.5,
                   color: p.primary,
@@ -94,7 +101,7 @@ class MoreTab extends StatelessWidget {
               ),
               const SizedBox(height: 10),
               Text(
-                'Daily Curriculum: Sabaq (new memorization), Sabqi (recent revision), and Manzil (cumulative revision). Record daily attendance and keep parents updated.',
+                loc.translate('dailyCurriculumDesc'),
                 style: TextStyle(
                   fontSize: 12,
                   color: p.inkSecondary,
@@ -113,7 +120,7 @@ class MoreTab extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      'CLASS ROSTER',
+                      loc.translate('classRosterHeader'),
                       style: TextStyle(
                         fontSize: 10.5,
                         fontWeight: FontWeight.w700,
@@ -124,7 +131,7 @@ class MoreTab extends StatelessWidget {
                     const SizedBox(height: 8),
                     if (classStudents.isEmpty)
                       Text(
-                        'No students currently assigned.',
+                        loc.translate('noStudentsCurrentlyAssigned'),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       )
                     else
@@ -156,7 +163,8 @@ class MoreTab extends StatelessWidget {
                                         ),
                                         const SizedBox(width: 8),
                                         Text(
-                                          'Juz ${s.currentJuz}',
+                                          loc.tr('juzShort',
+                                              {'juz': '${s.currentJuz}'}),
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             color: p.inkSecondary,
@@ -178,7 +186,7 @@ class MoreTab extends StatelessWidget {
                 width: double.infinity,
                 child: ElevatedButton(
                   onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Close'),
+                  child: Text(loc.close),
                 ),
               ),
             ],
@@ -296,8 +304,7 @@ class MoreTab extends StatelessWidget {
                       icon: Icons.manage_accounts_rounded,
                       iconColor: p.primary,
                       title: loc.userManagement,
-                      subtitle:
-                          'Manage teachers, parents, circle assignments & access',
+                      subtitle: loc.translate('manageUsersSubtitle'),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -313,7 +320,7 @@ class MoreTab extends StatelessWidget {
                       icon: Icons.menu_book_rounded,
                       iconColor: p.primary,
                       title: loc.studyCircles,
-                      subtitle: 'Create circles, assign Ustazs & view enrollment',
+                      subtitle: loc.translate('manageCirclesSubtitle'),
                       onTap: () => HalaqahManagementSheet.show(context),
                     ),
                     _buildDivider(p),
@@ -322,8 +329,7 @@ class MoreTab extends StatelessWidget {
                       icon: Icons.vpn_key_rounded,
                       iconColor: p.gold,
                       title: loc.inviteCodes,
-                      subtitle:
-                          'Generate sign-up codes for teachers & parents',
+                      subtitle: loc.translate('generateInvitesSubtitle'),
                       onTap: () => InviteCodesBottomSheet.show(context),
                     ),
                   ],
@@ -342,8 +348,9 @@ class MoreTab extends StatelessWidget {
                   icon: Icons.school_rounded,
                   iconColor: p.primary,
                   title: loc.studyCircles,
-                  subtitle:
-                      '${AuthSessionService.instance.assignedHalaqahName} • Roster & Curriculum',
+                  subtitle: loc.tr('rosterAndCurriculumMeta', {
+                    'circle': AuthSessionService.instance.assignedHalaqahName,
+                  }),
                   onTap: () => _showTeacherHalaqahDialog(context),
                 ),
               ),
@@ -362,7 +369,7 @@ class MoreTab extends StatelessWidget {
                     iconColor: p.gold,
                     title: loc.schoolAnnouncements,
                     subtitle: isAdmin
-                        ? 'Broadcast notices to parents & teachers'
+                        ? loc.translate('broadcastNoticesSubtitle')
                         : loc.officialCirculars,
                     onTap: () => AnnouncementsSheet.show(context, initialTab: 1),
                     trailing: isAdmin
@@ -403,8 +410,8 @@ class MoreTab extends StatelessWidget {
                       iconColor: p.primary,
                       title: loc.tuitionAndFees,
                       subtitle: isParent
-                          ? 'Upload bank receipts & check monthly fee status'
-                          : 'Issue monthly tuition, verify receipts & overdue alerts',
+                          ? loc.translate('parentFeesSubtitle')
+                          : loc.translate('adminFeesSubtitle'),
                       onTap: () {
                         Navigator.push(
                           context,
@@ -513,7 +520,15 @@ class MoreTab extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             trailing ??
-                Icon(Icons.chevron_right_rounded, size: 20, color: p.inkMuted),
+                Builder(
+                  builder: (ctx) => Icon(
+                    Directionality.of(ctx) == TextDirection.rtl
+                        ? Icons.chevron_left_rounded
+                        : Icons.chevron_right_rounded,
+                    size: 20,
+                    color: p.inkMuted,
+                  ),
+                ),
           ],
         ),
       ),

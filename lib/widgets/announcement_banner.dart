@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../core/localization/app_localizations.dart';
 import '../core/models/announcement.dart';
 import '../core/theme/app_colors.dart';
 import 'pro_ui_kit.dart';
@@ -93,7 +94,9 @@ class AnnouncementBanner extends StatelessWidget {
                                   borderRadius: BorderRadius.circular(6),
                                 ),
                                 child: Text(
-                                  isPrayer ? 'REMINDER' : 'NOTICE',
+                                  isPrayer
+                                      ? AppLocalizations.of(context).reminderTag
+                                      : AppLocalizations.of(context).noticeTag,
                                   style: TextStyle(
                                     color: accent,
                                     fontSize: 9.5,

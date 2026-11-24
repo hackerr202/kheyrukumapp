@@ -138,16 +138,18 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  void _deleteTempFileSync(String? path) {
+  void _deleteTempFileAsync(String? path) {
     if (path == null || path.isEmpty) return;
-    try {
-      final f = File(path);
-      if (f.existsSync()) {
-        f.deleteSync();
+    unawaited(() async {
+      try {
+        final f = File(path);
+        if (await f.exists()) {
+          await f.delete();
+        }
+      } catch (e) {
+        debugPrint('[ChatScreen] Failed deleting temp file: $e');
       }
-    } catch (e) {
-      debugPrint('[ChatScreen] Failed deleting temp file: $e');
-    }
+    }());
   }
 
   @override
@@ -161,8 +163,8 @@ class _ChatScreenState extends State<ChatScreen>
     _audioPlayer.dispose();
     _audioRecorder.dispose();
 
-    _deleteTempFileSync(_currentRecordingPath);
-    _deleteTempFileSync(_failedRecordingPath);
+    _deleteTempFileAsync(_currentRecordingPath);
+    _deleteTempFileAsync(_failedRecordingPath);
 
     _msgCtrl.removeListener(_onMsgTextChanged);
     _recordingSecondsNotifier.dispose();
@@ -229,7 +231,9 @@ class _ChatScreenState extends State<ChatScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to send message: ${SupabaseService.cleanErrorMessage(e)}',
+              AppLocalizations.of(context).tr('failedSendMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -244,16 +248,15 @@ class _ChatScreenState extends State<ChatScreen>
     if (_isStartingRecording || _isRecordingVoice || _isUploadingAttachment) {
       return;
     }
+    final loc = AppLocalizations.of(context);
     _isStartingRecording = true;
     try {
       final hasPermission = await _audioRecorder.hasPermission();
       if (!hasPermission) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Microphone permission is required to record voice notes.',
-              ),
+            SnackBar(
+              content: Text(loc.translate('micPermissionRequiredMsg')),
             ),
           );
         }
@@ -266,7 +269,7 @@ class _ChatScreenState extends State<ChatScreen>
       if (!mounted) return;
 
       if (_failedRecordingPath != null) {
-        _deleteTempFileSync(_failedRecordingPath);
+        _deleteTempFileAsync(_failedRecordingPath);
         _failedRecordingPath = null;
         _failedRecordingDuration = 0;
       }
@@ -293,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen>
             await _audioRecorder.stop();
           }
         } catch (_) {}
-        _deleteTempFileSync(filePath);
+        _deleteTempFileAsync(filePath);
         _currentRecordingPath = null;
         return;
       }
@@ -313,13 +316,15 @@ class _ChatScreenState extends State<ChatScreen>
       });
     } catch (e) {
       debugPrint('[ChatScreen] Error starting voice record: $e');
-      _deleteTempFileSync(_currentRecordingPath);
+      _deleteTempFileAsync(_currentRecordingPath);
       _currentRecordingPath = null;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Could not start recording: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('couldNotStartRecordingMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -359,12 +364,13 @@ class _ChatScreenState extends State<ChatScreen>
     _failedRecordingPath = filePath;
     _failedRecordingDuration = duration;
     if (!mounted) return;
+    final loc = AppLocalizations.of(context);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
         duration: const Duration(seconds: 6),
         action: SnackBarAction(
-          label: 'Retry',
+          label: loc.retry,
           onPressed: _retryFailedVoiceUpload,
         ),
       ),
@@ -383,14 +389,15 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _uploadAndSendVoiceFile(String filePath, int duration) async {
+    final loc = AppLocalizations.of(context);
     var uploadAndSendSucceeded = false;
     try {
       final file = File(filePath);
       if (!await file.exists()) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Voice recording file is no longer available.'),
+            SnackBar(
+              content: Text(loc.translate('voiceFileUnavailableMsg')),
             ),
           );
         }
@@ -402,8 +409,8 @@ class _ChatScreenState extends State<ChatScreen>
         uploadAndSendSucceeded = true;
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text('Voice recording exceeds the 25 MB limit.'),
+            SnackBar(
+              content: Text(loc.translate('voiceExceedsLimitMsg')),
             ),
           );
         }
@@ -414,6 +421,9 @@ class _ChatScreenState extends State<ChatScreen>
       final ms = DateTime.now().millisecondsSinceEpoch;
       final fileName = 'voice_$ms.m4a';
       final targetPath = 'voice/${widget.conversationId}/$fileName';
+      final voiceLabel = loc.tr('voiceMessageWithDuration', {
+        'duration': _formatDuration(duration),
+      });
 
       Future<void> stageAndQueueOfflineVoice() async {
         final stagedPath = await OfflineSyncService.instance.stageMediaFile(
@@ -422,7 +432,7 @@ class _ChatScreenState extends State<ChatScreen>
         );
         final queued = await _sendMessage(
           type: 'voice',
-          contentOverride: 'Voice message (${_formatDuration(duration)})',
+          contentOverride: voiceLabel,
           attachmentName: fileName,
           audioDurationSeconds: duration,
           localMediaPath: stagedPath,
@@ -452,7 +462,7 @@ class _ChatScreenState extends State<ChatScreen>
       if (audioUrl != null) {
         final sent = await _sendMessage(
           type: 'voice',
-          contentOverride: 'Voice message (${_formatDuration(duration)})',
+          contentOverride: voiceLabel,
           attachmentUrl: audioUrl,
           attachmentName: fileName,
           audioDurationSeconds: duration,
@@ -474,7 +484,7 @@ class _ChatScreenState extends State<ChatScreen>
       _retainFailedVoiceRecording(
         filePath,
         duration,
-        'Failed to upload voice recording to cloud storage.',
+        loc.translate('failedUploadVoiceCloudMsg'),
       );
     } catch (e) {
       debugPrint('[ChatScreen] Error sending voice note: $e');
@@ -489,7 +499,9 @@ class _ChatScreenState extends State<ChatScreen>
           );
           final queued = await _sendMessage(
             type: 'voice',
-            contentOverride: 'Voice message (${_formatDuration(duration)})',
+            contentOverride: loc.tr('voiceMessageWithDuration', {
+              'duration': _formatDuration(duration),
+            }),
             attachmentName: fileName,
             audioDurationSeconds: duration,
             localMediaPath: stagedPath,
@@ -513,7 +525,7 @@ class _ChatScreenState extends State<ChatScreen>
       );
     } finally {
       if (uploadAndSendSucceeded) {
-        _deleteTempFileSync(filePath);
+        _deleteTempFileAsync(filePath);
       }
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
@@ -552,13 +564,17 @@ class _ChatScreenState extends State<ChatScreen>
         _retainFailedVoiceRecording(
           fallbackPath,
           duration,
-          'Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}',
+          AppLocalizations.of(context).tr('failedSendVoiceMsg', {
+            'error': SupabaseService.cleanErrorMessage(e),
+          }),
         );
       } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to stop recording: ${SupabaseService.cleanErrorMessage(e)}',
+              AppLocalizations.of(context).tr('failedStopRecordingMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -573,10 +589,11 @@ class _ChatScreenState extends State<ChatScreen>
   // --- Voice Playback ---
 
   Future<void> _togglePlayVoice(ChatMessage msg) async {
+    final loc = AppLocalizations.of(context);
     final url = msg.attachmentUrl;
     if (url == null || url.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Voice audio URL is not available.')),
+        SnackBar(content: Text(loc.translate('voiceUrlUnavailableMsg'))),
       );
       return;
     }
@@ -588,8 +605,8 @@ class _ChatScreenState extends State<ChatScreen>
         if (!await File(localPath).exists()) {
           if (mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
-              const SnackBar(
-                content: Text('Offline voice recording file not found.'),
+              SnackBar(
+                content: Text(loc.translate('offlineVoiceNotFoundMsg')),
               ),
             );
           }
@@ -601,7 +618,7 @@ class _ChatScreenState extends State<ChatScreen>
         if (!mounted) return;
         if (resolvedUrl == null || resolvedUrl.isEmpty) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not access voice note audio.')),
+            SnackBar(content: Text(loc.translate('couldNotAccessVoiceMsg'))),
           );
           return;
         }
@@ -636,7 +653,11 @@ class _ChatScreenState extends State<ChatScreen>
           _currentlyPlayingId = null;
         });
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error playing audio: $e')),
+          SnackBar(
+            content: Text(
+              loc.tr('errorPlayingAudioMsg', {'error': '$e'}),
+            ),
+          ),
         );
       } else {
         _currentlyPlayingId = null;
@@ -653,6 +674,7 @@ class _ChatScreenState extends State<ChatScreen>
   // --- Media Pickers ---
 
   Future<void> _pickAndSendImage({required ImageSource source}) async {
+    final loc = AppLocalizations.of(context);
     try {
       final picked = await _imagePicker.pickImage(
         source: source,
@@ -664,10 +686,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (size > _maxAttachmentBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Image exceeds the 25 MB limit. Please select a smaller file.',
-              ),
+            SnackBar(
+              content: Text(loc.translate('imageExceedsLimitMsg')),
             ),
           );
         }
@@ -728,8 +748,8 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         setState(() => _isUploadingAttachment = false);
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to upload image to cloud storage.'),
+          SnackBar(
+            content: Text(loc.translate('failedUploadImageMsg')),
           ),
         );
       }
@@ -742,7 +762,9 @@ class _ChatScreenState extends State<ChatScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to attach image: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('failedAttachImageMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -751,6 +773,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _pickAndSendVideo() async {
+    final loc = AppLocalizations.of(context);
     try {
       final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
       if (picked == null) return;
@@ -759,10 +782,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (size > _maxAttachmentBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Video exceeds the 25 MB limit. Please select a shorter clip.',
-              ),
+            SnackBar(
+              content: Text(loc.translate('videoExceedsLimitMsg')),
             ),
           );
         }
@@ -791,8 +812,8 @@ class _ChatScreenState extends State<ChatScreen>
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to upload video to cloud storage.'),
+          SnackBar(
+            content: Text(loc.translate('failedUploadVideoMsg')),
           ),
         );
       }
@@ -802,7 +823,9 @@ class _ChatScreenState extends State<ChatScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to attach video: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('failedAttachVideoMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -811,6 +834,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Future<void> _pickAndSendDocument() async {
+    final loc = AppLocalizations.of(context);
     try {
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
@@ -823,10 +847,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (file.size > _maxAttachmentBytes) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Document exceeds the 25 MB limit. Please select a smaller file.',
-              ),
+            SnackBar(
+              content: Text(loc.translate('docExceedsLimitMsg')),
             ),
           );
         }
@@ -848,10 +870,8 @@ class _ChatScreenState extends State<ChatScreen>
         if (mounted) {
           setState(() => _isUploadingAttachment = false);
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text(
-                'Document exceeds the 25 MB limit. Please select a smaller file.',
-              ),
+            SnackBar(
+              content: Text(loc.translate('docExceedsLimitMsg')),
             ),
           );
         }
@@ -876,8 +896,8 @@ class _ChatScreenState extends State<ChatScreen>
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text('Failed to upload document to cloud storage.'),
+          SnackBar(
+            content: Text(loc.translate('failedUploadDocMsg')),
           ),
         );
       }
@@ -887,7 +907,9 @@ class _ChatScreenState extends State<ChatScreen>
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to attach document: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('failedAttachDocMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
           ),
         );
@@ -905,7 +927,7 @@ class _ChatScreenState extends State<ChatScreen>
       builder: (ctx) {
         return ProBottomSheetShell(
           title: loc.shareAttachment,
-          subtitle: 'Photos, videos, files, or Quranic reflection',
+          subtitle: loc.translate('shareAttachmentSubtitle'),
           icon: Icons.attach_file_rounded,
           iconColor: p.primary,
           heightFactor: 0.34,
@@ -917,7 +939,7 @@ class _ChatScreenState extends State<ChatScreen>
                 _buildAttachmentOption(
                   p: p,
                   icon: Icons.camera_alt_rounded,
-                  label: 'Camera',
+                  label: loc.translate('cameraOption'),
                   color: p.danger,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -927,7 +949,7 @@ class _ChatScreenState extends State<ChatScreen>
                 _buildAttachmentOption(
                   p: p,
                   icon: Icons.photo_library_rounded,
-                  label: 'Gallery',
+                  label: loc.translate('galleryOption'),
                   color: p.primary,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -937,7 +959,7 @@ class _ChatScreenState extends State<ChatScreen>
                 _buildAttachmentOption(
                   p: p,
                   icon: Icons.videocam_rounded,
-                  label: 'Video',
+                  label: loc.translate('videoOption'),
                   color: p.excused,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -957,7 +979,7 @@ class _ChatScreenState extends State<ChatScreen>
                 _buildAttachmentOption(
                   p: p,
                   icon: Icons.auto_stories_rounded,
-                  label: 'Ayah Quote',
+                  label: loc.translate('ayahQuoteOption'),
                   color: p.gold,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -1012,12 +1034,12 @@ class _ChatScreenState extends State<ChatScreen>
   void _sendQuranAyahQuote() {
     _sendMessage(
       type: 'text',
-      contentOverride:
-          'Surah Al-Kahf (18:10): "Our Lord, grant us from Yourself mercy and prepare for us from our affair right guidance."',
+      contentOverride: AppLocalizations.of(context).translate('ayahKahf1810Quote'),
     );
   }
 
   void _openFullScreenImageViewer(String imageUrl, String? caption) {
+    final loc = AppLocalizations.of(context);
     Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => Scaffold(
@@ -1034,7 +1056,7 @@ class _ChatScreenState extends State<ChatScreen>
               IconButton(
                 icon:
                     const Icon(Icons.open_in_browser_rounded, color: Colors.white),
-                tooltip: 'Open in browser',
+                tooltip: loc.translate('openInBrowserTooltip'),
                 onPressed: () async {
                   final resolvedUrl =
                       await StorageService.resolveSignedUrl(imageUrl) ?? imageUrl;
@@ -1060,15 +1082,17 @@ class _ChatScreenState extends State<ChatScreen>
                     color: AppColors.goldWarm,
                   ),
                 ),
-                errorWidget: const Center(
+                errorWidget: Center(
                   child: Column(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.broken_image_rounded,
+                      const Icon(Icons.broken_image_rounded,
                           size: 64, color: Colors.white54),
-                      SizedBox(height: 12),
-                      Text('Failed to load image preview',
-                          style: TextStyle(color: Colors.white70)),
+                      const SizedBox(height: 12),
+                      Text(
+                        loc.translate('failedLoadImagePreview'),
+                        style: const TextStyle(color: Colors.white70),
+                      ),
                     ],
                   ),
                 ),
@@ -1191,7 +1215,9 @@ class _ChatScreenState extends State<ChatScreen>
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Failed to delete message: ${SupabaseService.cleanErrorMessage(e)}',
+                                AppLocalizations.of(context).tr('failedDeleteMsg', {
+                                  'error': SupabaseService.cleanErrorMessage(e),
+                                }),
                               ),
                               backgroundColor: p.danger,
                             ),
@@ -1223,14 +1249,15 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     final subtitleLabel = widget.targetRole == 'teacher'
-        ? 'Ustaz Direct Channel'
+        ? loc.translate('ustazDirectChannel')
         : (widget.targetRole == 'parent'
-            ? 'Parent Direct Channel'
+            ? loc.translate('parentDirectChannel')
             : (widget.targetRole == 'admin'
-                ? 'Center Administration'
-                : 'Center Channel'));
+                ? loc.translate('centerAdministrationTitle')
+                : loc.translate('centerChannel')));
 
     return Scaffold(
       backgroundColor: p.canvas,
@@ -1323,7 +1350,7 @@ class _ChatScreenState extends State<ChatScreen>
                                     size: 26, color: p.primary),
                                 const SizedBox(height: 10),
                                 Text(
-                                  'Direct School Channel',
+                                  loc.translate('directSchoolChannel'),
                                   style: TextStyle(
                                     color: p.ink,
                                     fontSize: 14,
@@ -1332,7 +1359,7 @@ class _ChatScreenState extends State<ChatScreen>
                                 ),
                                 const SizedBox(height: 4),
                                 Text(
-                                  'Send a message, document, photo, or voice note to begin.',
+                                  loc.translate('emptyChatPrompt'),
                                   textAlign: TextAlign.center,
                                   style: TextStyle(
                                       color: p.inkSecondary, fontSize: 12),
@@ -1376,7 +1403,7 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                       const SizedBox(width: 10),
                       Text(
-                        'Uploading attachment to cloud...',
+                        loc.translate('uploadingAttachmentToCloud'),
                         style: TextStyle(
                           fontSize: 12,
                           color: p.ink,
@@ -1521,7 +1548,7 @@ class _ChatScreenState extends State<ChatScreen>
         const SizedBox(width: 12),
         Expanded(
           child: Text(
-            'Recording voice note...',
+            AppLocalizations.of(context).translate('recordingVoiceNoteLabel'),
             style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
           ),
         ),
@@ -1606,7 +1633,8 @@ class _ChatScreenState extends State<ChatScreen>
                         borderRadius: BorderRadius.circular(5),
                       ),
                       child: Text(
-                        msg.senderRole.toUpperCase(),
+                        AppLocalizations.of(context)
+                            .localizedRoleBadge(msg.senderRole),
                         style: TextStyle(
                           fontSize: 8.5,
                           fontWeight: FontWeight.w700,
@@ -1643,7 +1671,7 @@ class _ChatScreenState extends State<ChatScreen>
                   const Spacer(),
                   if (msg.isEdited)
                     Text(
-                      'edited ',
+                      AppLocalizations.of(context).translate('editedTag'),
                       style: TextStyle(
                         fontSize: 9.5,
                         fontStyle: FontStyle.italic,
@@ -1883,15 +1911,15 @@ class _ChatScreenState extends State<ChatScreen>
                     color: Colors.black.withOpacity(0.6),
                     borderRadius: BorderRadius.circular(8),
                   ),
-                  child: const Row(
+                  child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.zoom_in_rounded,
+                      const Icon(Icons.zoom_in_rounded,
                           size: 12, color: Colors.white),
-                      SizedBox(width: 3),
+                      const SizedBox(width: 3),
                       Text(
-                        'View',
-                        style: TextStyle(
+                        AppLocalizations.of(context).translate('viewAction'),
+                        style: const TextStyle(
                           color: Colors.white,
                           fontSize: 10,
                           fontWeight: FontWeight.w700,
@@ -1917,6 +1945,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildVideoBubbleContent(
       ChatMessage msg, bool isMe, Color textColor) {
+    final loc = AppLocalizations.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () async {
@@ -1956,7 +1985,7 @@ class _ChatScreenState extends State<ChatScreen>
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    msg.attachmentName ?? 'Video File',
+                    msg.attachmentName ?? loc.translate('videoFileFallback'),
                     style: TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
@@ -1966,7 +1995,7 @@ class _ChatScreenState extends State<ChatScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'Tap to play video',
+                    loc.translate('tapToPlayVideo'),
                     style: TextStyle(
                       fontSize: 10.5,
                       color: textColor.withOpacity(0.75),
@@ -1983,6 +2012,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   Widget _buildDocumentBubbleContent(
       ChatMessage msg, bool isMe, Color textColor) {
+    final loc = AppLocalizations.of(context);
     return InkWell(
       borderRadius: BorderRadius.circular(12),
       onTap: () async {
@@ -1995,7 +2025,7 @@ class _ChatScreenState extends State<ChatScreen>
           } else {
             if (context.mounted) {
               ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Could not open document URL.')),
+                SnackBar(content: Text(loc.translate('couldNotOpenDocUrl'))),
               );
             }
           }
@@ -2034,7 +2064,7 @@ class _ChatScreenState extends State<ChatScreen>
                     overflow: TextOverflow.ellipsis,
                   ),
                   Text(
-                    'Tap to view / download',
+                    loc.translate('tapToViewDownload'),
                     style: TextStyle(
                       fontSize: 10.5,
                       color: textColor.withOpacity(0.75),
@@ -2099,7 +2129,7 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
         autofocus: true,
         maxLines: 4,
         minLines: 1,
-        decoration: const InputDecoration(hintText: 'Enter updated message...'),
+        decoration: InputDecoration(hintText: loc.translate('enterUpdatedMsgHint')),
       ),
       actions: [
         TextButton(
@@ -2132,14 +2162,16 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to edit message: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedEditMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: widget.palette.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSaving ? 'Saving...' : loc.save),
+          child: Text(_isSaving ? loc.savingProgress : loc.save),
         ),
       ],
     );

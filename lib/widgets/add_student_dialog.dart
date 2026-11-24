@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import '../core/localization/app_localizations.dart';
+import '../core/models/student.dart';
 import '../core/services/halaqah_service.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/student_service.dart';
@@ -9,23 +10,29 @@ import '../core/theme/app_colors.dart';
 import '../screens/admin/halaqah_management_sheet.dart';
 import 'pro_ui_kit.dart';
 
-/// Flagship Stateful Dialog for Enrolling Students with full controller disposal.
+/// Flagship Stateful Dialog for Enrolling & Editing Students with full controller disposal.
 class AddStudentDialog extends StatefulWidget {
   final ScaffoldMessengerState? hostMessenger;
   final BuildContext? hostContext;
+  final Student? existingStudent;
 
   const AddStudentDialog({
     super.key,
     this.hostMessenger,
     this.hostContext,
+    this.existingStudent,
   });
 
-  static Future<void> show(BuildContext context) {
+  static Future<void> show(
+    BuildContext context, {
+    Student? existingStudent,
+  }) {
     return showDialog<void>(
       context: context,
       builder: (_) => AddStudentDialog(
         hostMessenger: ScaffoldMessenger.of(context),
         hostContext: Navigator.of(context).context,
+        existingStudent: existingStudent,
       ),
     );
   }
@@ -41,6 +48,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   final _parentPhoneCtrl = TextEditingController();
   final _parentEmailCtrl = TextEditingController();
 
+  String? _gender; // 'male', 'female', or null
   String? _avatarUrl;
   bool _isUploadingAvatar = false;
   String? _selectedHalaqahId;
@@ -52,10 +60,38 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   static const int _ayah = 1;
   bool _isSaving = false;
 
+  bool get _isEditing => widget.existingStudent != null;
+
   @override
   void initState() {
     super.initState();
     final halaqahs = HalaqahService.instance.halaqahs;
+    final existing = widget.existingStudent;
+    if (existing != null) {
+      _nameCtrl.text = existing.fullName;
+      _ageCtrl.text = '${existing.age}';
+      _gender = Student.normalizeGender(existing.gender);
+      _avatarUrl = existing.avatarUrl;
+      _juz = existing.currentJuz;
+      _surah = existing.currentSurah;
+      if (existing.halaqahId != null &&
+          halaqahs.any((h) => h.id == existing.halaqahId)) {
+        _selectedHalaqahId = existing.halaqahId;
+        _selectedHalaqahName = existing.halaqahName;
+      } else if (halaqahs.isNotEmpty) {
+        final match = halaqahs.where(
+          (h) => h.name.toLowerCase() == existing.halaqahName.toLowerCase(),
+        );
+        final resolved = match.isNotEmpty ? match.first : halaqahs.first;
+        _selectedHalaqahId = resolved.id;
+        _selectedHalaqahName = resolved.name;
+      } else {
+        _selectedHalaqahName = existing.halaqahName;
+      }
+      _createNewParent = false;
+      return;
+    }
+
     if (halaqahs.isNotEmpty) {
       _selectedHalaqahId = halaqahs.first.id;
       _selectedHalaqahName = halaqahs.first.name;
@@ -111,10 +147,37 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
 
   Future<void> _submit(int? parsedAge) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final messenger = widget.hostMessenger ?? ScaffoldMessenger.of(context);
     final currentParents = StudentService.instance.getRegisteredParents();
     setState(() => _isSaving = true);
     try {
+      if (_isEditing) {
+        final updated = await StudentService.instance.updateStudent(
+          existing: widget.existingStudent!,
+          fullName: _nameCtrl.text.trim(),
+          age: parsedAge ?? widget.existingStudent!.age,
+          gender: _gender,
+          avatarUrl: _avatarUrl,
+          halaqahName: _selectedHalaqahName,
+          halaqahId: _selectedHalaqahId,
+          currentJuz: _juz,
+          currentSurah: _surah,
+          currentAyah: widget.existingStudent!.currentAyah,
+        );
+        if (!mounted) return;
+        Navigator.of(context).pop();
+        messenger.showSnackBar(
+          SnackBar(
+            content: Text(
+              loc.tr('studentUpdatedMsg', {'name': updated.fullName}),
+            ),
+            backgroundColor: p.success,
+          ),
+        );
+        return;
+      }
+
       String finalParentId = '';
       String finalParentName = _parentNameCtrl.text.trim();
       String finalParentPhone = _parentPhoneCtrl.text.trim();
@@ -134,11 +197,12 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       final student = await StudentService.instance.addStudent(
         fullName: _nameCtrl.text.trim(),
         age: parsedAge ?? 8,
+        gender: _gender,
         avatarUrl: _avatarUrl,
         halaqahName: _selectedHalaqahName,
         halaqahId: _selectedHalaqahId,
         parentId: finalParentId,
-        parentName: finalParentName.isNotEmpty ? finalParentName : 'Parent',
+        parentName: finalParentName.isNotEmpty ? finalParentName : loc.roleParent,
         parentPhone: finalParentPhone,
         parentEmail: _parentEmailCtrl.text.trim(),
         currentJuz: _juz,
@@ -166,7 +230,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       Navigator.of(context).pop();
       messenger.showSnackBar(
         SnackBar(
-          content: Text('Student "${student.fullName}" enrolled successfully.'),
+          content: Text(
+            loc.tr('studentEnrolledMsg', {'name': student.fullName}),
+          ),
           backgroundColor: p.success,
         ),
       );
@@ -177,12 +243,67 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
       messenger.showSnackBar(
         SnackBar(
           content: Text(
-            'Enrollment failed: ${SupabaseService.cleanErrorMessage(e)}',
+            loc.tr(
+              _isEditing ? 'updateFailedMsg' : 'enrollmentFailedMsg',
+              {'error': SupabaseService.cleanErrorMessage(e)},
+            ),
           ),
           backgroundColor: p.danger,
         ),
       );
     }
+  }
+
+  Widget _buildGenderOption(
+    AppPalette p, {
+    required String value,
+    required String label,
+    required IconData icon,
+  }) {
+    final isSelected = _gender == value;
+    final Color activeColor = value == 'male' ? p.primary : p.gold;
+    return Expanded(
+      child: InkWell(
+        borderRadius: BorderRadius.circular(12),
+        onTap: () {
+          setState(() {
+            _gender = isSelected ? null : value;
+          });
+        },
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          padding: const EdgeInsets.symmetric(vertical: 11, horizontal: 12),
+          decoration: BoxDecoration(
+            color:
+                isSelected ? activeColor.withOpacity(0.13) : p.surfaceSubtle,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(
+              color: isSelected ? activeColor : p.border,
+              width: isSelected ? 1.5 : 1,
+            ),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                size: 18,
+                color: isSelected ? activeColor : p.inkSecondary,
+              ),
+              const SizedBox(width: 6),
+              Text(
+                label,
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: isSelected ? FontWeight.w700 : FontWeight.w600,
+                  color: isSelected ? activeColor : p.inkSecondary,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -196,11 +317,14 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
     final bool isAgeValid =
         parsedAge != null && parsedAge > 0 && parsedAge <= 99;
 
+    final bool hasValidParent = _isEditing ||
+        (!_createNewParent && _selectedParentId != null) ||
+        (_createNewParent && _parentNameCtrl.text.trim().isNotEmpty);
+
     final bool canSubmit = _nameCtrl.text.trim().isNotEmpty &&
         isAgeValid &&
-        ((!_createNewParent && _selectedParentId != null) ||
-            (_createNewParent && _parentNameCtrl.text.trim().isNotEmpty)) &&
-        _selectedHalaqahId != null &&
+        hasValidParent &&
+        (_selectedHalaqahId != null || _isEditing) &&
         !_isSaving &&
         !_isUploadingAvatar;
 
@@ -231,7 +355,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                           borderRadius: BorderRadius.circular(12),
                         ),
                         child: Icon(
-                          Icons.person_add_rounded,
+                          _isEditing
+                              ? Icons.edit_rounded
+                              : Icons.person_add_rounded,
                           color: p.primary,
                           size: 22,
                         ),
@@ -242,7 +368,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              loc.enrollStudent,
+                              _isEditing ? loc.editStudent : loc.enrollStudent,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -252,7 +378,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                               ),
                             ),
                             Text(
-                              loc.parentLinkage,
+                              _isEditing
+                                  ? widget.existingStudent!.fullName
+                                  : loc.parentLinkage,
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                               style: TextStyle(
@@ -408,6 +536,35 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               const SizedBox(height: 16),
 
               Text(
+                loc.studentGender,
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: p.inkMuted,
+                  letterSpacing: 0.6,
+                ),
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  _buildGenderOption(
+                    p,
+                    value: 'male',
+                    label: loc.male,
+                    icon: Icons.male_rounded,
+                  ),
+                  const SizedBox(width: 10),
+                  _buildGenderOption(
+                    p,
+                    value: 'female',
+                    label: loc.female,
+                    icon: Icons.female_rounded,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+
+              Text(
                 loc.assignedCircle,
                 style: TextStyle(
                   fontSize: 11,
@@ -432,7 +589,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          'No halaqahs yet. Create one first.',
+                          loc.translate('noHalaqahsYetMsg'),
                           style: TextStyle(fontSize: 12, color: p.ink),
                         ),
                       ),
@@ -443,7 +600,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                           Navigator.of(context).pop();
                           HalaqahManagementSheet.show(hostCtx);
                         },
-                        child: const Text('Create'),
+                        child: Text(loc.create),
                       ),
                     ],
                   ),
@@ -479,94 +636,96 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 ),
               const SizedBox(height: 16),
 
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Flexible(
-                    child: Text(
-                      loc.parentLinkage,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: p.inkMuted,
-                        letterSpacing: 0.6,
-                      ),
-                    ),
-                  ),
-                  if (currentParents.isNotEmpty)
-                    InkWell(
-                      onTap: () =>
-                          setState(() => _createNewParent = !_createNewParent),
+              if (!_isEditing) ...[
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Flexible(
                       child: Text(
-                        _createNewParent
-                            ? loc.parentsTab
-                            : '+ ${loc.create}',
+                        loc.parentLinkage,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(
-                          fontSize: 11.5,
-                          color: p.primary,
+                          fontSize: 11,
                           fontWeight: FontWeight.w700,
+                          color: p.inkMuted,
+                          letterSpacing: 0.6,
                         ),
                       ),
                     ),
-                ],
-              ),
-              const SizedBox(height: 6),
-
-              if (!_createNewParent && currentParents.isNotEmpty)
-                DropdownButtonFormField<String>(
-                  value: _selectedParentId,
-                  isExpanded: true,
-                  dropdownColor: p.surface,
-                  style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: const InputDecoration(
-                    prefixIcon: Icon(Icons.family_restroom_rounded, size: 20),
-                  ),
-                  items: currentParents.map((parent) {
-                    return DropdownMenuItem(
-                      value: parent['id'],
-                      child: Text(
-                        '${parent['name']} (${parent['phone'] ?? parent['email'] ?? 'Parent'})',
-                        overflow: TextOverflow.ellipsis,
+                    if (currentParents.isNotEmpty)
+                      InkWell(
+                        onTap: () =>
+                            setState(() => _createNewParent = !_createNewParent),
+                        child: Text(
+                          _createNewParent
+                              ? loc.parentsTab
+                              : '+ ${loc.create}',
+                          style: TextStyle(
+                            fontSize: 11.5,
+                            color: p.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
                       ),
-                    );
-                  }).toList(),
-                  onChanged: (val) {
-                    setState(() => _selectedParentId = val);
-                  },
-                )
-              else ...[
-                TextField(
-                  controller: _parentNameCtrl,
-                  onChanged: (_) => setState(() {}),
-                  style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: InputDecoration(
-                    hintText: loc.fullName,
-                    prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
-                  ),
+                  ],
                 ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _parentPhoneCtrl,
-                  keyboardType: TextInputType.phone,
-                  style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: InputDecoration(
-                    hintText: loc.phoneOptional,
-                    prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                const SizedBox(height: 6),
+
+                if (!_createNewParent && currentParents.isNotEmpty)
+                  DropdownButtonFormField<String>(
+                    value: _selectedParentId,
+                    isExpanded: true,
+                    dropdownColor: p.surface,
+                    style: TextStyle(fontSize: 13.5, color: p.ink),
+                    decoration: const InputDecoration(
+                      prefixIcon: Icon(Icons.family_restroom_rounded, size: 20),
+                    ),
+                    items: currentParents.map((parent) {
+                      return DropdownMenuItem(
+                        value: parent['id'],
+                        child: Text(
+                          '${parent['name']} (${parent['phone'] ?? parent['email'] ?? loc.roleParent})',
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      );
+                    }).toList(),
+                    onChanged: (val) {
+                      setState(() => _selectedParentId = val);
+                    },
+                  )
+                else ...[
+                  TextField(
+                    controller: _parentNameCtrl,
+                    onChanged: (_) => setState(() {}),
+                    style: TextStyle(fontSize: 13.5, color: p.ink),
+                    decoration: InputDecoration(
+                      hintText: loc.fullName,
+                      prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                TextField(
-                  controller: _parentEmailCtrl,
-                  keyboardType: TextInputType.emailAddress,
-                  style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: InputDecoration(
-                    hintText: loc.parentEmailOptional,
-                    prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _parentPhoneCtrl,
+                    keyboardType: TextInputType.phone,
+                    style: TextStyle(fontSize: 13.5, color: p.ink),
+                    decoration: InputDecoration(
+                      hintText: loc.phoneOptional,
+                      prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                    ),
                   ),
-                ),
+                  const SizedBox(height: 8),
+                  TextField(
+                    controller: _parentEmailCtrl,
+                    keyboardType: TextInputType.emailAddress,
+                    style: TextStyle(fontSize: 13.5, color: p.ink),
+                    decoration: InputDecoration(
+                      hintText: loc.parentEmailOptional,
+                      prefixIcon: const Icon(Icons.email_outlined, size: 20),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
               ],
-              const SizedBox(height: 16),
 
               Text(
                 loc.startingMilestone,
@@ -629,7 +788,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : Text(loc.enrollStudent),
+                          : Text(_isEditing ? loc.save : loc.enrollStudent),
                     ),
                   ),
                 ],

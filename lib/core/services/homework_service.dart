@@ -26,6 +26,7 @@ class HomeworkService {
   bool _cacheLoaded = false;
   RealtimeChannel? _assignmentsChannel;
   RealtimeChannel? _submissionsChannel;
+  Timer? _realtimeDebounce;
 
   final StreamController<List<HomeworkAssignment>> _assignmentsController =
       StreamController<List<HomeworkAssignment>>.broadcast();
@@ -174,6 +175,8 @@ class HomeworkService {
   Future<void> clearOnLogout() async {
     final uid = _uid;
     final client = SupabaseService.instance.client;
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = null;
     final assignCh = _assignmentsChannel;
     final subCh = _submissionsChannel;
     _assignmentsChannel = null;
@@ -264,6 +267,15 @@ class HomeworkService {
     }
   }
 
+  void _scheduleRealtimeRefresh() {
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        fetchFromCloud();
+      }
+    });
+  }
+
   Future<void> _subscribeRealtime() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
@@ -281,7 +293,7 @@ class HomeworkService {
             schema: 'public',
             table: 'homework_assignments',
             callback: (payload) async {
-              await fetchFromCloud();
+              _scheduleRealtimeRefresh();
               final newRow = payload.newRecord;
               if (newRow.isEmpty) return;
               final halaqahId = newRow['halaqah_id']?.toString() ?? '';
@@ -316,7 +328,7 @@ class HomeworkService {
             schema: 'public',
             table: 'homework_submissions',
             callback: (payload) async {
-              await fetchFromCloud();
+              _scheduleRealtimeRefresh();
               final newRow = payload.newRecord;
               if (newRow.isEmpty) return;
               final status = newRow['status']?.toString() ?? '';

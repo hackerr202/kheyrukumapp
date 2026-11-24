@@ -60,23 +60,26 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
     );
 
     if (mounted) {
+      final loc = AppLocalizations.of(context);
       setState(() {
         _isGenerating = false;
         if (res['success'] == true) {
           _newlyGeneratedCode = res['code'];
           _targetEmailController.clear();
         } else {
-          _errorMessage = res['message'] ?? 'Failed to generate code';
+          _errorMessage =
+              res['message'] ?? loc.translate('failedGenerateCodeMsg');
         }
       });
     }
   }
 
   void _copyToClipboard(String code) {
+    final loc = AppLocalizations.of(context);
     Clipboard.setData(ClipboardData(text: code));
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
-        content: Text('Copied "$code" to clipboard.'),
+        content: Text(loc.tr('copiedCodeMsg', {'code': code})),
         duration: const Duration(seconds: 2),
         backgroundColor: AppColors.of(context).primary,
       ),
@@ -255,7 +258,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Active Code Ready',
+                            loc.translate('activeCodeReadyTitle'),
                             style: TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
@@ -278,7 +281,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     IconButton(
                       icon: Icon(Icons.copy_rounded, color: p.success, size: 18),
                       onPressed: () => _copyToClipboard(_newlyGeneratedCode!),
-                      tooltip: 'Copy Code',
+                      tooltip: loc.copyCodeTooltip,
                     ),
                   ],
                 ),
@@ -293,7 +296,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Live Invitation Codes',
+                  loc.translate('liveInvitationCodesTitle'),
                   style: TextStyle(
                     fontSize: 13.5,
                     fontWeight: FontWeight.w700,
@@ -301,7 +304,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                   ),
                 ),
                 ProStatusPill(
-                  label: 'REALTIME',
+                  label: loc.live,
                   icon: Icons.sync_rounded,
                   color: p.primary,
                 ),
@@ -327,7 +330,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                   if (codes.isEmpty) {
                     return Center(
                       child: Text(
-                        'No invitation codes generated yet.',
+                        loc.translate('noInviteCodesGeneratedYet'),
                         style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
                       ),
                     );
@@ -356,7 +359,9 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                         child: Row(
                           children: [
                             ProStatusPill(
-                              label: isTeacher ? 'TEACHER' : 'PARENT',
+                              label: isTeacher
+                                  ? loc.translate('teacherRoleTag')
+                                  : loc.translate('parentRoleTag'),
                               color: roleColor,
                             ),
                             const SizedBox(width: 8),
@@ -388,14 +393,16 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                               ),
                             ),
                             ProStatusPill(
-                              label: item.isUsed ? 'USED' : 'ACTIVE',
+                              label: item.isUsed
+                                  ? loc.translate('usedTag')
+                                  : loc.translate('activeTag'),
                               color: item.isUsed ? p.inkMuted : p.success,
                             ),
                             IconButton(
                               icon: const Icon(Icons.copy_rounded, size: 16),
                               color: p.inkSecondary,
                               onPressed: () => _copyToClipboard(item.code),
-                              tooltip: 'Copy Code',
+                              tooltip: loc.copyCodeTooltip,
                               visualDensity: VisualDensity.compact,
                             ),
                           ],

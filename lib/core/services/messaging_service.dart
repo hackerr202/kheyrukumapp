@@ -28,6 +28,7 @@ class MessagingService {
   final Map<String, StreamController<List<ChatMessage>>> _chatControllers = {};
   RealtimeChannel? _realtimeMessagesSubscription;
   RealtimeChannel? _realtimeConvosSubscription;
+  Timer? _convosRealtimeDebounce;
 
   final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(false);
   final ValueNotifier<String?> errorNotifier = ValueNotifier<String?>(null);
@@ -54,6 +55,8 @@ class MessagingService {
   Future<void> clearOnLogout() async {
     final uid = _uid;
     final client = SupabaseService.instance.client;
+    _convosRealtimeDebounce?.cancel();
+    _convosRealtimeDebounce = null;
     final msgCh = _realtimeMessagesSubscription;
     final convoCh = _realtimeConvosSubscription;
     _realtimeMessagesSubscription = null;
@@ -190,6 +193,15 @@ class MessagingService {
     }
   }
 
+  void _scheduleConvosRefresh() {
+    _convosRealtimeDebounce?.cancel();
+    _convosRealtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        fetchConversationsFromCloud();
+      }
+    });
+  }
+
   Future<void> _initCloudSync() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
@@ -208,7 +220,7 @@ class MessagingService {
             event: PostgresChangeEvent.all,
             schema: 'public',
             table: 'conversations',
-            callback: (_) => fetchConversationsFromCloud(),
+            callback: (_) => _scheduleConvosRefresh(),
           )
           .subscribe();
 

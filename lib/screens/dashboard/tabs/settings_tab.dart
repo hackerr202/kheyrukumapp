@@ -622,7 +622,7 @@ class _SettingsTabState extends State<SettingsTab> {
                         children: [
                           Expanded(
                             child: _LanguageOptionCard(
-                              label: 'English',
+                              label: loc.languageEnglishLabel,
                               nativeLabel: 'English',
                               isSelected: currentLang == 'en',
                               p: p,
@@ -635,7 +635,7 @@ class _SettingsTabState extends State<SettingsTab> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _LanguageOptionCard(
-                              label: 'Arabic',
+                              label: loc.languageArabicLabel,
                               nativeLabel: 'العربية',
                               isSelected: currentLang == 'ar',
                               p: p,
@@ -648,7 +648,7 @@ class _SettingsTabState extends State<SettingsTab> {
                           const SizedBox(width: 8),
                           Expanded(
                             child: _LanguageOptionCard(
-                              label: 'Amharic',
+                              label: loc.languageAmharicLabel,
                               nativeLabel: 'አማርኛ',
                               isSelected: currentLang == 'am',
                               p: p,

@@ -70,13 +70,14 @@ class _StudentsTabState extends State<StudentsTab> {
               return _buildAdminView(context, students, p);
             }
 
-            return const Center(
+            return Center(
               child: Padding(
-                padding: EdgeInsets.all(24),
+                padding: const EdgeInsets.all(24),
                 child: ProEmptyState(
                   icon: Icons.lock_outline_rounded,
-                  title: 'Access Restricted',
-                  message: 'Your session permissions could not be verified.',
+                  title: AppLocalizations.of(context).accessRestrictedTitle,
+                  message: AppLocalizations.of(context)
+                      .sessionPermissionsUnverified,
                 ),
               ),
             );
@@ -145,8 +146,8 @@ class _StudentsTabState extends State<StudentsTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'ASSIGNED CLASS',
-                            style: TextStyle(
+                            loc.translate('assignedClassHeader'),
+                            style: const TextStyle(
                               fontSize: 10.5,
                               fontWeight: FontWeight.w700,
                               letterSpacing: 1.0,
@@ -177,7 +178,11 @@ class _StudentsTabState extends State<StudentsTab> {
                         borderRadius: BorderRadius.circular(20),
                       ),
                       child: Text(
-                        '${classStudents.length} Students',
+                        classStudents.length == 1
+                            ? loc.translate('studentBadgeOne')
+                            : loc.tr('studentsBadgeLabel', {
+                                'count': '${classStudents.length}',
+                              }),
                         style: const TextStyle(
                           color: Colors.white,
                           fontWeight: FontWeight.w700,
@@ -229,7 +234,10 @@ class _StudentsTabState extends State<StudentsTab> {
                             const SizedBox(width: 6),
                             Text(
                               isToday
-                                  ? 'Today (${_teacherSelectedDate.month}/${_teacherSelectedDate.day})'
+                                  ? loc.tr('todayDateParens', {
+                                      'date':
+                                          '${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
+                                    })
                                   : '${_teacherSelectedDate.year}-${_teacherSelectedDate.month.toString().padLeft(2, '0')}-${_teacherSelectedDate.day.toString().padLeft(2, '0')}',
                               style: const TextStyle(
                                 fontSize: 12,
@@ -265,8 +273,8 @@ class _StudentsTabState extends State<StudentsTab> {
                                 if (context.mounted) {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
-                                      content: const Text(
-                                        'All class students marked Present. Parents notified.',
+                                      content: Text(
+                                        loc.translate('allPresentSuccessMsg'),
                                       ),
                                       backgroundColor: p.success,
                                     ),
@@ -278,7 +286,11 @@ class _StudentsTabState extends State<StudentsTab> {
                                   ScaffoldMessenger.of(context).showSnackBar(
                                     SnackBar(
                                       content: Text(
-                                        'Failed to mark attendance: ${SupabaseService.cleanErrorMessage(e)}',
+                                        loc.tr('failedMarkAttendanceMsg', {
+                                          'error':
+                                              SupabaseService.cleanErrorMessage(
+                                                  e),
+                                        }),
                                       ),
                                       backgroundColor: p.danger,
                                     ),
@@ -287,9 +299,9 @@ class _StudentsTabState extends State<StudentsTab> {
                               }
                             },
                       icon: const Icon(Icons.done_all_rounded, size: 15),
-                      label: const Text(
-                        'All Present',
-                        style: TextStyle(
+                      label: Text(
+                        loc.translate('allPresentAction'),
+                        style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
                         ),
@@ -312,20 +324,20 @@ class _StudentsTabState extends State<StudentsTab> {
                 // 5-Column Glass Attendance Summary
                 Row(
                   children: [
-                    _buildAttCounterChip('Present', '$presentCount',
-                        const Color(0xFF4ADE80)),
+                    _buildAttCounterChip(
+                        loc.present, '$presentCount', const Color(0xFF4ADE80)),
                     const SizedBox(width: 6),
                     _buildAttCounterChip(
-                        'Late', '$lateCount', AppColors.goldWarm),
+                        loc.lateStatus, '$lateCount', AppColors.goldWarm),
                     const SizedBox(width: 6),
                     _buildAttCounterChip(
-                        'Absent', '$absentCount', const Color(0xFFFCA5A5)),
+                        loc.absent, '$absentCount', const Color(0xFFFCA5A5)),
                     const SizedBox(width: 6),
                     _buildAttCounterChip(
-                        'Excused', '$excusedCount', const Color(0xFFC4B5FD)),
+                        loc.excused, '$excusedCount', const Color(0xFFC4B5FD)),
                     const SizedBox(width: 6),
                     _buildAttCounterChip(
-                        'Open', '$unmarkedCount', Colors.white70),
+                        loc.openStatus, '$unmarkedCount', Colors.white70),
                   ],
                 ),
               ],
@@ -350,9 +362,10 @@ class _StudentsTabState extends State<StudentsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   ProSectionHeader(
-                    title:
-                        'Pending Absence Excuses (${pendingRequests.length})',
-                    subtitle: 'Submitted by parents for review',
+                    title: loc.tr('pendingAbsenceExcusesTitle', {
+                      'count': '${pendingRequests.length}',
+                    }),
+                    subtitle: loc.translate('submittedByParentsSubtitle'),
                   ),
                   const SizedBox(height: 10),
                   ...pendingRequests.map(
@@ -386,7 +399,9 @@ class _StudentsTabState extends State<StudentsTab> {
                             ),
                             const SizedBox(height: 6),
                             Text(
-                              'Reason: ${_cleanReasonLabel(req.reason)}',
+                              loc.tr('reasonLabelValue', {
+                                'reason': loc.localizedAbsenceReason(req.reason),
+                              }),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w600,
@@ -424,7 +439,9 @@ class _StudentsTabState extends State<StudentsTab> {
                                               .showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'Absence excuse approved for ${req.studentName}.',
+                                                loc.tr(
+                                                    'absenceExcuseApprovedMsg',
+                                                    {'name': req.studentName}),
                                               ),
                                               backgroundColor: p.excused,
                                             ),
@@ -437,7 +454,11 @@ class _StudentsTabState extends State<StudentsTab> {
                                               .showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'Failed to approve request: ${SupabaseService.cleanErrorMessage(e)}',
+                                                loc.tr(
+                                                    'failedApproveRequestMsg', {
+                                                  'error': SupabaseService
+                                                      .cleanErrorMessage(e),
+                                                }),
                                               ),
                                               backgroundColor: p.danger,
                                             ),
@@ -447,8 +468,8 @@ class _StudentsTabState extends State<StudentsTab> {
                                     },
                                     icon: const Icon(Icons.check_rounded,
                                         size: 15),
-                                    label: const Text('Approve & Excuse',
-                                        style: TextStyle(fontSize: 12)),
+                                    label: Text(loc.approveAndExcuse,
+                                        style: const TextStyle(fontSize: 12)),
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: p.excused,
                                       foregroundColor: Colors.white,
@@ -477,7 +498,11 @@ class _StudentsTabState extends State<StudentsTab> {
                                               .showSnackBar(
                                             SnackBar(
                                               content: Text(
-                                                'Failed to decline request: ${SupabaseService.cleanErrorMessage(e)}',
+                                                loc.tr(
+                                                    'failedDeclineRequestMsg', {
+                                                  'error': SupabaseService
+                                                      .cleanErrorMessage(e),
+                                                }),
                                               ),
                                               backgroundColor: p.danger,
                                             ),
@@ -487,7 +512,7 @@ class _StudentsTabState extends State<StudentsTab> {
                                     },
                                     icon: Icon(Icons.close_rounded,
                                         size: 15, color: p.danger),
-                                    label: Text('Decline',
+                                    label: Text(loc.decline,
                                         style: TextStyle(
                                             fontSize: 12, color: p.danger)),
                                     style: OutlinedButton.styleFrom(
@@ -511,19 +536,19 @@ class _StudentsTabState extends State<StudentsTab> {
             },
           ),
 
-          const ProSectionHeader(
-            title: 'Class Attendance Sheet',
-            subtitle:
-                'Tap a status to record attendance; parents are notified automatically.',
+          ProSectionHeader(
+            title: loc.translate('classAttendanceSheetTitle'),
+            subtitle: loc.translate('classAttendanceSheetSubtitle'),
           ),
           const SizedBox(height: 12),
 
           if (classStudents.isEmpty)
             ProEmptyState(
               icon: Icons.people_outline_rounded,
-              title: 'No students enrolled in this circle',
-              message:
-                  'Students assigned to $assignedHalaqah by administration will appear here.',
+              title: loc.translate('noStudentsInThisCircleTitle'),
+              message: loc.tr('studentsAssignedByAdminMsg', {
+                'circle': assignedHalaqah,
+              }),
             )
           else
             ...classStudents
@@ -572,6 +597,8 @@ class _StudentsTabState extends State<StudentsTab> {
 
   Widget _buildTeacherStudentCard(
       BuildContext context, Student student, AppPalette p) {
+    final loc = AppLocalizations.of(context);
+    final genderLabel = loc.localizedGender(student.gender);
     final todayAtt = StudentService.instance.getTodayAttendanceForStudent(
       student.id,
       date: _teacherSelectedDate,
@@ -599,17 +626,38 @@ class _StudentsTabState extends State<StudentsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        student.fullName,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: p.ink,
-                        ),
+                      Wrap(
+                        spacing: 6,
+                        runSpacing: 4,
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        children: [
+                          Text(
+                            student.fullName,
+                            style: TextStyle(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: p.ink,
+                            ),
+                          ),
+                          if (genderLabel != null)
+                            ProStatusPill(
+                              label: genderLabel,
+                              color: student.gender == 'male'
+                                  ? p.primary
+                                  : p.gold,
+                              icon: student.gender == 'male'
+                                  ? Icons.male_rounded
+                                  : Icons.female_rounded,
+                            ),
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Juz ${student.currentJuz} • Surah #${student.currentSurah}, Ayah ${student.currentAyah}',
+                        loc.tr('juzSurahAyahSummary', {
+                          'juz': '${student.currentJuz}',
+                          'surah': '${student.currentSurah}',
+                          'ayah': '${student.currentAyah}',
+                        }),
                         style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
                       ),
                     ],
@@ -627,7 +675,10 @@ class _StudentsTabState extends State<StudentsTab> {
             Row(
               children: [
                 Text(
-                  'Attendance for ${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
+                  loc.tr('attendanceForDateLabel', {
+                    'date':
+                        '${_teacherSelectedDate.month}/${_teacherSelectedDate.day}',
+                  }),
                   style: TextStyle(
                     fontSize: 11.5,
                     fontWeight: FontWeight.w600,
@@ -665,7 +716,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   p: p,
                   student: student,
                   status: 'present',
-                  label: 'Present',
+                  label: loc.present,
                   icon: Icons.check_circle_rounded,
                   color: p.success,
                   isSelected: currentStatus == 'present',
@@ -675,7 +726,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   p: p,
                   student: student,
                   status: 'late',
-                  label: 'Late',
+                  label: loc.lateStatus,
                   icon: Icons.schedule_rounded,
                   color: p.warning,
                   isSelected: currentStatus == 'late',
@@ -685,7 +736,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   p: p,
                   student: student,
                   status: 'absent',
-                  label: 'Absent',
+                  label: loc.absent,
                   icon: Icons.cancel_rounded,
                   color: p.danger,
                   isSelected: currentStatus == 'absent',
@@ -695,7 +746,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   p: p,
                   student: student,
                   status: 'excused',
-                  label: 'Excused',
+                  label: loc.excused,
                   icon: Icons.note_alt_rounded,
                   color: p.excused,
                   isSelected: currentStatus == 'excused',
@@ -747,7 +798,8 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: _buildCompactCardAction(
                     icon: Icons.chat_bubble_outline_rounded,
-                    label: 'Message Parent',
+                    label: AppLocalizations.of(context)
+                        .translate('messageParentAction'),
                     color: p.gold,
                     onTap: () => _openTeacherParentChat(context, student),
                   ),
@@ -756,7 +808,7 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: _buildCompactCardAction(
                     icon: Icons.menu_book_rounded,
-                    label: 'Weekly Report',
+                    label: AppLocalizations.of(context).weeklyReport,
                     color: p.primary,
                     onTap: () => _showWeeklyReportDialog(context, student),
                   ),
@@ -772,7 +824,8 @@ class _StudentsTabState extends State<StudentsTab> {
                       borderRadius: BorderRadius.circular(10),
                     ),
                   ),
-                  tooltip: 'Attendance History',
+                  tooltip: AppLocalizations.of(context)
+                      .translate('attendanceHistoryTitle'),
                 ),
               ],
             ),
@@ -784,12 +837,13 @@ class _StudentsTabState extends State<StudentsTab> {
 
   Future<void> _openTeacherParentChat(
       BuildContext context, Student student) async {
+    final loc = AppLocalizations.of(context);
     if (student.parentId == null || student.parentId!.isEmpty) {
       if (context.mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              '${student.fullName} does not have a linked parent account yet.',
+              loc.tr('noLinkedParentMsg', {'name': student.fullName}),
             ),
           ),
         );
@@ -823,7 +877,9 @@ class _StudentsTabState extends State<StudentsTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('couldNotOpenChatMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
             backgroundColor: AppColors.of(context).danger,
           ),
@@ -844,6 +900,7 @@ class _StudentsTabState extends State<StudentsTab> {
     return Expanded(
       child: InkWell(
         onTap: () async {
+          final loc = AppLocalizations.of(context);
           try {
             await StudentService.instance.recordDailyAttendance(
               studentId: student.id,
@@ -857,7 +914,10 @@ class _StudentsTabState extends State<StudentsTab> {
               ScaffoldMessenger.of(context).showSnackBar(
                 SnackBar(
                   content: Text(
-                    '${student.fullName} marked ${status.toUpperCase()}. Parent notified.',
+                    loc.tr('studentMarkedStatusMsg', {
+                      'name': student.fullName,
+                      'status': loc.localizedAttendanceStatus(status),
+                    }),
                   ),
                   duration: const Duration(seconds: 2),
                   backgroundColor: color,
@@ -869,7 +929,9 @@ class _StudentsTabState extends State<StudentsTab> {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  'Failed to save attendance: ${SupabaseService.cleanErrorMessage(e)}',
+                  loc.tr('failedSaveAttendanceMsg', {
+                    'error': SupabaseService.cleanErrorMessage(e),
+                  }),
                 ),
                 backgroundColor: p.danger,
               ),
@@ -926,19 +988,19 @@ class _StudentsTabState extends State<StudentsTab> {
   // ===========================================================================
   Widget _buildParentView(
       BuildContext context, List<Student> children, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     if (children.isEmpty) {
       return RefreshIndicator(
         color: p.primary,
         onRefresh: _handleRefresh,
         child: ListView(
           padding: const EdgeInsets.all(24),
-          children: const [
-            SizedBox(height: 40),
+          children: [
+            const SizedBox(height: 40),
             ProEmptyState(
               icon: Icons.family_restroom_rounded,
-              title: 'No Children Linked',
-              message:
-                  'When center administration enrolls your child and links them to your account, their Quran progress and attendance will appear here.',
+              title: loc.noLinkedChildrenTitle,
+              message: loc.noLinkedChildrenDesc,
             ),
           ],
         ),
@@ -966,7 +1028,9 @@ class _StudentsTabState extends State<StudentsTab> {
         children: [
           if (children.length > 1) ...[
             Text(
-              'My Enrolled Children (${children.length})',
+              loc.tr('myEnrolledChildrenHeader', {
+                'count': '${children.length}',
+              }),
               style: TextStyle(
                 fontSize: 12.5,
                 fontWeight: FontWeight.w700,
@@ -1055,19 +1119,64 @@ class _StudentsTabState extends State<StudentsTab> {
                             ),
                           ),
                           const SizedBox(height: 3),
-                          Text(
-                            currentChild.fullName,
-                            style: const TextStyle(
-                              fontSize: 19,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
+                          Row(
+                            children: [
+                              Flexible(
+                                child: Text(
+                                  currentChild.fullName,
+                                  style: const TextStyle(
+                                    fontSize: 19,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                  ),
+                                ),
+                              ),
+                              if (AppLocalizations.of(context)
+                                      .localizedGender(currentChild.gender) !=
+                                  null) ...[
+                                const SizedBox(width: 8),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 8,
+                                    vertical: 2.5,
+                                  ),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.16),
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Icon(
+                                        currentChild.gender == 'male'
+                                            ? Icons.male_rounded
+                                            : Icons.female_rounded,
+                                        size: 12,
+                                        color: AppColors.goldWarm,
+                                      ),
+                                      const SizedBox(width: 3),
+                                      Text(
+                                        AppLocalizations.of(context)
+                                            .localizedGender(
+                                                currentChild.gender)!,
+                                        style: const TextStyle(
+                                          fontSize: 10.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ],
                           ),
                         ],
                       ),
                     ),
                     ElevatedButton.icon(
                       onPressed: () async {
+                        final loc = AppLocalizations.of(context);
                         final halaqahs = HalaqahService.instance.halaqahs;
                         final hMatch = halaqahs.where((h) =>
                             h.name.toLowerCase() ==
@@ -1075,7 +1184,7 @@ class _StudentsTabState extends State<StudentsTab> {
                         final teacherName = (hMatch.isNotEmpty &&
                                 hMatch.first.teacherName != 'Unassigned')
                             ? hMatch.first.teacherName
-                            : 'Assigned Ustaz';
+                            : loc.assignedUstazTitle;
 
                         try {
                           final convo =
@@ -1107,7 +1216,10 @@ class _StudentsTabState extends State<StudentsTab> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+                                  loc.tr('couldNotOpenChatMsg', {
+                                    'error':
+                                        SupabaseService.cleanErrorMessage(e),
+                                  }),
                                 ),
                                 backgroundColor: p.danger,
                               ),
@@ -1117,8 +1229,10 @@ class _StudentsTabState extends State<StudentsTab> {
                       },
                       icon: const Icon(Icons.chat_bubble_outline_rounded,
                           size: 14),
-                      label: const Text('Message Ustaz',
-                          style: TextStyle(fontSize: 11.5)),
+                      label: Text(
+                          AppLocalizations.of(context)
+                              .translate('messageUstazAction'),
+                          style: const TextStyle(fontSize: 11.5)),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.goldWarm,
                         foregroundColor: const Color(0xFF102322),
@@ -1133,14 +1247,17 @@ class _StudentsTabState extends State<StudentsTab> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Quran Memorization Progress',
+                      AppLocalizations.of(context)
+                          .translate('quranMemorizationProgressTitle'),
                       style: TextStyle(
                         fontSize: 11.5,
                         color: Colors.white.withOpacity(0.8),
                       ),
                     ),
                     Text(
-                      'Juz ${currentChild.currentJuz} of 30',
+                      AppLocalizations.of(context).tr('juzOf30', {
+                        'juz': '${currentChild.currentJuz}',
+                      }),
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
@@ -1166,13 +1283,23 @@ class _StudentsTabState extends State<StudentsTab> {
                 Row(
                   children: [
                     _buildHeroMetricTile(
-                        'Current Juz', 'Juz ${currentChild.currentJuz}'),
+                      AppLocalizations.of(context)
+                          .translate('currentJuzMetric'),
+                      AppLocalizations.of(context)
+                          .tr('juzShort', {'juz': '${currentChild.currentJuz}'}),
+                    ),
                     const SizedBox(width: 8),
                     _buildHeroMetricTile(
-                        'Surah', '#${currentChild.currentSurah}'),
+                      AppLocalizations.of(context).surahLabel,
+                      '#${currentChild.currentSurah}',
+                    ),
                     const SizedBox(width: 8),
                     _buildHeroMetricTile(
-                        'Ayah', 'Ayah ${currentChild.currentAyah}'),
+                      AppLocalizations.of(context).translate('ayahMetric'),
+                      AppLocalizations.of(context).tr('ayahValueLabel', {
+                        'ayah': '${currentChild.currentAyah}',
+                      }),
+                    ),
                   ],
                 ),
               ],
@@ -1214,7 +1341,11 @@ class _StudentsTabState extends State<StudentsTab> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Today: ${(todayAtt?.status ?? 'Unrecorded').toUpperCase()}',
+                        loc.tr('todayAttBadge', {
+                          'status': todayAtt != null
+                              ? loc.localizedAttendanceStatus(todayAtt.status)
+                              : loc.unrecordedStatus,
+                        }),
                         style: TextStyle(
                           fontSize: 13.5,
                           fontWeight: FontWeight.w700,
@@ -1226,7 +1357,7 @@ class _StudentsTabState extends State<StudentsTab> {
                       const SizedBox(height: 2),
                       Text(
                         todayAtt?.teacherRemarks ??
-                            'Ustaz will mark attendance during circle time.',
+                            loc.translate('ustazWillMarkMsg'),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       ),
                     ],
@@ -1239,13 +1370,13 @@ class _StudentsTabState extends State<StudentsTab> {
           const SizedBox(height: 22),
 
           ProSectionHeader(
-            title: 'Attendance History',
+            title: loc.translate('attendanceHistoryTitle'),
             trailing: ElevatedButton.icon(
               onPressed: () =>
                   _showRequestAbsenceDialog(context, currentChild),
               icon: const Icon(Icons.edit_calendar_rounded, size: 14),
-              label: const Text('Request Excuse',
-                  style: TextStyle(fontSize: 11.5)),
+              label: Text(AppLocalizations.of(context).requestExcuse,
+                  style: const TextStyle(fontSize: 11.5)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: p.excused,
                 foregroundColor: Colors.white,
@@ -1260,6 +1391,7 @@ class _StudentsTabState extends State<StudentsTab> {
             stream: AbsenceService.instance.requestsStream,
             initialData: AbsenceService.instance.allRequests,
             builder: (context, snapshot) {
+              final loc = AppLocalizations.of(context);
               final childRequests = (snapshot.data ?? [])
                   .where((r) => r.studentId == currentChild.id)
                   .toList();
@@ -1274,8 +1406,8 @@ class _StudentsTabState extends State<StudentsTab> {
                         ? p.success
                         : (req.isDeclined ? p.danger : p.warning);
                     final reqLabel = req.isApproved
-                        ? 'Approved'
-                        : (req.isDeclined ? 'Declined' : 'Pending');
+                        ? loc.approved
+                        : (req.isDeclined ? loc.declinedStatus : loc.pending);
 
                     return Padding(
                       padding: const EdgeInsets.only(bottom: 8),
@@ -1289,7 +1421,10 @@ class _StudentsTabState extends State<StudentsTab> {
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
                                   Text(
-                                    'Excuse: ${_cleanReasonLabel(req.reason)}',
+                                    loc.tr('excuseReasonLine', {
+                                      'reason': loc
+                                          .localizedAbsenceReason(req.reason),
+                                    }),
                                     style: TextStyle(
                                       fontWeight: FontWeight.w700,
                                       fontSize: 13,
@@ -1298,7 +1433,11 @@ class _StudentsTabState extends State<StudentsTab> {
                                   ),
                                   const SizedBox(height: 2),
                                   Text(
-                                    'Date: ${req.date.toIso8601String().substring(0, 10)}${req.notes.isNotEmpty ? " • \"${req.notes}\"" : ""}',
+                                    '${loc.tr('dateLineLabel', {
+                                      'date': req.date
+                                          .toIso8601String()
+                                          .substring(0, 10),
+                                    })}${req.notes.isNotEmpty ? " • \"${req.notes}\"" : ""}',
                                     style: TextStyle(
                                       fontSize: 11.5,
                                       color: p.inkSecondary,
@@ -1321,28 +1460,32 @@ class _StudentsTabState extends State<StudentsTab> {
 
           const SizedBox(height: 12),
           if (attendanceHistory.isEmpty)
-            const ProEmptyState(
+            ProEmptyState(
               icon: Icons.fact_check_outlined,
-              title: 'No attendance logged yet',
-              message:
-                  'Daily attendance entries recorded by Ustaz will appear here.',
+              title: AppLocalizations.of(context)
+                  .translate('noAttendanceLoggedTitle'),
+              message: AppLocalizations.of(context)
+                  .translate('dailyAttendanceAppearHereMsg'),
             )
           else
             ...attendanceHistory.map((att) => _buildAttendanceCard(att, p)),
 
           const SizedBox(height: 22),
 
-          const ProSectionHeader(
-            title: 'Weekly Quran Progress Reports',
-            subtitle: 'Sabaq, Sabqi, Manzil & Tajweed evaluations',
+          ProSectionHeader(
+            title: AppLocalizations.of(context)
+                .translate('weeklyQuranProgressReportsTitle'),
+            subtitle: AppLocalizations.of(context)
+                .translate('sabaqSabqiManzilSubtitle'),
           ),
           const SizedBox(height: 12),
           if (weeklyReports.isEmpty)
-            const ProEmptyState(
+            ProEmptyState(
               icon: Icons.auto_stories_outlined,
-              title: 'No weekly reports yet',
-              message:
-                  'Weekly memorization and Tajweed evaluations will appear here once published.',
+              title:
+                  AppLocalizations.of(context).translate('noWeeklyReportsTitle'),
+              message: AppLocalizations.of(context)
+                  .translate('weeklyReportsAppearHereMsg'),
             )
           else
             ...weeklyReports
@@ -1497,7 +1640,7 @@ class _StudentsTabState extends State<StudentsTab> {
                             ),
                           ),
                           child: Text(
-                            name,
+                            name == 'All' ? loc.all : name,
                             style: TextStyle(
                               fontSize: 12,
                               fontWeight: isSelected
@@ -1548,6 +1691,8 @@ class _StudentsTabState extends State<StudentsTab> {
     AppPalette p,
     List<MonthlyPayment> studentPayments,
   ) {
+    final loc = AppLocalizations.of(context);
+    final genderLabel = loc.localizedGender(student.gender);
     final parentContact = student.parentPhone.isNotEmpty
         ? ' • ${student.parentPhone}'
         : (student.parentEmail != null && student.parentEmail!.isNotEmpty
@@ -1558,7 +1703,13 @@ class _StudentsTabState extends State<StudentsTab> {
     final Color badgeColor;
     if (studentPayments.isNotEmpty) {
       final latest = studentPayments.first.status;
-      badgeText = latest.toUpperCase();
+      badgeText = switch (latest.toLowerCase()) {
+        'approved' => loc.approved,
+        'submitted' => loc.submitted,
+        'rejected' => loc.rejected,
+        'overdue' => loc.overdue,
+        _ => loc.pending,
+      };
       badgeColor = latest == 'approved'
           ? p.success
           : (latest == 'rejected' || latest == 'overdue'
@@ -1588,17 +1739,39 @@ class _StudentsTabState extends State<StudentsTab> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(
-                        student.fullName,
-                        style: TextStyle(
-                          fontSize: 15.5,
-                          fontWeight: FontWeight.w700,
-                          color: p.ink,
-                        ),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              student.fullName,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 15.5,
+                                fontWeight: FontWeight.w700,
+                                color: p.ink,
+                              ),
+                            ),
+                          ),
+                          if (genderLabel != null) ...[
+                            const SizedBox(width: 6),
+                            ProStatusPill(
+                              label: genderLabel,
+                              color:
+                                  student.gender == 'male' ? p.primary : p.gold,
+                              icon: student.gender == 'male'
+                                  ? Icons.male_rounded
+                                  : Icons.female_rounded,
+                            ),
+                          ],
+                        ],
                       ),
                       const SizedBox(height: 2),
                       Text(
-                        'Parent: ${student.parentName}$parentContact',
+                        loc.tr('parentContactLine', {
+                          'name': student.parentName,
+                          'contact': parentContact,
+                        }),
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
@@ -1618,18 +1791,28 @@ class _StudentsTabState extends State<StudentsTab> {
                   ),
                   color: p.surface,
                   onSelected: (val) async {
-                    if (val == 'delete') {
+                    if (val == 'edit') {
+                      await AddStudentDialog.show(
+                        context,
+                        existingStudent: student,
+                      );
+                      if (mounted) setState(() {});
+                    } else if (val == 'delete') {
                       final confirm = await showDialog<bool>(
                         context: context,
                         builder: (c) => AlertDialog(
-                          title: Text('Remove ${student.fullName}?'),
-                          content: const Text(
-                            'This will permanently remove this student and their linked records from the roster.',
+                          title: Text(
+                            loc.tr('removeStudentConfirmTitle', {
+                              'name': student.fullName,
+                            }),
+                          ),
+                          content: Text(
+                            loc.translate('removeStudentConfirmBody'),
                           ),
                           actions: [
                             TextButton(
                               onPressed: () => Navigator.pop(c, false),
-                              child: const Text('Cancel'),
+                              child: Text(loc.cancel),
                             ),
                             ElevatedButton(
                               style: ElevatedButton.styleFrom(
@@ -1637,7 +1820,7 @@ class _StudentsTabState extends State<StudentsTab> {
                                 foregroundColor: Colors.white,
                               ),
                               onPressed: () => Navigator.pop(c, true),
-                              child: const Text('Remove'),
+                              child: Text(loc.translate('removeAction')),
                             ),
                           ],
                         ),
@@ -1653,8 +1836,11 @@ class _StudentsTabState extends State<StudentsTab> {
                               SnackBar(
                                 content: Text(
                                   ok
-                                      ? 'Removed ${student.fullName} from roster.'
-                                      : 'Failed to remove student. Please check permissions.',
+                                      ? loc.tr('removedStudentMsg', {
+                                          'name': student.fullName,
+                                        })
+                                      : loc.translate(
+                                          'failedRemoveStudentPermsMsg'),
                                 ),
                                 backgroundColor: ok ? p.success : p.danger,
                               ),
@@ -1666,7 +1852,10 @@ class _StudentsTabState extends State<StudentsTab> {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
                                 content: Text(
-                                  'Failed to remove student: ${SupabaseService.cleanErrorMessage(e)}',
+                                  loc.tr('failedRemoveStudentMsg', {
+                                    'error':
+                                        SupabaseService.cleanErrorMessage(e),
+                                  }),
                                 ),
                                 backgroundColor: p.danger,
                               ),
@@ -1678,6 +1867,23 @@ class _StudentsTabState extends State<StudentsTab> {
                   },
                   itemBuilder: (_) => [
                     PopupMenuItem(
+                      value: 'edit',
+                      child: Row(
+                        children: [
+                          Icon(Icons.edit_outlined, size: 18, color: p.primary),
+                          const SizedBox(width: 8),
+                          Text(
+                            loc.editStudent,
+                            style: TextStyle(
+                              color: p.ink,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    PopupMenuItem(
                       value: 'delete',
                       child: Row(
                         children: [
@@ -1685,7 +1891,7 @@ class _StudentsTabState extends State<StudentsTab> {
                               size: 18, color: p.danger),
                           const SizedBox(width: 8),
                           Text(
-                            'Remove Student',
+                            loc.translate('removeStudentMenuLabel'),
                             style: TextStyle(
                               color: p.danger,
                               fontSize: 13,
@@ -1713,7 +1919,11 @@ class _StudentsTabState extends State<StudentsTab> {
                   const SizedBox(width: 7),
                   Expanded(
                     child: Text(
-                      '${student.halaqahName} • Juz ${student.currentJuz}, Surah #${student.currentSurah}, Ayah ${student.currentAyah}',
+                      '${student.halaqahName} • ${loc.tr('juzSurahAyahSummary', {
+                        'juz': '${student.currentJuz}',
+                        'surah': '${student.currentSurah}',
+                        'ayah': '${student.currentAyah}',
+                      })}',
                       style: TextStyle(
                         fontSize: 12,
                         color: p.inkSecondary,
@@ -1731,7 +1941,7 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: _buildCompactCardAction(
                     icon: Icons.check_circle_outline_rounded,
-                    label: 'Attendance',
+                    label: loc.translate('attendanceShortTab'),
                     color: p.success,
                     onTap: () => _showMarkAttendanceDialog(context, student),
                   ),
@@ -1740,7 +1950,7 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: _buildCompactCardAction(
                     icon: Icons.menu_book_rounded,
-                    label: 'Report',
+                    label: loc.translate('reportShortTab'),
                     color: p.primary,
                     onTap: () => _showWeeklyReportDialog(context, student),
                   ),
@@ -1749,7 +1959,7 @@ class _StudentsTabState extends State<StudentsTab> {
                 Expanded(
                   child: _buildCompactCardAction(
                     icon: Icons.chat_bubble_outline_rounded,
-                    label: 'Message',
+                    label: loc.translate('messageShortAction'),
                     color: p.gold,
                     onTap: () async {
                       if (student.parentId == null ||
@@ -1758,7 +1968,9 @@ class _StudentsTabState extends State<StudentsTab> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${student.fullName} does not have a linked parent account yet.',
+                                loc.tr('noLinkedParentMsg', {
+                                  'name': student.fullName,
+                                }),
                               ),
                             ),
                           );
@@ -1788,7 +2000,9 @@ class _StudentsTabState extends State<StudentsTab> {
                           ScaffoldMessenger.of(context).showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+                                loc.tr('couldNotOpenChatMsg', {
+                                  'error': SupabaseService.cleanErrorMessage(e),
+                                }),
                               ),
                               backgroundColor: p.danger,
                             ),
@@ -1865,18 +2079,21 @@ class _StudentsTabState extends State<StudentsTab> {
 
   void _showStudentHistoryDialog(BuildContext context, Student student) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final history = StudentService.instance.getAttendanceForStudent(student.id);
 
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text('Attendance Log: ${student.fullName}'),
+        title: Text(
+          loc.tr('attendanceLogTitle', {'name': student.fullName}),
+        ),
         content: SizedBox(
           width: double.maxFinite,
           child: history.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(20),
-                  child: Text('No attendance recorded yet.'),
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Text(loc.translate('noAttendanceRecordedYet')),
                 )
               : ListView.builder(
                   shrinkWrap: true,
@@ -1887,7 +2104,7 @@ class _StudentsTabState extends State<StudentsTab> {
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(ctx),
-            child: const Text('Close'),
+            child: Text(loc.close),
           ),
         ],
       ),
@@ -1897,6 +2114,7 @@ class _StudentsTabState extends State<StudentsTab> {
   Future<void> _showMarkAttendanceDialog(
       BuildContext context, Student student) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _MarkAttendanceDialog(student: student, palette: p),
@@ -1907,7 +2125,9 @@ class _StudentsTabState extends State<StudentsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Attendance recorded. Parent ${student.parentName} notified.',
+            loc.tr('attendanceRecordedNotifyMsg', {
+              'name': student.parentName,
+            }),
           ),
         ),
       );
@@ -1917,6 +2137,7 @@ class _StudentsTabState extends State<StudentsTab> {
   Future<void> _showWeeklyReportDialog(
       BuildContext context, Student student) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _WeeklyReportDialog(student: student, palette: p),
@@ -1927,7 +2148,9 @@ class _StudentsTabState extends State<StudentsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Weekly report posted. Parent ${student.parentName} notified.',
+            loc.tr('weeklyReportPostedNotifyMsg', {
+              'name': student.parentName,
+            }),
           ),
         ),
       );
@@ -1935,6 +2158,7 @@ class _StudentsTabState extends State<StudentsTab> {
   }
 
   Widget _buildAttendanceCard(AttendanceRecord att, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final pillColor = _statusColor(att.status, p);
 
     return Padding(
@@ -1945,7 +2169,7 @@ class _StudentsTabState extends State<StudentsTab> {
         child: Row(
           children: [
             ProStatusPill(
-              label: att.status.toUpperCase(),
+              label: loc.localizedAttendanceStatus(att.status),
               color: pillColor,
               showDot: true,
             ),
@@ -1955,7 +2179,8 @@ class _StudentsTabState extends State<StudentsTab> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    att.teacherRemarks ?? 'Attended circle on time',
+                    att.teacherRemarks ??
+                        loc.translate('defaultAttendedOnTime'),
                     style: TextStyle(
                       color: p.ink,
                       fontSize: 12.5,
@@ -1977,6 +2202,7 @@ class _StudentsTabState extends State<StudentsTab> {
   }
 
   Widget _buildWeeklyReportCard(WeeklyReport report, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 12),
       child: ProCard(
@@ -1987,7 +2213,9 @@ class _StudentsTabState extends State<StudentsTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Week of ${report.weekStartDate.toIso8601String().substring(0, 10)}',
+                  loc.tr('weekOfDateLabel', {
+                    'date': report.weekStartDate.toIso8601String().substring(0, 10),
+                  }),
                   style: TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 13.5,
@@ -1995,7 +2223,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   ),
                 ),
                 ProStatusPill(
-                  label: report.tajweedRating,
+                  label: loc.localizedTajweedRating(report.tajweedRating),
                   color: p.success,
                   icon: Icons.verified_rounded,
                 ),
@@ -2010,18 +2238,21 @@ class _StudentsTabState extends State<StudentsTab> {
               ),
               child: Column(
                 children: [
-                  _buildReportLine(p, 'Sabaq (New)', report.sabaq),
+                  _buildReportLine(
+                      p, loc.translate('sabaqNewLessonLabel'), report.sabaq),
                   const SizedBox(height: 6),
-                  _buildReportLine(p, 'Sabqi (Revision)', report.sabqi),
+                  _buildReportLine(
+                      p, loc.translate('sabqiRecentRevisionLabel'), report.sabqi),
                   const SizedBox(height: 6),
-                  _buildReportLine(p, 'Manzil (Retention)', report.manzil),
+                  _buildReportLine(
+                      p, loc.translate('manzilRetentionLabel'), report.manzil),
                 ],
               ),
             ),
             if (report.teacherRemarks.isNotEmpty) ...[
               const SizedBox(height: 10),
               Text(
-                'Ustaz Notes: "${report.teacherRemarks}"',
+                loc.tr('ustazNotesQuote', {'notes': report.teacherRemarks}),
                 style: TextStyle(
                   fontSize: 12,
                   fontStyle: FontStyle.italic,
@@ -2067,6 +2298,7 @@ class _StudentsTabState extends State<StudentsTab> {
   Future<void> _showRequestAbsenceDialog(
       BuildContext context, Student student) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _RequestAbsenceDialog(student: student, palette: p),
@@ -2077,26 +2309,11 @@ class _StudentsTabState extends State<StudentsTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Absence excuse submitted for ${student.fullName}. Ustaz notified.',
+            loc.tr('absenceExcuseSubmittedMsg', {'name': student.fullName}),
           ),
           backgroundColor: p.excused,
         ),
       );
-    }
-  }
-
-  String _cleanReasonLabel(String reason) {
-    switch (reason.toLowerCase()) {
-      case 'illness':
-        return 'Medical / Illness';
-      case 'family_emergency':
-        return 'Family Emergency';
-      case 'school_exam':
-        return 'School Academic Exam';
-      case 'travel':
-        return 'Travel / Out of Town';
-      default:
-        return 'Personal Reason';
     }
   }
 }
@@ -2135,18 +2352,22 @@ class _EditRemarksDialogState extends State<_EditRemarksDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text('Edit Remarks: ${widget.student.fullName}'),
+      title: Text(
+        loc.tr('editRemarksTitle', {'name': widget.student.fullName}),
+      ),
       content: TextField(
         controller: _remarksCtrl,
         enabled: !_isSaving,
-        decoration:
-            const InputDecoration(labelText: 'Teacher Remarks / Notes'),
+        decoration: InputDecoration(
+          labelText: loc.translate('teacherRemarksLabel'),
+        ),
       ),
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSaving
@@ -2168,14 +2389,17 @@ class _EditRemarksDialogState extends State<_EditRemarksDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to save note: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedSaveNoteMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: widget.palette.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSaving ? 'Saving...' : 'Save Note'),
+          child: Text(
+              _isSaving ? loc.savingProgress : loc.translate('saveNoteAction')),
         ),
       ],
     );
@@ -2197,8 +2421,19 @@ class _MarkAttendanceDialog extends StatefulWidget {
 
 class _MarkAttendanceDialogState extends State<_MarkAttendanceDialog> {
   String _selectedStatus = 'present';
-  final _remarksCtrl = TextEditingController(text: 'Attended circle on time.');
+  final _remarksCtrl = TextEditingController();
+  bool _didInitLocalizedDefaults = false;
   bool _isSaving = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _remarksCtrl.text =
+          AppLocalizations.of(context).translate('defaultAttendedOnTime');
+    }
+  }
 
   @override
   void dispose() {
@@ -2208,18 +2443,21 @@ class _MarkAttendanceDialogState extends State<_MarkAttendanceDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text('Daily Attendance: ${widget.student.fullName}'),
+      title: Text(
+        loc.tr('dailyAttendanceTitle', {'name': widget.student.fullName}),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
           DropdownButtonFormField<String>(
             value: _selectedStatus,
-            items: const [
-              DropdownMenuItem(value: 'present', child: Text('Present')),
-              DropdownMenuItem(value: 'late', child: Text('Late')),
-              DropdownMenuItem(value: 'absent', child: Text('Absent')),
-              DropdownMenuItem(value: 'excused', child: Text('Excused')),
+            items: [
+              DropdownMenuItem(value: 'present', child: Text(loc.present)),
+              DropdownMenuItem(value: 'late', child: Text(loc.lateStatus)),
+              DropdownMenuItem(value: 'absent', child: Text(loc.absent)),
+              DropdownMenuItem(value: 'excused', child: Text(loc.excused)),
             ],
             onChanged: _isSaving
                 ? null
@@ -2228,20 +2466,23 @@ class _MarkAttendanceDialogState extends State<_MarkAttendanceDialog> {
                       setState(() => _selectedStatus = val);
                     }
                   },
-            decoration: const InputDecoration(labelText: 'Status'),
+            decoration:
+                InputDecoration(labelText: loc.translate('statusFieldLabel')),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _remarksCtrl,
             enabled: !_isSaving,
-            decoration: const InputDecoration(labelText: 'Teacher Remarks'),
+            decoration: InputDecoration(
+              labelText: loc.translate('teacherRemarksShortLabel'),
+            ),
           ),
         ],
       ),
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSaving
@@ -2262,14 +2503,18 @@ class _MarkAttendanceDialogState extends State<_MarkAttendanceDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to save attendance: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedSaveAttendanceMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: widget.palette.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSaving ? 'Saving...' : 'Save & Notify'),
+          child: Text(_isSaving
+              ? loc.savingProgress
+              : loc.translate('saveAndNotifyAction')),
         ),
       ],
     );
@@ -2290,13 +2535,26 @@ class _WeeklyReportDialog extends StatefulWidget {
 }
 
 class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
-  final _sabaqCtrl = TextEditingController(text: 'Surah Al-Mulk (1-15)');
-  final _sabqiCtrl = TextEditingController(text: 'Surah Al-Qalam (1-20)');
-  final _manzilCtrl = TextEditingController(text: 'Juz 29 Retention');
-  final _remarksCtrl =
-      TextEditingController(text: 'Consistent Tajweed articulation.');
+  final _sabaqCtrl = TextEditingController();
+  final _sabqiCtrl = TextEditingController();
+  final _manzilCtrl = TextEditingController();
+  final _remarksCtrl = TextEditingController();
   String _rating = 'Excellent';
+  bool _didInitLocalizedDefaults = false;
   bool _isSubmitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      final loc = AppLocalizations.of(context);
+      _sabaqCtrl.text = loc.translate('defaultSabaqSample');
+      _sabqiCtrl.text = loc.translate('defaultSabqiSample');
+      _manzilCtrl.text = loc.translate('defaultManzilSample');
+      _remarksCtrl.text = loc.translate('defaultReportRemarks');
+    }
+  }
 
   @override
   void dispose() {
@@ -2309,8 +2567,11 @@ class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text('Weekly Report: ${widget.student.fullName}'),
+      title: Text(
+        loc.tr('weeklyReportTitle', {'name': widget.student.fullName}),
+      ),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -2318,32 +2579,38 @@ class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
             TextField(
               controller: _sabaqCtrl,
               enabled: !_isSubmitting,
-              decoration:
-                  const InputDecoration(labelText: 'Sabaq (New Lesson)'),
+              decoration: InputDecoration(
+                labelText: loc.translate('sabaqNewLessonLabel'),
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _sabqiCtrl,
               enabled: !_isSubmitting,
-              decoration:
-                  const InputDecoration(labelText: 'Sabqi (Recent Revision)'),
+              decoration: InputDecoration(
+                labelText: loc.translate('sabqiRecentRevisionLabel'),
+              ),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _manzilCtrl,
               enabled: !_isSubmitting,
-              decoration:
-                  const InputDecoration(labelText: 'Manzil (Retention)'),
+              decoration: InputDecoration(
+                labelText: loc.translate('manzilRetentionLabel'),
+              ),
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               value: _rating,
-              items: const [
-                DropdownMenuItem(value: 'Excellent', child: Text('Excellent')),
-                DropdownMenuItem(value: 'Very Good', child: Text('Very Good')),
-                DropdownMenuItem(value: 'Good', child: Text('Good')),
+              items: [
                 DropdownMenuItem(
-                    value: 'Needs Revision', child: Text('Needs Revision')),
+                    value: 'Excellent', child: Text(loc.ratingExcellent)),
+                DropdownMenuItem(
+                    value: 'Very Good', child: Text(loc.ratingVeryGood)),
+                DropdownMenuItem(value: 'Good', child: Text(loc.ratingGood)),
+                DropdownMenuItem(
+                    value: 'Needs Revision',
+                    child: Text(loc.ratingNeedsRevision)),
               ],
               onChanged: _isSubmitting
                   ? null
@@ -2352,15 +2619,15 @@ class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
                         setState(() => _rating = val);
                       }
                     },
-              decoration:
-                  const InputDecoration(labelText: 'Tajweed Evaluation'),
+              decoration: InputDecoration(labelText: loc.tajweedEvaluation),
             ),
             const SizedBox(height: 10),
             TextField(
               controller: _remarksCtrl,
               enabled: !_isSubmitting,
-              decoration:
-                  const InputDecoration(labelText: 'Ustaz Evaluation Notes'),
+              decoration: InputDecoration(
+                labelText: loc.translate('ustazEvaluationNotesLabel'),
+              ),
             ),
           ],
         ),
@@ -2368,7 +2635,7 @@ class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSubmitting
@@ -2393,14 +2660,18 @@ class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to submit report: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedSubmitReportMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: widget.palette.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSubmitting ? 'Submitting...' : 'Submit & Notify'),
+          child: Text(_isSubmitting
+              ? loc.submittingProgress
+              : loc.translate('submitAndNotifyAction')),
         ),
       ],
     );
@@ -2423,9 +2694,19 @@ class _RequestAbsenceDialog extends StatefulWidget {
 class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
   DateTime _selectedDate = DateTime.now();
   String _selectedReason = 'illness';
-  final _notesCtrl =
-      TextEditingController(text: 'Feeling unwell and needs rest at home.');
+  final _notesCtrl = TextEditingController();
+  bool _didInitLocalizedDefaults = false;
   bool _isSubmitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _notesCtrl.text =
+          AppLocalizations.of(context).translate('defaultExcuseNote');
+    }
+  }
 
   @override
   void dispose() {
@@ -2436,13 +2717,16 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
   @override
   Widget build(BuildContext context) {
     final p = widget.palette;
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
       title: Row(
         children: [
           Icon(Icons.edit_calendar_rounded, color: p.excused, size: 22),
           const SizedBox(width: 8),
           Expanded(
-            child: Text('Request Excuse: ${widget.student.fullName}'),
+            child: Text(
+              loc.tr('requestExcuseTitle', {'name': widget.student.fullName}),
+            ),
           ),
         ],
       ),
@@ -2452,7 +2736,9 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'Circle: ${widget.student.halaqahName}',
+              loc.tr('circlePrefixLabel', {
+                'circle': widget.student.halaqahName,
+              }),
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -2464,7 +2750,9 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  'Date: ${_selectedDate.toIso8601String().substring(0, 10)}',
+                  loc.tr('dateLineLabel', {
+                    'date': _selectedDate.toIso8601String().substring(0, 10),
+                  }),
                   style: const TextStyle(
                     fontSize: 12.5,
                     fontWeight: FontWeight.w700,
@@ -2487,24 +2775,25 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
                           }
                         },
                   icon: const Icon(Icons.calendar_month_rounded, size: 15),
-                  label: const Text('Change'),
+                  label: Text(loc.changeAction),
                 ),
               ],
             ),
             const SizedBox(height: 10),
             DropdownButtonFormField<String>(
               value: _selectedReason,
-              items: const [
+              items: [
                 DropdownMenuItem(
-                    value: 'illness', child: Text('Medical / Illness')),
+                    value: 'illness', child: Text(loc.reasonMedical)),
                 DropdownMenuItem(
-                    value: 'family_emergency', child: Text('Family Emergency')),
+                    value: 'family_emergency',
+                    child: Text(loc.reasonFamilyEmergency)),
                 DropdownMenuItem(
-                    value: 'school_exam', child: Text('School Academic Exam')),
+                    value: 'school_exam', child: Text(loc.reasonSchoolExam)),
                 DropdownMenuItem(
-                    value: 'travel', child: Text('Travel / Out of Town')),
+                    value: 'travel', child: Text(loc.reasonTravel)),
                 DropdownMenuItem(
-                    value: 'other', child: Text('Other Personal Reason')),
+                    value: 'other', child: Text(loc.reasonPersonal)),
               ],
               onChanged: _isSubmitting
                   ? null
@@ -2513,8 +2802,8 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
                         setState(() => _selectedReason = val);
                       }
                     },
-              decoration: const InputDecoration(
-                labelText: 'Reason for Absence',
+              decoration: InputDecoration(
+                labelText: loc.translate('reasonForAbsenceLabel'),
               ),
             ),
             const SizedBox(height: 12),
@@ -2522,9 +2811,9 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
               controller: _notesCtrl,
               enabled: !_isSubmitting,
               maxLines: 2,
-              decoration: const InputDecoration(
-                labelText: 'Parent Explanation',
-                hintText: 'Enter reason details for the teacher...',
+              decoration: InputDecoration(
+                labelText: loc.translate('parentExplanationLabel'),
+                hintText: loc.translate('parentExplanationHint'),
               ),
             ),
           ],
@@ -2533,7 +2822,7 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
       actions: [
         TextButton(
           onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSubmitting
@@ -2555,7 +2844,9 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to submit excuse: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedSubmitExcuseMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: p.danger,
                       ),
@@ -2566,7 +2857,7 @@ class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
             backgroundColor: p.excused,
             foregroundColor: Colors.white,
           ),
-          child: Text(_isSubmitting ? 'Submitting...' : 'Submit Excuse'),
+          child: Text(_isSubmitting ? loc.submittingProgress : loc.submitExcuse),
         ),
       ],
     );

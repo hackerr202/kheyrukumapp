@@ -23,6 +23,7 @@ class AbsenceService {
   final List<AbsenceRequest> _requests = [];
   bool _cacheLoaded = false;
   RealtimeChannel? _realtimeChannel;
+  Timer? _realtimeDebounce;
   final StreamController<List<AbsenceRequest>> _requestsController =
       StreamController<List<AbsenceRequest>>.broadcast();
 
@@ -105,6 +106,8 @@ class AbsenceService {
   Future<void> clearOnLogout() async {
     final uid = _uid;
     final client = SupabaseService.instance.client;
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = null;
     final ch = _realtimeChannel;
     _realtimeChannel = null;
     if (ch != null) {
@@ -155,6 +158,15 @@ class AbsenceService {
     }
   }
 
+  void _scheduleRealtimeRefresh() {
+    _realtimeDebounce?.cancel();
+    _realtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        fetchFromCloud();
+      }
+    });
+  }
+
   Future<void> _subscribeRealtime() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
@@ -172,7 +184,7 @@ class AbsenceService {
             schema: 'public',
             table: 'absence_requests',
             callback: (payload) async {
-              await fetchFromCloud();
+              _scheduleRealtimeRefresh();
               final newRow = payload.newRecord;
               if (newRow.isEmpty) return;
 

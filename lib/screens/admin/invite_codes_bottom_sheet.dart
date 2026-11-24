@@ -116,12 +116,11 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
                       (snapshot.data ?? []).where((c) => !c.isUsed).toList();
 
                   if (codes.isEmpty) {
-                    return const Center(
+                    return Center(
                       child: ProEmptyState(
                         icon: Icons.vpn_key_off_outlined,
-                        title: 'No active codes',
-                        message:
-                            'Generate a Teacher or Parent invite code above to onboard new members.',
+                        title: loc.translate('noActiveCodesTitle'),
+                        message: loc.translate('generateInviteOnboardingDesc'),
                       ),
                     );
                   }
@@ -171,7 +170,7 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
                                     ),
                                   ),
                                   Text(
-                                    item.role.toUpperCase(),
+                                    loc.localizedRoleBadge(item.role),
                                     style: TextStyle(
                                       fontSize: 10.5,
                                       fontWeight: FontWeight.w700,
@@ -184,14 +183,17 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
                             IconButton(
                               icon: Icon(Icons.copy_rounded,
                                   size: 18, color: p.primary),
-                              tooltip: 'Copy Code',
+                              tooltip: loc.copyCodeTooltip,
                               onPressed: () {
                                 Clipboard.setData(
                                     ClipboardData(text: item.code));
                                 ScaffoldMessenger.of(context).showSnackBar(
                                   SnackBar(
                                     content: Text(
-                                        'Copied "${item.code}" to clipboard.'),
+                                      loc.tr('copiedCodeMsg', {
+                                        'code': item.code,
+                                      }),
+                                    ),
                                   ),
                                 );
                               },

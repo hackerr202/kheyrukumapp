@@ -12,6 +12,7 @@ class Student {
   final String parentPhone;
   final String? parentEmail;
   final DateTime? dateOfBirth;
+  final String? gender; // 'male', 'female', or null
   final int currentJuz;
   final int currentSurah;
   final int currentAyah;
@@ -31,6 +32,7 @@ class Student {
     this.parentPhone = '',
     this.parentEmail,
     this.dateOfBirth,
+    this.gender,
     this.currentJuz = 30,
     this.currentSurah = 67,
     this.currentAyah = 1,
@@ -38,6 +40,14 @@ class Student {
     this.monthlyFeeAmount = 50.0,
     required this.createdAt,
   });
+
+  static String? normalizeGender(String? raw) {
+    final normalized = raw?.trim().toLowerCase();
+    if (normalized == 'male' || normalized == 'female') {
+      return normalized;
+    }
+    return null;
+  }
 
   factory Student.fromJson(Map<String, dynamic> json) {
     final halaqahMap = JsonParsers.asMap(json['halaqahs']);
@@ -55,6 +65,7 @@ class Student {
       parentPhone: JsonParsers.asString(json['parent_phone']),
       parentEmail: JsonParsers.asNullableString(json['parent_email']),
       dateOfBirth: JsonParsers.asNullableDateTime(json['date_of_birth']),
+      gender: normalizeGender(JsonParsers.asNullableString(json['gender'])),
       currentJuz: JsonParsers.asInt(json['current_juz'], 30),
       currentSurah: JsonParsers.asInt(json['current_surah'], 67),
       currentAyah: JsonParsers.asInt(json['current_ayah'], 1),
@@ -83,6 +94,7 @@ class Student {
       'monthly_fee_status': monthlyFeeStatus,
       'monthly_fee_amount': monthlyFeeAmount,
       'date_of_birth': dateOfBirth?.toIso8601String(),
+      'gender': gender,
       'created_at': createdAt.toIso8601String(),
     };
   }
@@ -97,6 +109,7 @@ class Student {
     String? parentName,
     String? parentPhone,
     String? parentEmail,
+    String? gender,
     int? currentJuz,
     int? currentSurah,
     int? currentAyah,
@@ -115,6 +128,7 @@ class Student {
       parentPhone: parentPhone ?? this.parentPhone,
       parentEmail: parentEmail ?? this.parentEmail,
       dateOfBirth: dateOfBirth,
+      gender: gender ?? this.gender,
       currentJuz: currentJuz ?? this.currentJuz,
       currentSurah: currentSurah ?? this.currentSurah,
       currentAyah: currentAyah ?? this.currentAyah,

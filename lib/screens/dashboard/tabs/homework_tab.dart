@@ -33,6 +33,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
@@ -44,13 +45,13 @@ class _HomeworkTabState extends State<HomeworkTab> {
         } else if (currentRole == 'admin' || currentRole == 'superadmin') {
           return _buildAdminView(context, p);
         }
-        return const Center(
+        return Center(
           child: Padding(
-            padding: EdgeInsets.all(24),
+            padding: const EdgeInsets.all(24),
             child: ProEmptyState(
               icon: Icons.lock_outline_rounded,
-              title: 'Access Restricted',
-              message: 'Your session permissions could not be verified.',
+              title: loc.accessRestrictedTitle,
+              message: loc.sessionPermissionsUnverified,
             ),
           ),
         );
@@ -92,129 +93,152 @@ class _HomeworkTabState extends State<HomeworkTab> {
             return RefreshIndicator(
               color: p.primary,
               onRefresh: _handleRefresh,
-              child: ListView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
-                children: [
-                  ProHeroCard(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Row(
-                          children: [
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  const Text(
-                                    'TAJWEED & RECITATION',
-                                    style: TextStyle(
-                                      fontSize: 10.5,
-                                      fontWeight: FontWeight.w700,
-                                      letterSpacing: 1.0,
-                                      color: AppColors.goldWarm,
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          ProHeroCard(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            loc.tajweedAndRecitationHeader,
+                                            style: const TextStyle(
+                                              fontSize: 10.5,
+                                              fontWeight: FontWeight.w700,
+                                              letterSpacing: 1.0,
+                                              color: AppColors.goldWarm,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 3),
+                                          Text(
+                                            loc.assignedHomework,
+                                            style: const TextStyle(
+                                              fontSize: 18,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            assignedHalaqah,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color:
+                                                  Colors.white.withOpacity(0.78),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
                                     ),
-                                  ),
-                                  const SizedBox(height: 3),
-                                  Text(
-                                    loc.assignedHomework,
-                                    style: const TextStyle(
-                                      fontSize: 18,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                    const SizedBox(width: 8),
+                                    ElevatedButton.icon(
+                                      onPressed: () =>
+                                          _showCreateAssignmentDialog(
+                                              context, assignedHalaqah),
+                                      icon: const Icon(Icons.add_rounded,
+                                          size: 17),
+                                      label: Text(loc.assignHomework),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: AppColors.goldWarm,
+                                        foregroundColor:
+                                            const Color(0xFF102322),
+                                        padding: const EdgeInsets.symmetric(
+                                            horizontal: 12, vertical: 10),
+                                      ),
                                     ),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                Text(
+                                  loc.assignSurahGoalsHint,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.white.withOpacity(0.80),
+                                    height: 1.4,
                                   ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    assignedHalaqah,
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white.withOpacity(0.78),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 8),
-                            ElevatedButton.icon(
-                              onPressed: () => _showCreateAssignmentDialog(
-                                  context, assignedHalaqah),
-                              icon: const Icon(Icons.add_rounded, size: 17),
-                              label: Text(loc.assignHomework),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppColors.goldWarm,
-                                foregroundColor: const Color(0xFF102322),
-                                padding: const EdgeInsets.symmetric(
-                                    horizontal: 12, vertical: 10),
-                              ),
-                            ),
-                          ],
-                        ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Assign Surah goals and Tajweed rules to your circle. Review submissions when parents log home practice.',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withOpacity(0.80),
-                            height: 1.4,
                           ),
-                        ),
-                      ],
+                          const SizedBox(height: 16),
+
+                          // Filter Chips
+                          SingleChildScrollView(
+                            scrollDirection: Axis.horizontal,
+                            child: Row(
+                              children: [
+                                _buildFilterChip(p, 'all',
+                                    '${loc.all} (${assignments.length})'),
+                                const SizedBox(width: 8),
+                                _buildFilterChip(p, 'active',
+                                    '${loc.activeLabel} (${assignments.where((a) => !a.isOverdue).length})'),
+                                const SizedBox(width: 8),
+                                _buildFilterChip(p, 'overdue',
+                                    '${loc.overdue} (${assignments.where((a) => a.isOverdue).length})'),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                        ],
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 16),
-
-                  // Filter Chips
-                  SingleChildScrollView(
-                    scrollDirection: Axis.horizontal,
-                    child: Row(
-                      children: [
-                        _buildFilterChip(
-                            p, 'all', '${loc.all} (${assignments.length})'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(
-                            p,
-                            'active',
-                            'Active (${assignments.where((a) => !a.isOverdue).length})'),
-                        const SizedBox(width: 8),
-                        _buildFilterChip(
-                            p,
-                            'overdue',
-                            '${loc.overdue} (${assignments.where((a) => a.isOverdue).length})'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-
                   if (filtered.isEmpty)
-                    ProEmptyState(
-                      icon: Icons.assignment_outlined,
-                      title: 'No Homework Tasks Found',
-                      message:
-                          'No homework has been assigned for $assignedHalaqah yet. Tap "${loc.assignHomework}" to give your students their first recitation goal.',
-                      actionLabel: loc.assignHomework,
-                      onAction: () =>
-                          _showCreateAssignmentDialog(context, assignedHalaqah),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                      sliver: SliverToBoxAdapter(
+                        child: ProEmptyState(
+                          icon: Icons.assignment_outlined,
+                          title: loc.noHomeworkFoundTitle,
+                          message: loc.tr('noHomeworkForCircleMsg', {
+                            'circle': assignedHalaqah,
+                            'action': loc.assignHomework,
+                          }),
+                          actionLabel: loc.assignHomework,
+                          onAction: () => _showCreateAssignmentDialog(
+                              context, assignedHalaqah),
+                        ),
+                      ),
                     )
                   else
-                    ...filtered.map((a) {
-                      final studentCount = halaqahStudentCounts.putIfAbsent(
-                        a.halaqahName,
-                        () => StudentService.instance
-                            .getStudentsForHalaqah(a.halaqahName)
-                            .length,
-                      );
-                      return _buildTeacherAssignmentCard(
-                        context,
-                        a,
-                        p,
-                        preindexedSubmissions:
-                            submissionsByAssignment[a.id] ?? const [],
-                        halaqahStudentCount: studentCount,
-                      );
-                    }),
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                      sliver: SliverList.builder(
+                        itemCount: filtered.length,
+                        itemBuilder: (context, index) {
+                          final a = filtered[index];
+                          final studentCount = halaqahStudentCounts.putIfAbsent(
+                            a.halaqahName,
+                            () => StudentService.instance
+                                .getStudentsForHalaqah(a.halaqahName)
+                                .length,
+                          );
+                          return _buildTeacherAssignmentCard(
+                            context,
+                            a,
+                            p,
+                            preindexedSubmissions:
+                                submissionsByAssignment[a.id] ?? const [],
+                            halaqahStudentCount: studentCount,
+                          );
+                        },
+                      ),
+                    ),
                 ],
               ),
             );
@@ -310,7 +334,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                           const SizedBox(width: 6),
                         ],
                         ProStatusPill(
-                          label: assignment.isOverdue ? loc.overdue : 'Active',
+                          label: assignment.isOverdue
+                              ? loc.overdue
+                              : loc.activeLabel,
                           color: assignment.isOverdue ? p.danger : p.success,
                           showDot: true,
                         ),
@@ -356,7 +382,10 @@ class _HomeworkTabState extends State<HomeworkTab> {
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
-                  '$completedCount of $totalCount Practiced at Home',
+                  loc.tr('practicedAtHomeCount', {
+                    'completed': '$completedCount',
+                    'total': '$totalCount',
+                  }),
                   style: TextStyle(
                     fontSize: 12,
                     fontWeight: FontWeight.w600,
@@ -367,7 +396,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
                 Row(
                   children: [
                     Text(
-                      'Review',
+                      loc.reviewAction,
                       style: TextStyle(
                         fontSize: 12,
                         fontWeight: FontWeight.w700,
@@ -404,6 +433,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   void _showTeacherInspectionSheet(
       BuildContext context, HomeworkAssignment assignment) {
     final p = AppColors.of(context);
+    final sheetLoc = AppLocalizations.of(context);
     final classStudents = StudentService.instance
         .getStudentsForHalaqah(assignment.halaqahName);
 
@@ -423,19 +453,21 @@ class _HomeworkTabState extends State<HomeworkTab> {
 
             return ProBottomSheetShell(
               title: assignment.title,
-              subtitle:
-                  '${assignment.surahName} (Ayahs ${assignment.fromAyah}–${assignment.toAyah})',
+              subtitle: loc.tr('surahAyahRange', {
+                'surah': assignment.surahName,
+                'from': '${assignment.fromAyah}',
+                'to': '${assignment.toAyah}',
+              }),
               icon: Icons.fact_check_rounded,
               iconColor: p.primary,
               heightFactor: 0.78,
               child: classStudents.isEmpty
-                  ? const Padding(
-                      padding: EdgeInsets.all(20),
+                  ? Padding(
+                      padding: const EdgeInsets.all(20),
                       child: ProEmptyState(
                         icon: Icons.people_outline_rounded,
-                        title: 'No students in circle',
-                        message:
-                            'No enrolled students found for this halaqah.',
+                        title: sheetLoc.noStudentsInHalaqahTitle,
+                        message: sheetLoc.noEnrolledStudentsHalaqahMsg,
                       ),
                     )
                   : ListView.separated(
@@ -458,8 +490,10 @@ class _HomeworkTabState extends State<HomeworkTab> {
                             ? p.excused
                             : (sub.isCompleted ? p.success : p.inkMuted);
                         final statusLabel = sub.isReviewed
-                            ? 'Reviewed'
-                            : (sub.isCompleted ? 'Practiced' : loc.pending);
+                            ? loc.reviewedStatus
+                            : (sub.isCompleted
+                                ? loc.practicedStatus
+                                : loc.pending);
 
                         return ProCard(
                           padding: const EdgeInsets.all(14),
@@ -507,7 +541,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                         CrossAxisAlignment.start,
                                     children: [
                                       Text(
-                                        'Home Repetitions: ${sub.repetitionCount}x recited with parent',
+                                        loc.tr('homeRepetitionsLine', {
+                                          'count': '${sub.repetitionCount}',
+                                        }),
                                         style: TextStyle(
                                           fontSize: 12,
                                           fontWeight: FontWeight.w600,
@@ -518,7 +554,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                           true) ...[
                                         const SizedBox(height: 3),
                                         Text(
-                                          'Parent Note: "${sub.parentNote}"',
+                                          loc.tr('parentNoteQuote', {
+                                            'note': '${sub.parentNote}',
+                                          }),
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             fontStyle: FontStyle.italic,
@@ -529,7 +567,12 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                       if (sub.isReviewed) ...[
                                         const SizedBox(height: 6),
                                         Text(
-                                          'Rating: ${sub.teacherRating} • "${sub.teacherFeedback ?? "Excellent"}"',
+                                          loc.tr('ratingFeedbackLine', {
+                                            'rating': loc.localizedTajweedRating(
+                                                sub.teacherRating ?? ''),
+                                            'feedback': sub.teacherFeedback ??
+                                                loc.ratingExcellent,
+                                          }),
                                           style: TextStyle(
                                             fontSize: 11.5,
                                             fontWeight: FontWeight.w700,
@@ -583,6 +626,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   Future<void> _showReviewDialog(BuildContext context,
       HomeworkSubmission submission, VoidCallback onReviewed) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _ReviewSubmissionDialog(
@@ -595,7 +639,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text('Submission endorsed for ${submission.studentName}.'),
+          content: Text(
+            loc.tr('submissionEndorsedMsg', {'name': submission.studentName}),
+          ),
           backgroundColor: p.excused,
         ),
       );
@@ -605,6 +651,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   Future<void> _showCreateAssignmentDialog(
       BuildContext context, String assignedHalaqah) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _CreateAssignmentDialog(
@@ -616,8 +663,8 @@ class _HomeworkTabState extends State<HomeworkTab> {
     setState(() {});
     if (context.mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text('Homework assigned successfully.'),
+        SnackBar(
+          content: Text(loc.translate('homeworkAssignedMsg')),
         ),
       );
     }
@@ -627,6 +674,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   // 2. PARENT VIEW
   // ===========================================================================
   Widget _buildParentView(BuildContext context, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final children = StudentService.instance.getStudentsForParent(
       AuthSessionService.instance.userId,
       parentEmail: AuthSessionService.instance.userEmail,
@@ -638,13 +686,12 @@ class _HomeworkTabState extends State<HomeworkTab> {
         onRefresh: _handleRefresh,
         child: ListView(
           padding: const EdgeInsets.all(24),
-          children: const [
-            SizedBox(height: 40),
+          children: [
+            const SizedBox(height: 40),
             ProEmptyState(
               icon: Icons.assignment_outlined,
-              title: 'No Linked Children',
-              message:
-                  'No children are currently linked to your parent account. Contact center administration to enroll your children.',
+              title: loc.noLinkedChildrenTitle,
+              message: loc.noLinkedChildrenDesc,
             ),
           ],
         ),
@@ -662,6 +709,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
           stream: HomeworkService.instance.submissionsStream,
           initialData: HomeworkService.instance.allSubmissions,
           builder: (context, subSnap) {
+            final loc = AppLocalizations.of(context);
             final assignments = HomeworkService.instance
                 .getAssignmentsForStudent(
                   activeChild.id,
@@ -680,132 +728,166 @@ class _HomeworkTabState extends State<HomeworkTab> {
             return RefreshIndicator(
               color: p.primary,
               onRefresh: _handleRefresh,
-              child: ListView(
+              child: CustomScrollView(
                 physics: const AlwaysScrollableScrollPhysics(
                   parent: BouncingScrollPhysics(),
                 ),
-                padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
-                children: [
-                  if (children.length > 1) ...[
-                    SizedBox(
-                      height: 40,
-                      child: ListView.separated(
-                        scrollDirection: Axis.horizontal,
-                        itemCount: children.length,
-                        separatorBuilder: (_, __) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) {
-                          final child = children[index];
-                          final isSelected = index == safeIndex;
-                          return GestureDetector(
-                            onTap: () =>
-                                setState(() => _selectedChildIndex = index),
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 180),
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 14, vertical: 8),
-                              decoration: BoxDecoration(
-                                color: isSelected ? p.primary : p.surface,
-                                borderRadius: BorderRadius.circular(20),
-                                border: Border.all(
-                                  color: isSelected ? p.primary : p.border,
-                                ),
+                slivers: [
+                  SliverPadding(
+                    padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                    sliver: SliverToBoxAdapter(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.stretch,
+                        children: [
+                          if (children.length > 1) ...[
+                            SizedBox(
+                              height: 40,
+                              child: ListView.separated(
+                                scrollDirection: Axis.horizontal,
+                                itemCount: children.length,
+                                separatorBuilder: (_, __) =>
+                                    const SizedBox(width: 8),
+                                itemBuilder: (context, index) {
+                                  final child = children[index];
+                                  final isSelected = index == safeIndex;
+                                  return GestureDetector(
+                                    onTap: () => setState(
+                                        () => _selectedChildIndex = index),
+                                    child: AnimatedContainer(
+                                      duration:
+                                          const Duration(milliseconds: 180),
+                                      padding: const EdgeInsets.symmetric(
+                                          horizontal: 14, vertical: 8),
+                                      decoration: BoxDecoration(
+                                        color: isSelected
+                                            ? p.primary
+                                            : p.surface,
+                                        borderRadius: BorderRadius.circular(20),
+                                        border: Border.all(
+                                          color: isSelected
+                                              ? p.primary
+                                              : p.border,
+                                        ),
+                                      ),
+                                      child: Row(
+                                        children: [
+                                          Icon(
+                                            Icons.person_rounded,
+                                            size: 15,
+                                            color: isSelected
+                                                ? p.onPrimary
+                                                : p.inkMuted,
+                                          ),
+                                          const SizedBox(width: 6),
+                                          Text(
+                                            child.fullName,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              fontWeight: FontWeight.w700,
+                                              color: isSelected
+                                                  ? p.onPrimary
+                                                  : p.ink,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  );
+                                },
                               ),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.person_rounded,
-                                    size: 15,
-                                    color:
-                                        isSelected ? p.onPrimary : p.inkMuted,
+                            ),
+                            const SizedBox(height: 14),
+                          ],
+
+                          ProHeroCard(
+                            padding: const EdgeInsets.all(18),
+                            child: Row(
+                              children: [
+                                ProAvatar(
+                                  name: activeChild.fullName,
+                                  radius: 22,
+                                  color: AppColors.goldWarm,
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        activeChild.fullName,
+                                        style: const TextStyle(
+                                          fontSize: 16.5,
+                                          fontWeight: FontWeight.w700,
+                                          color: Colors.white,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        activeChild.halaqahName,
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color:
+                                              Colors.white.withOpacity(0.78),
+                                        ),
+                                      ),
+                                    ],
                                   ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    child.fullName,
-                                    style: TextStyle(
-                                      fontSize: 12,
+                                ),
+                                Container(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 10, vertical: 5),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.16),
+                                    borderRadius: BorderRadius.circular(20),
+                                  ),
+                                  child: Text(
+                                    loc.tr('tasksCountBadge',
+                                        {'count': '${assignments.length}'}),
+                                    style: const TextStyle(
+                                      fontSize: 11.5,
                                       fontWeight: FontWeight.w700,
-                                      color: isSelected ? p.onPrimary : p.ink,
+                                      color: Colors.white,
                                     ),
                                   ),
-                                ],
-                              ),
+                                ),
+                              ],
                             ),
-                          );
-                        },
+                          ),
+                          const SizedBox(height: 18),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 14),
-                  ],
-
-                  ProHeroCard(
-                    padding: const EdgeInsets.all(18),
-                    child: Row(
-                      children: [
-                        ProAvatar(
-                          name: activeChild.fullName,
-                          radius: 22,
-                          color: AppColors.goldWarm,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                activeChild.fullName,
-                                style: const TextStyle(
-                                  fontSize: 16.5,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                              const SizedBox(height: 2),
-                              Text(
-                                activeChild.halaqahName,
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.white.withOpacity(0.78),
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 5),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.16),
-                            borderRadius: BorderRadius.circular(20),
-                          ),
-                          child: Text(
-                            '${assignments.length} Tasks',
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
                   ),
-                  const SizedBox(height: 18),
-
                   if (assignments.isEmpty)
-                    ProEmptyState(
-                      icon: Icons.menu_book_outlined,
-                      title: 'No Homework Tasks Assigned',
-                      message:
-                          'Ustaz has not posted any homework tasks for ${activeChild.fullName}\'s circle yet.',
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                      sliver: SliverToBoxAdapter(
+                        child: ProEmptyState(
+                          icon: Icons.menu_book_outlined,
+                          title: loc.noHomeworkAssignedTitle,
+                          message: loc.tr('ustazNoHomeworkYetMsg', {
+                            'name': activeChild.fullName,
+                          }),
+                        ),
+                      ),
                     )
                   else
-                    ...assignments.map(
-                      (a) => _buildParentAssignmentCard(
-                        context,
-                        a,
-                        activeChild,
-                        p,
-                        preindexedSubmission: childSubmissionsByAssignment[a.id],
+                    SliverPadding(
+                      padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                      sliver: SliverList.builder(
+                        itemCount: assignments.length,
+                        itemBuilder: (context, index) {
+                          final a = assignments[index];
+                          return _buildParentAssignmentCard(
+                            context,
+                            a,
+                            activeChild,
+                            p,
+                            preindexedSubmission:
+                                childSubmissionsByAssignment[a.id],
+                          );
+                        },
                       ),
                     ),
                 ],
@@ -832,8 +914,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
 
     final statusColor =
         isReviewed ? p.excused : (isDone ? p.success : p.warning);
-    final statusLabel =
-        isReviewed ? 'Reviewed' : (isDone ? 'Practiced' : 'Needs Practice');
+    final statusLabel = isReviewed
+        ? loc.reviewedStatus
+        : (isDone ? loc.practicedStatus : loc.needsPracticeStatus);
 
     return Padding(
       padding: const EdgeInsets.only(bottom: 14),
@@ -931,7 +1014,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                 Icon(Icons.event_outlined, size: 14, color: p.inkMuted),
                 const SizedBox(width: 5),
                 Text(
-                  'Due: ${assignment.dueDate.toIso8601String().substring(0, 10)}',
+                  loc.tr('dueDateLabel', {
+                    'date': assignment.dueDate.toIso8601String().substring(0, 10),
+                  }),
                   style: TextStyle(fontSize: 11.5, color: p.inkMuted),
                 ),
               ],
@@ -964,7 +1049,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                             size: 16, color: p.success),
                         const SizedBox(width: 6),
                         Text(
-                          'Completed: ${sub.repetitionCount}x recited at home',
+                          loc.tr('completedRepetitionsLine', {
+                            'count': '${sub.repetitionCount}',
+                          }),
                           style: TextStyle(
                             fontSize: 12,
                             fontWeight: FontWeight.w700,
@@ -976,7 +1063,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
                     if (sub.parentNote?.isNotEmpty == true) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Your Note: "${sub.parentNote}"',
+                        loc.tr('yourNoteQuote', {'note': '${sub.parentNote}'}),
                         style: TextStyle(
                           fontSize: 11.5,
                           fontStyle: FontStyle.italic,
@@ -989,7 +1076,10 @@ class _HomeworkTabState extends State<HomeworkTab> {
                       Divider(height: 1, color: p.border),
                       const SizedBox(height: 8),
                       Text(
-                        'Ustaz Grade: ${sub.teacherRating}',
+                        loc.tr('ustazGradeLine', {
+                          'rating': loc.localizedTajweedRating(
+                              sub.teacherRating ?? ''),
+                        }),
                         style: TextStyle(
                           fontSize: 12.5,
                           fontWeight: FontWeight.w700,
@@ -999,7 +1089,9 @@ class _HomeworkTabState extends State<HomeworkTab> {
                       if (sub.teacherFeedback?.isNotEmpty == true) ...[
                         const SizedBox(height: 2),
                         Text(
-                          'Feedback: "${sub.teacherFeedback}"',
+                          loc.tr('feedbackQuote', {
+                            'feedback': '${sub.teacherFeedback}',
+                          }),
                           style: TextStyle(fontSize: 11.5, color: p.ink),
                         ),
                       ],
@@ -1016,6 +1108,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
   Future<void> _showMarkPracticedDialog(BuildContext context,
       HomeworkAssignment assignment, Student student) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final saved = await showDialog<bool>(
       context: context,
       builder: (_) => _MarkPracticedDialog(
@@ -1030,7 +1123,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Marked practiced for ${student.fullName}. Ustaz notified.',
+            loc.tr('markedPracticedMsg', {'name': student.fullName}),
           ),
         ),
       );
@@ -1050,97 +1143,130 @@ class _HomeworkTabState extends State<HomeworkTab> {
         return RefreshIndicator(
           color: p.primary,
           onRefresh: _handleRefresh,
-          child: ListView(
+          child: CustomScrollView(
             physics: const AlwaysScrollableScrollPhysics(
               parent: BouncingScrollPhysics(),
             ),
-            padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
-            children: [
-              ProHeroCard(
-                padding: const EdgeInsets.all(18),
-                child: Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: Colors.white.withOpacity(0.14),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Icon(Icons.menu_book_rounded,
-                          size: 22, color: AppColors.goldWarm),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            AppLocalizations.of(context).assignedHomework,
-                            style: const TextStyle(
-                              fontSize: 16.5,
-                              fontWeight: FontWeight.w700,
-                              color: Colors.white,
+            slivers: [
+              SliverPadding(
+                padding: const EdgeInsets.fromLTRB(20, 8, 20, 0),
+                sliver: SliverToBoxAdapter(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      ProHeroCard(
+                        padding: const EdgeInsets.all(18),
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: Colors.white.withOpacity(0.14),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: const Icon(Icons.menu_book_rounded,
+                                  size: 22, color: AppColors.goldWarm),
                             ),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            '${assignments.length} total assignments across study circles',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withOpacity(0.78),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    AppLocalizations.of(context)
+                                        .assignedHomework,
+                                    style: const TextStyle(
+                                      fontSize: 16.5,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Text(
+                                    AppLocalizations.of(context).tr(
+                                      'totalAssignmentsMeta',
+                                      {'count': '${assignments.length}'},
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Colors.white.withOpacity(0.78),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
-                    ),
-                  ],
+                      const SizedBox(height: 18),
+                    ],
+                  ),
                 ),
               ),
-              const SizedBox(height: 18),
               if (assignments.isEmpty)
-                const ProEmptyState(
-                  icon: Icons.assignment_outlined,
-                  title: 'No Homework Tasks Recorded',
-                  message:
-                      'Teachers have not created any homework tasks across any study circles yet.',
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                  sliver: SliverToBoxAdapter(
+                    child: ProEmptyState(
+                      icon: Icons.assignment_outlined,
+                      title: AppLocalizations.of(context)
+                          .noHomeworkRecordedTitle,
+                      message: AppLocalizations.of(context)
+                          .teachersNoHomeworkYetMsg,
+                    ),
+                  ),
                 )
               else
-                ...assignments.map(
-                  (a) => Padding(
-                    padding: const EdgeInsets.only(bottom: 12),
-                    child: ProCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 0, 20, 124),
+                  sliver: SliverList.builder(
+                    itemCount: assignments.length,
+                    itemBuilder: (context, index) {
+                      final a = assignments[index];
+                      final loc = AppLocalizations.of(context);
+                      return Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: ProCard(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Expanded(
-                                child: Text(
-                                  a.title,
-                                  style: TextStyle(
-                                    fontSize: 15,
-                                    fontWeight: FontWeight.w700,
-                                    color: p.ink,
+                              Row(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.spaceBetween,
+                                children: [
+                                  Expanded(
+                                    child: Text(
+                                      a.title,
+                                      style: TextStyle(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: p.ink,
+                                      ),
+                                    ),
                                   ),
+                                  const SizedBox(width: 8),
+                                  ProStatusPill(
+                                      label: a.halaqahName, color: p.primary),
+                                ],
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                loc.tr('surahAyahWithTeacher', {
+                                  'surah': a.surahName,
+                                  'from': '${a.fromAyah}',
+                                  'to': '${a.toAyah}',
+                                  'teacher': a.teacherName,
+                                }),
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: p.inkSecondary,
                                 ),
                               ),
-                              const SizedBox(width: 8),
-                              ProStatusPill(
-                                  label: a.halaqahName, color: p.primary),
                             ],
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            '${a.surahName} (Ayahs ${a.fromAyah}–${a.toAyah}) • Ustaz: ${a.teacherName}',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: p.inkSecondary,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                        ),
+                      );
+                    },
                   ),
                 ),
             ],
@@ -1167,9 +1293,19 @@ class _ReviewSubmissionDialog extends StatefulWidget {
 
 class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
   String _selectedRating = 'Mumtaz (ممتاز)';
-  final _feedbackCtrl = TextEditingController(
-      text: 'Masha\'Allah excellent recitation with clear Tajweed.');
+  final _feedbackCtrl = TextEditingController();
+  bool _didInitLocalizedDefaults = false;
   bool _isSubmitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _feedbackCtrl.text =
+          AppLocalizations.of(context).translate('defaultEndorseFeedback');
+    }
+  }
 
   @override
   void dispose() {
@@ -1182,29 +1318,31 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
     final p = widget.palette;
     final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text('Grade ${widget.submission.studentName}\'s Practice'),
+      title: Text(
+        loc.tr('gradePracticeTitle', {'name': widget.submission.studentName}),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           DropdownButtonFormField<String>(
             value: _selectedRating,
-            items: const [
+            items: [
               DropdownMenuItem(
                 value: 'Mumtaz (ممتاز)',
-                child: Text('Mumtaz (ممتاز) — Excellent'),
+                child: Text(loc.ratingExcellent),
               ),
               DropdownMenuItem(
                 value: 'Jayyid Jiddan (جيد جداً)',
-                child: Text('Jayyid Jiddan (جيد جداً) — Very Good'),
+                child: Text(loc.ratingVeryGood),
               ),
               DropdownMenuItem(
                 value: 'Jayyid (جيد)',
-                child: Text('Jayyid (جيد) — Good'),
+                child: Text(loc.ratingGood),
               ),
               DropdownMenuItem(
                 value: 'Needs Revision (يحتاج مراجعة)',
-                child: Text('Needs Revision (يحتاج مراجعة)'),
+                child: Text(loc.ratingNeedsRevision),
               ),
             ],
             onChanged: _isSubmitting
@@ -1214,16 +1352,18 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
                       setState(() => _selectedRating = val);
                     }
                   },
-            decoration: const InputDecoration(labelText: 'Recitation Rating'),
+            decoration: InputDecoration(
+              labelText: loc.translate('recitationRatingLabel'),
+            ),
           ),
           const SizedBox(height: 12),
           TextField(
             controller: _feedbackCtrl,
             enabled: !_isSubmitting,
             maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Ustaz Feedback / Advice',
-              hintText: 'Enter guidance for parent and student...',
+            decoration: InputDecoration(
+              labelText: loc.translate('ustazFeedbackLabel'),
+              hintText: loc.translate('ustazFeedbackHint'),
             ),
           ),
         ],
@@ -1252,7 +1392,9 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to submit endorsement: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedEndorseMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: p.danger,
                       ),
@@ -1263,7 +1405,7 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
             backgroundColor: p.excused,
             foregroundColor: Colors.white,
           ),
-          child: Text(_isSubmitting ? 'Submitting...' : loc.submitEndorsement),
+          child: Text(_isSubmitting ? loc.submittingProgress : loc.submitEndorsement),
         ),
       ],
     );
@@ -1285,19 +1427,28 @@ class _CreateAssignmentDialog extends StatefulWidget {
 }
 
 class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
-  final _titleCtrl =
-      TextEditingController(text: 'Surah Memorization & Tajweed');
+  final _titleCtrl = TextEditingController();
   final _surahNameCtrl = TextEditingController(text: 'Al-Mulk (الملك)');
   final _surahNumCtrl = TextEditingController(text: '67');
   final _fromAyahCtrl = TextEditingController(text: '1');
   final _toAyahCtrl = TextEditingController(text: '10');
-  final _tajweedCtrl = TextEditingController(text: 'Ghunnah & Ikhfa Rules');
-  final _instructionsCtrl = TextEditingController(
-    text:
-        'Recite each verse at least 3 times focusing on correct elongation and nasalization.',
-  );
+  final _tajweedCtrl = TextEditingController();
+  final _instructionsCtrl = TextEditingController();
   DateTime _dueDate = DateTime.now().add(const Duration(days: 3));
+  bool _didInitLocalizedDefaults = false;
   bool _isSubmitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      final loc = AppLocalizations.of(context);
+      _titleCtrl.text = loc.translate('defaultHomeworkTitle');
+      _tajweedCtrl.text = loc.translate('defaultTajweedFocus');
+      _instructionsCtrl.text = loc.translate('defaultHomeworkInstructions');
+    }
+  }
 
   @override
   void dispose() {
@@ -1331,7 +1482,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               ProStatusPill(
-                label: 'Circle: ${widget.assignedHalaqah}',
+                label: loc.tr('circlePrefixLabel', {
+                  'circle': widget.assignedHalaqah,
+                }),
                 color: p.primary,
                 icon: Icons.school_rounded,
               ),
@@ -1339,9 +1492,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
               TextField(
                 controller: _titleCtrl,
                 enabled: !_isSubmitting,
-                decoration: const InputDecoration(
-                  labelText: 'Assignment Title',
-                  hintText: 'e.g. Surah Al-Mulk Practice',
+                decoration: InputDecoration(
+                  labelText: loc.translate('assignmentTitleLabel'),
+                  hintText: loc.translate('assignmentTitleHint'),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1352,8 +1505,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                     child: TextField(
                       controller: _surahNameCtrl,
                       enabled: !_isSubmitting,
-                      decoration:
-                          const InputDecoration(labelText: 'Surah Name'),
+                      decoration: InputDecoration(
+                        labelText: loc.translate('surahNameLabel'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1376,7 +1530,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                       controller: _fromAyahCtrl,
                       enabled: !_isSubmitting,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'From Ayah'),
+                      decoration: InputDecoration(
+                        labelText: loc.translate('fromAyahLabel'),
+                      ),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -1385,7 +1541,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                       controller: _toAyahCtrl,
                       enabled: !_isSubmitting,
                       keyboardType: TextInputType.number,
-                      decoration: const InputDecoration(labelText: 'To Ayah'),
+                      decoration: InputDecoration(
+                        labelText: loc.translate('toAyahLabel'),
+                      ),
                     ),
                   ),
                 ],
@@ -1394,9 +1552,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
               TextField(
                 controller: _tajweedCtrl,
                 enabled: !_isSubmitting,
-                decoration: const InputDecoration(
-                  labelText: 'Tajweed Rule Focus',
-                  hintText: 'e.g. Qalqalah, Ghunnah, Madd',
+                decoration: InputDecoration(
+                  labelText: loc.translate('tajweedFocusLabel'),
+                  hintText: loc.translate('tajweedFocusHint'),
                 ),
               ),
               const SizedBox(height: 10),
@@ -1404,8 +1562,8 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                 controller: _instructionsCtrl,
                 enabled: !_isSubmitting,
                 maxLines: 2,
-                decoration: const InputDecoration(
-                  labelText: 'Instructions for Parents & Students',
+                decoration: InputDecoration(
+                  labelText: loc.translate('instructionsParentsStudentsLabel'),
                 ),
               ),
               const SizedBox(height: 12),
@@ -1413,7 +1571,9 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
                   Text(
-                    'Due: ${_dueDate.toIso8601String().substring(0, 10)}',
+                    loc.tr('dueDateLabel', {
+                      'date': _dueDate.toIso8601String().substring(0, 10),
+                    }),
                     style: const TextStyle(
                       fontSize: 12.5,
                       fontWeight: FontWeight.w700,
@@ -1435,7 +1595,7 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                             }
                           },
                     icon: const Icon(Icons.calendar_today_rounded, size: 14),
-                    label: const Text('Change Date'),
+                    label: Text(loc.translate('changeDateAction')),
                   ),
                 ],
               ),
@@ -1478,14 +1638,17 @@ class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to assign homework: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedAssignHomeworkMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: p.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSubmitting ? 'Assigning...' : loc.assignHomework),
+          child: Text(
+              _isSubmitting ? loc.assigningProgress : loc.assignHomework),
         ),
       ],
     );
@@ -1509,9 +1672,19 @@ class _MarkPracticedDialog extends StatefulWidget {
 
 class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
   int _repetitionCount = 3;
-  final _notesCtrl =
-      TextEditingController(text: 'Recited smoothly with parent.');
+  final _notesCtrl = TextEditingController();
+  bool _didInitLocalizedDefaults = false;
   bool _isSubmitting = false;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (!_didInitLocalizedDefaults) {
+      _didInitLocalizedDefaults = true;
+      _notesCtrl.text =
+          AppLocalizations.of(context).translate('defaultPracticeNote');
+    }
+  }
 
   @override
   void dispose() {
@@ -1524,13 +1697,19 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
     final p = widget.palette;
     final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: Text('Practice for ${widget.student.fullName}'),
+      title: Text(
+        loc.tr('practiceForStudentTitle', {'name': widget.student.fullName}),
+      ),
       content: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            '${widget.assignment.surahName} (Ayahs ${widget.assignment.fromAyah}–${widget.assignment.toAyah})',
+            loc.tr('surahAyahRange', {
+              'surah': widget.assignment.surahName,
+              'from': '${widget.assignment.fromAyah}',
+              'to': '${widget.assignment.toAyah}',
+            }),
             style: TextStyle(
               fontSize: 12.5,
               fontWeight: FontWeight.w700,
@@ -1538,9 +1717,9 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
             ),
           ),
           const SizedBox(height: 14),
-          const Text(
-            'How many times did your child recite at home?',
-            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+          Text(
+            loc.translate('repetitionsQuestion'),
+            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
           ),
           const SizedBox(height: 10),
           Row(
@@ -1560,7 +1739,9 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Text(
-                  '$_repetitionCount Repetitions',
+                  loc.tr('repetitionsCountLabel', {
+                    'count': '$_repetitionCount',
+                  }),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -1581,9 +1762,9 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
             controller: _notesCtrl,
             enabled: !_isSubmitting,
             maxLines: 2,
-            decoration: const InputDecoration(
-              labelText: 'Parent Notes (Optional)',
-              hintText: 'e.g. Read smoothly, struggled on Ayah 7...',
+            decoration: InputDecoration(
+              labelText: loc.translate('parentNotesOptionalLabel'),
+              hintText: loc.translate('parentNotesHint'),
             ),
           ),
         ],
@@ -1613,14 +1794,17 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to save practice: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedSavePracticeMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: p.danger,
                       ),
                     );
                   }
                 },
-          child: Text(_isSubmitting ? 'Saving...' : loc.confirmPractice),
+          child:
+              Text(_isSubmitting ? loc.savingProgress : loc.confirmPractice),
         ),
       ],
     );

@@ -28,6 +28,8 @@ class StudentService {
 
   RealtimeChannel? _attendanceRealtimeChannel;
   RealtimeChannel? _reportsRealtimeChannel;
+  Timer? _attRealtimeDebounce;
+  Timer? _repRealtimeDebounce;
 
   final StreamController<List<Student>> _studentsController =
       StreamController<List<Student>>.broadcast();
@@ -111,6 +113,7 @@ class StudentService {
         id: id,
         fullName: p['full_name']?.toString() ?? 'Student',
         age: JsonParsers.asInt(p['age'], 8),
+        gender: Student.normalizeGender(p['gender']?.toString()),
         avatarUrl: p['avatar_url']?.toString(),
         halaqahId: p['halaqah_id']?.toString(),
         halaqahName: p['_halaqah_name']?.toString() ?? 'Assigned Halaqah',
@@ -281,6 +284,10 @@ class StudentService {
   Future<void> clearOnLogout() async {
     final uid = _uid;
     final client = SupabaseService.instance.client;
+    _attRealtimeDebounce?.cancel();
+    _attRealtimeDebounce = null;
+    _repRealtimeDebounce?.cancel();
+    _repRealtimeDebounce = null;
     final attCh = _attendanceRealtimeChannel;
     final repCh = _reportsRealtimeChannel;
     _attendanceRealtimeChannel = null;
@@ -323,6 +330,24 @@ class StudentService {
     await LocalStorageService.instance.remove('cached_students');
   }
 
+  void _scheduleAttendanceRefresh() {
+    _attRealtimeDebounce?.cancel();
+    _attRealtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        fetchAttendanceFromCloud();
+      }
+    });
+  }
+
+  void _scheduleReportsRefresh() {
+    _repRealtimeDebounce?.cancel();
+    _repRealtimeDebounce = Timer(const Duration(milliseconds: 1500), () {
+      if (SupabaseService.instance.currentUser != null) {
+        fetchWeeklyReportsFromCloud();
+      }
+    });
+  }
+
   Future<void> _subscribeRealtime() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
@@ -340,7 +365,7 @@ class StudentService {
             schema: 'public',
             table: 'student_attendance',
             callback: (payload) async {
-              await fetchAttendanceFromCloud();
+              _scheduleAttendanceRefresh();
               final newRow = payload.newRecord;
               if (newRow.isEmpty) return;
               final studentId = newRow['student_id']?.toString() ?? '';
@@ -378,7 +403,7 @@ class StudentService {
             schema: 'public',
             table: 'weekly_reports',
             callback: (payload) async {
-              await fetchWeeklyReportsFromCloud();
+              _scheduleReportsRefresh();
               final newRow = payload.newRecord;
               if (newRow.isEmpty) return;
               final studentId = newRow['student_id']?.toString() ?? '';
@@ -496,7 +521,7 @@ class StudentService {
       final res = await client
           .from('students')
           .select(
-            'id, full_name, age, avatar_url, halaqah_id, current_juz, current_surah, current_ayah, date_of_birth, created_at, '
+            'id, full_name, age, gender, avatar_url, halaqah_id, current_juz, current_surah, current_ayah, date_of_birth, created_at, '
             'halaqahs:halaqah_id(name), '
             'parent_students(parent_id, profiles:parent_id(full_name, phone, email))',
           )
@@ -683,6 +708,7 @@ class StudentService {
   Future<Student> addStudent({
     required String fullName,
     required int age,
+    String? gender,
     String? avatarUrl,
     required String halaqahName,
     required String parentId,
@@ -697,11 +723,13 @@ class StudentService {
     final studentId = UuidV4.generate();
     final createdAt = DateTime.now();
     final createdAtIso = createdAt.toUtc().toIso8601String();
+    final cleanGender = Student.normalizeGender(gender);
 
     final Map<String, dynamic> insertPayload = {
       'id': studentId,
       'full_name': fullName.trim(),
       'age': age,
+      if (cleanGender != null) 'gender': cleanGender,
       'current_juz': currentJuz,
       'current_surah': currentSurah,
       'current_ayah': currentAyah,
@@ -718,6 +746,7 @@ class StudentService {
         id: studentId,
         fullName: fullName.trim(),
         age: age,
+        gender: cleanGender,
         avatarUrl: avatarUrl,
         halaqahId: _isValidUuid(halaqahId) ? halaqahId : null,
         halaqahName: halaqahName,
@@ -805,6 +834,97 @@ class StudentService {
         );
       }
       return syncedStudent;
+    } catch (e) {
+      if (ConnectivityService.isNetworkError(e)) {
+        ConnectivityService.instance.reportNetworkFailure();
+        return await applyLocally(queueOffline: true);
+      }
+      rethrow;
+    }
+  }
+
+  /// Admin Action: Update an existing student's profile details and sex/gender.
+  Future<Student> updateStudent({
+    required Student existing,
+    required String fullName,
+    required int age,
+    String? gender,
+    String? avatarUrl,
+    required String halaqahName,
+    String? halaqahId,
+    required int currentJuz,
+    required int currentSurah,
+    required int currentAyah,
+  }) async {
+    final cleanGender = Student.normalizeGender(gender);
+    final resolvedHalaqahId =
+        _isValidUuid(halaqahId) ? halaqahId : existing.halaqahId;
+    final Map<String, dynamic> dbFields = {
+      'full_name': fullName.trim(),
+      'age': age,
+      'gender': cleanGender,
+      'current_juz': currentJuz,
+      'current_surah': currentSurah,
+      'current_ayah': currentAyah,
+      if (resolvedHalaqahId != null) 'halaqah_id': resolvedHalaqahId,
+      if (avatarUrl != null && avatarUrl.isNotEmpty) 'avatar_url': avatarUrl,
+    };
+
+    Future<Student> applyLocally({required bool queueOffline}) async {
+      final updated = existing.copyWith(
+        fullName: fullName.trim(),
+        age: age,
+        gender: cleanGender,
+        avatarUrl:
+            (avatarUrl != null && avatarUrl.isNotEmpty) ? avatarUrl : existing.avatarUrl,
+        halaqahId: resolvedHalaqahId,
+        halaqahName: halaqahName,
+        currentJuz: currentJuz,
+        currentSurah: currentSurah,
+        currentAyah: currentAyah,
+      );
+      final idx = _students.indexWhere((s) => s.id == existing.id);
+      if (idx != -1) {
+        _students[idx] = updated;
+      } else {
+        _students.insert(0, updated);
+      }
+      if (!_studentsController.isClosed) {
+        _studentsController.add(List.from(_students));
+      }
+      await _saveStudentsCache();
+
+      if (queueOffline) {
+        await OfflineSyncService.instance.enqueue(
+          entityType: OfflineEntityTypes.student,
+          operation: 'upsert',
+          id: existing.id,
+          payload: {
+            'id': existing.id,
+            ...dbFields,
+            'created_at': existing.createdAt.toUtc().toIso8601String(),
+            '_halaqah_name': halaqahName,
+            if (_isValidUuid(existing.parentId)) '_parent_id': existing.parentId,
+            '_parent_name': existing.parentName,
+            '_parent_phone': existing.parentPhone,
+            if (existing.parentEmail != null)
+              '_parent_email': existing.parentEmail,
+          },
+          displayLabel: 'Update: ${fullName.trim()}',
+          triggerImmediateSync: false,
+        );
+      }
+      return updated;
+    }
+
+    final client = SupabaseService.instance.client;
+    if (!ConnectivityService.instance.isOnline || client == null) {
+      return await applyLocally(queueOffline: true);
+    }
+
+    try {
+      await client.from('students').update(dbFields).eq('id', existing.id);
+      return await applyLocally(queueOffline: false);
     } catch (e) {
       if (ConnectivityService.isNetworkError(e)) {
         ConnectivityService.instance.reportNetworkFailure();

@@ -194,7 +194,7 @@ class _HomeTabState extends State<HomeTab> {
                                   ),
                                   const SizedBox(width: 5),
                                   Text(
-                                    _formatTodayLabel(),
+                                    loc.formatTodayDateBanner(),
                                     style: const TextStyle(
                                       fontSize: 11,
                                       fontWeight: FontWeight.w600,
@@ -250,13 +250,16 @@ class _HomeTabState extends State<HomeTab> {
                 VoidCallback nextStepAction;
 
                 if (!hasHalaqah) {
-                  nextStepActionText = 'Create First Halaqah';
+                  nextStepActionText =
+                      loc.translate('createFirstHalaqahAction');
                   nextStepAction = () => HalaqahManagementSheet.show(context);
                 } else if (!hasTeacherCode) {
-                  nextStepActionText = 'Generate Teacher Invite Code';
+                  nextStepActionText =
+                      loc.translate('generateTeacherCodeAction');
                   nextStepAction = () => InviteCodesBottomSheet.show(context);
                 } else {
-                  nextStepActionText = 'Enroll First Student';
+                  nextStepActionText =
+                      loc.translate('enrollFirstStudentAction');
                   nextStepAction = () => AddStudentDialog.show(context);
                 }
 
@@ -272,7 +275,7 @@ class _HomeTabState extends State<HomeTab> {
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
                               Text(
-                                'Center Setup',
+                                loc.translate('centerSetupTitle'),
                                 style: TextStyle(
                                   fontSize: 16,
                                   fontWeight: FontWeight.w700,
@@ -281,7 +284,7 @@ class _HomeTabState extends State<HomeTab> {
                               ),
                               const SizedBox(height: 2),
                               Text(
-                                'Complete onboarding to launch all circles',
+                                loc.translate('completeOnboardingSubtitle'),
                                 style: TextStyle(
                                   fontSize: 12,
                                   color: p.inkSecondary,
@@ -290,7 +293,7 @@ class _HomeTabState extends State<HomeTab> {
                             ],
                           ),
                           ProStatusPill(
-                            label: '$completedSteps of 3',
+                            label: loc.tr('stepsOf3', {'count': '$completedSteps'}),
                             color: p.gold,
                           ),
                         ],
@@ -309,21 +312,21 @@ class _HomeTabState extends State<HomeTab> {
                       _buildChecklistStep(
                         p: p,
                         stepNum: 1,
-                        title: 'Create a study circle (Halaqah)',
+                        title: loc.translate('checklistStep1'),
                         isDone: hasHalaqah,
                       ),
                       const SizedBox(height: 10),
                       _buildChecklistStep(
                         p: p,
                         stepNum: 2,
-                        title: 'Generate a teacher invite code',
+                        title: loc.translate('checklistStep2'),
                         isDone: hasTeacherCode,
                       ),
                       const SizedBox(height: 10),
                       _buildChecklistStep(
                         p: p,
                         stepNum: 3,
-                        title: 'Enroll your first student',
+                        title: loc.translate('checklistStep3'),
                         isDone: hasStudent,
                       ),
                       const SizedBox(height: 18),
@@ -392,16 +395,6 @@ class _HomeTabState extends State<HomeTab> {
         ),
       ],
     );
-  }
-
-  String _formatTodayLabel() {
-    const weekdays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final now = DateTime.now();
-    return '${weekdays[now.weekday - 1]}, ${months[now.month - 1]} ${now.day}';
   }
 
   Widget _buildHeroStatItem({
@@ -604,6 +597,7 @@ class _HomeTabState extends State<HomeTab> {
           stream: AbsenceService.instance.requestsStream,
           initialData: AbsenceService.instance.allRequests,
           builder: (context, _) {
+            final loc = AppLocalizations.of(context);
             final pendingExcuses = AbsenceService.instance
                 .getPendingRequestsForHalaqah(className, halaqahId: classId)
                 .length;
@@ -619,9 +613,9 @@ class _HomeTabState extends State<HomeTab> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              'ASSIGNED STUDY CIRCLE',
-                              style: TextStyle(
+                            Text(
+                              loc.translate('assignedStudyCircleHeader'),
+                              style: const TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
                                 letterSpacing: 1.0,
@@ -632,7 +626,7 @@ class _HomeTabState extends State<HomeTab> {
                             Text(
                               className.isNotEmpty
                                   ? className
-                                  : 'Assigned Circle',
+                                  : loc.assignedCircle,
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
@@ -656,7 +650,10 @@ class _HomeTabState extends State<HomeTab> {
                           borderRadius: BorderRadius.circular(20),
                         ),
                         child: Text(
-                          '$total ${total == 1 ? 'Student' : 'Students'}',
+                          total == 1
+                              ? loc.translate('studentBadgeOne')
+                              : loc.tr('studentsBadgeLabel',
+                                  {'count': '$total'}),
                           style: const TextStyle(
                             fontSize: 11.5,
                             fontWeight: FontWeight.w700,
@@ -671,14 +668,17 @@ class _HomeTabState extends State<HomeTab> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       Text(
-                        'Today\'s Attendance',
+                        loc.translate('todaysAttendanceLabel'),
                         style: TextStyle(
                           fontSize: 12,
                           color: Colors.white.withOpacity(0.82),
                         ),
                       ),
                       Text(
-                        '$markedToday / $total marked',
+                        loc.tr('markedProgressLabel', {
+                          'marked': '$markedToday',
+                          'total': '$total',
+                        }),
                         style: const TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w700,
@@ -724,7 +724,10 @@ class _HomeTabState extends State<HomeTab> {
                           ),
                           const SizedBox(width: 6),
                           Text(
-                            '$pendingExcuses pending absence excuse${pendingExcuses == 1 ? '' : 's'} to review',
+                            pendingExcuses == 1
+                                ? loc.translate('pendingExcusesNoticeOne')
+                                : loc.tr('pendingExcusesNoticeMany',
+                                    {'count': '$pendingExcuses'}),
                             style: const TextStyle(
                               fontSize: 11.5,
                               fontWeight: FontWeight.w600,
@@ -742,7 +745,7 @@ class _HomeTabState extends State<HomeTab> {
                         child: ElevatedButton.icon(
                           onPressed: () => widget.onNavigateToTab?.call(1),
                           icon: const Icon(Icons.fact_check_rounded, size: 16),
-                          label: const Text('Take Attendance'),
+                          label: Text(loc.translate('takeAttendanceAction')),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: AppColors.goldWarm,
                             foregroundColor: const Color(0xFF102322),
@@ -759,9 +762,9 @@ class _HomeTabState extends State<HomeTab> {
                             size: 16,
                             color: Colors.white,
                           ),
-                          label: const Text(
-                            'Homework',
-                            style: TextStyle(color: Colors.white),
+                          label: Text(
+                            loc.translate('homeworkLabel'),
+                            style: const TextStyle(color: Colors.white),
                           ),
                           style: OutlinedButton.styleFrom(
                             side: BorderSide(
@@ -790,6 +793,7 @@ class _HomeTabState extends State<HomeTab> {
       stream: StudentService.instance.studentsStream,
       initialData: StudentService.instance.allStudents,
       builder: (context, _) {
+        final loc = AppLocalizations.of(context);
         final children = StudentService.instance.getStudentsForParent(
           AuthSessionService.instance.userId,
           parentEmail: AuthSessionService.instance.userEmail,
@@ -812,9 +816,9 @@ class _HomeTabState extends State<HomeTab> {
                   Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'FAMILY LEARNING HUB',
-                        style: TextStyle(
+                      Text(
+                        loc.translate('familyLearningHubHeader'),
+                        style: const TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
                           letterSpacing: 1.0,
@@ -825,7 +829,7 @@ class _HomeTabState extends State<HomeTab> {
                       Text(
                         activeChild != null
                             ? activeChild.fullName
-                            : 'Welcome Parent',
+                            : loc.translate('welcomeParentFallback'),
                         style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -845,7 +849,8 @@ class _HomeTabState extends State<HomeTab> {
                       borderRadius: BorderRadius.circular(20),
                     ),
                     child: Text(
-                      '${children.length} Enrolled',
+                      loc.tr('enrolledCountBadge',
+                          {'count': '${children.length}'}),
                       style: const TextStyle(
                         fontSize: 11.5,
                         fontWeight: FontWeight.w700,
@@ -861,7 +866,11 @@ class _HomeTabState extends State<HomeTab> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Text(
-                      'Juz ${activeChild.currentJuz} • Surah #${activeChild.currentSurah}, Ayah ${activeChild.currentAyah}',
+                      loc.tr('juzSurahAyahSummary', {
+                        'juz': '${activeChild.currentJuz}',
+                        'surah': '${activeChild.currentSurah}',
+                        'ayah': '${activeChild.currentAyah}',
+                      }),
                       style: TextStyle(
                         fontSize: 12.5,
                         color: Colors.white.withOpacity(0.88),
@@ -879,7 +888,10 @@ class _HomeTabState extends State<HomeTab> {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          'Today: ${todayAtt.status.toUpperCase()}',
+                          loc.tr('todayAttBadge', {
+                            'status':
+                                loc.localizedAttendanceStatus(todayAtt.status),
+                          }),
                           style: const TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w700,
@@ -903,7 +915,7 @@ class _HomeTabState extends State<HomeTab> {
                 ),
               ] else
                 Text(
-                  'No children linked to your account yet. Please contact center administration.',
+                  loc.translate('noChildrenLinkedBanner'),
                   style: TextStyle(
                     fontSize: 12.5,
                     color: Colors.white.withOpacity(0.82),
@@ -917,7 +929,7 @@ class _HomeTabState extends State<HomeTab> {
                     child: ElevatedButton.icon(
                       onPressed: () => widget.onNavigateToTab?.call(1),
                       icon: const Icon(Icons.auto_stories_rounded, size: 16),
-                      label: const Text('Learning Progress'),
+                      label: Text(loc.translate('learningProgressAction')),
                       style: ElevatedButton.styleFrom(
                         backgroundColor: AppColors.goldWarm,
                         foregroundColor: const Color(0xFF102322),
@@ -941,9 +953,9 @@ class _HomeTabState extends State<HomeTab> {
                         size: 16,
                         color: Colors.white,
                       ),
-                      label: const Text(
-                        'Tuition & Fees',
-                        style: TextStyle(color: Colors.white),
+                      label: Text(
+                        loc.tuitionAndFees,
+                        style: const TextStyle(color: Colors.white),
                       ),
                       style: OutlinedButton.styleFrom(
                         side: BorderSide(
@@ -989,7 +1001,13 @@ class _HomeTabState extends State<HomeTab> {
                       fontSize: 13, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(width: 2),
-                Icon(Icons.chevron_right_rounded, size: 17, color: p.primary),
+                Icon(
+                  Directionality.of(context) == TextDirection.rtl
+                      ? Icons.chevron_left_rounded
+                      : Icons.chevron_right_rounded,
+                  size: 17,
+                  color: p.primary,
+                ),
               ],
             ),
           ),
@@ -998,14 +1016,14 @@ class _HomeTabState extends State<HomeTab> {
         StreamBuilder<List<Announcement>>(
           stream: _announcementsStream,
           builder: (context, snapshot) {
+            final loc = AppLocalizations.of(context);
             final announcements = snapshot.data ?? [];
 
             if (announcements.isEmpty) {
               return ProEmptyState(
                 icon: Icons.campaign_outlined,
-                title: 'No announcements yet',
-                message:
-                    'Official circulars and center notices will appear here as soon as they are published.',
+                title: loc.translate('noAnnouncementsTitle'),
+                message: loc.translate('noAnnouncementsDesc'),
                 accentColor: p.gold,
               );
             }
@@ -1030,25 +1048,6 @@ class _VerticalAnnouncementsList extends StatelessWidget {
     required this.p,
   });
 
-  String _formatAnnouncementDate(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24 && now.day == dt.day) return '${diff.inHours}h ago';
-    final yesterday = now.subtract(const Duration(days: 1));
-    if (dt.year == yesterday.year &&
-        dt.month == yesterday.month &&
-        dt.day == yesterday.day) {
-      return 'Yesterday';
-    }
-    return '${months[dt.month - 1]} ${dt.day}';
-  }
-
   bool _isImage(String url, String? name) {
     final lowerUrl = url.toLowerCase();
     final lowerName = (name ?? '').toLowerCase();
@@ -1067,6 +1066,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     final items = announcements.take(4).toList();
 
     return Column(
@@ -1074,8 +1074,9 @@ class _VerticalAnnouncementsList extends StatelessWidget {
         final isPinned = item.isPinned;
         final hasAudienceTag = item.targetAudience == 'parents' ||
             item.targetAudience == 'teachers';
-        final audienceLabel =
-            item.targetAudience == 'parents' ? 'Parents' : 'Teachers';
+        final audienceLabel = item.targetAudience == 'parents'
+            ? loc.parentsTab
+            : loc.teachersTab;
         final hasImage = item.attachmentUrl != null &&
             item.attachmentUrl!.isNotEmpty &&
             _isImage(item.attachmentUrl!, item.attachmentName);
@@ -1099,7 +1100,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         children: [
                           if (isPinned)
                             ProStatusPill(
-                              label: 'Pinned',
+                              label: loc.translate('pinnedTag'),
                               icon: Icons.push_pin_rounded,
                               color: p.gold,
                             ),
@@ -1112,7 +1113,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                       )
                     else
                       Text(
-                        'CENTER NOTICE',
+                        loc.translate('centerNoticeTag'),
                         style: TextStyle(
                           fontSize: 10.5,
                           fontWeight: FontWeight.w700,
@@ -1121,7 +1122,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         ),
                       ),
                     Text(
-                      _formatAnnouncementDate(item.createdAt),
+                      loc.formatRelativeDate(item.createdAt),
                       style: TextStyle(
                         fontSize: 11.5,
                         color: p.inkSecondary,
@@ -1202,7 +1203,8 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         const SizedBox(width: 6),
                         Flexible(
                           child: Text(
-                            item.attachmentName ?? 'Attachment',
+                            item.attachmentName ??
+                                loc.translate('attachmentFallback'),
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: TextStyle(
@@ -1241,7 +1243,11 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                       const SizedBox(width: 7),
                       Expanded(
                         child: Text(
-                          item.authorName.replaceAll(' (Director)', ' · Director'),
+                          item.authorName
+                              .replaceAll(' (Director)', ' · ${loc.roleAdmin}')
+                              .replaceAll(
+                                  'Center Administration',
+                                  loc.centerAdministrationTitle),
                           style: TextStyle(
                             fontSize: 11.5,
                             color: p.inkMuted,

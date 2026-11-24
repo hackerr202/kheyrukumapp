@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
@@ -53,11 +54,12 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final isAdmin = AuthSessionService.instance.isAdmin;
 
     return ProBottomSheetShell(
-      title: 'Notices & Activity',
-      subtitle: 'Circulars & alerts',
+      title: loc.translate('noticesAndActivityTitle'),
+      subtitle: loc.translate('circularsAndAlertsSubtitle'),
       icon: Icons.campaign_rounded,
       iconColor: p.gold,
       heightFactor: 0.88,
@@ -70,7 +72,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 );
               },
               icon: const Icon(Icons.add_rounded, size: 15),
-              label: const Text('Post', style: TextStyle(fontSize: 12)),
+              label: Text(loc.translate('postShortButton'),
+                  style: const TextStyle(fontSize: 12)),
               style: ElevatedButton.styleFrom(
                 backgroundColor: p.gold,
                 foregroundColor: Colors.white,
@@ -84,7 +87,10 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           Padding(
             padding: const EdgeInsets.fromLTRB(18, 12, 18, 8),
             child: ProSegmentedControl(
-              labels: const ['Activity Alerts', 'Announcements'],
+              labels: [
+                loc.translate('activityAlertsTab'),
+                loc.translate('announcementsTab'),
+              ],
               selectedIndex: _activeTab,
               onChanged: (idx) {
                 setState(() => _activeTab = idx);
@@ -105,15 +111,14 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   final notifs = snapshot.data ?? [];
 
                   if (notifs.isEmpty) {
-                    return const Align(
-                      alignment: Alignment(0, -0.22),
+                    return Align(
+                      alignment: const Alignment(0, -0.22),
                       child: Padding(
-                        padding: EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(24),
                         child: ProEmptyState(
                           icon: Icons.notifications_none_rounded,
-                          title: 'No alerts yet',
-                          message:
-                              'Daily attendance updates, weekly reports, and tuition reminders will appear here.',
+                          title: loc.translate('noAlertsYetTitle'),
+                          message: loc.translate('noAlertsYetDesc'),
                         ),
                       ),
                     );
@@ -140,8 +145,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                                   tapTargetSize:
                                       MaterialTapTargetSize.shrinkWrap,
                                 ),
-                                child: const Text('Mark all read',
-                                    style: TextStyle(fontSize: 12)),
+                                child: Text(loc.translate('markAllReadAction'),
+                                    style: const TextStyle(fontSize: 12)),
                               ),
                             ],
                           ),
@@ -170,11 +175,12 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 padding:
                     const EdgeInsets.symmetric(horizontal: 18, vertical: 4),
                 children: [
-                  _buildFilterChip('all', 'All Notices', p),
-                  _buildFilterChip('pinned', 'Pinned', p),
-                  _buildFilterChip('parents', 'Parents', p),
-                  _buildFilterChip('teachers', 'Teachers', p),
-                  _buildFilterChip('attachments', 'Attachments', p),
+                  _buildFilterChip('all', loc.translate('allNoticesFilter'), p),
+                  _buildFilterChip('pinned', loc.translate('pinnedTag'), p),
+                  _buildFilterChip('parents', loc.parentsTab, p),
+                  _buildFilterChip('teachers', loc.teachersTab, p),
+                  _buildFilterChip(
+                      'attachments', loc.translate('attachmentsFilter'), p),
                 ],
               ),
             ),
@@ -210,15 +216,14 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   }).toList();
 
                   if (list.isEmpty) {
-                    return const Align(
-                      alignment: Alignment(0, -0.22),
+                    return Align(
+                      alignment: const Alignment(0, -0.22),
                       child: Padding(
-                        padding: EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(24),
                         child: ProEmptyState(
                           icon: Icons.campaign_outlined,
-                          title: 'No notices found',
-                          message:
-                              'No center announcements match the selected filter.',
+                          title: loc.translate('noNoticesFoundTitle'),
+                          message: loc.translate('noNoticesFilterDesc'),
                         ),
                       ),
                     );
@@ -242,6 +247,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   }
 
   Widget _buildNotificationCard(AppNotification item, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     Color iconColor = p.primary;
     IconData iconData = Icons.notifications_rounded;
 
@@ -300,7 +306,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                       ),
                     ),
                     Text(
-                      _formatDate(item.createdAt),
+                      loc.formatRelativeDate(item.createdAt),
                       style: TextStyle(
                         color: p.inkSecondary,
                         fontSize: 11,
@@ -346,7 +352,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                       mainAxisSize: MainAxisSize.min,
                       children: [
                         Text(
-                          'Open Tuition & Payments',
+                          loc.translate('openTuitionPaymentsAction'),
                           style: TextStyle(
                             fontSize: 12,
                             color: p.primary,
@@ -355,7 +361,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                         ),
                         const SizedBox(width: 4),
                         Icon(
-                          Icons.arrow_forward_rounded,
+                          Directionality.of(context) == TextDirection.rtl
+                              ? Icons.arrow_back_rounded
+                              : Icons.arrow_forward_rounded,
                           size: 14,
                           color: p.primary,
                         ),
@@ -399,10 +407,11 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   }
 
   Widget _buildAnnouncementCard(Announcement item, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     final hasAudienceTag =
         item.targetAudience == 'parents' || item.targetAudience == 'teachers';
     final audienceLabel =
-        item.targetAudience == 'parents' ? 'Parents' : 'Teachers';
+        item.targetAudience == 'parents' ? loc.parentsTab : loc.teachersTab;
 
     return ProCard(
       accentStripeColor: item.isPinned ? p.gold : null,
@@ -420,7 +429,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   children: [
                     if (item.isPinned)
                       ProStatusPill(
-                        label: 'Pinned',
+                        label: loc.translate('pinnedTag'),
                         icon: Icons.push_pin_rounded,
                         color: p.gold,
                       ),
@@ -433,7 +442,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 )
               else
                 Text(
-                  'CENTER NOTICE',
+                  loc.translate('centerNoticeTag'),
                   style: TextStyle(
                     fontSize: 10.5,
                     fontWeight: FontWeight.w700,
@@ -442,7 +451,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   ),
                 ),
               Text(
-                _formatDate(item.createdAt),
+                loc.formatRelativeDate(item.createdAt),
                 style: TextStyle(
                   color: p.inkSecondary,
                   fontSize: 11.5,
@@ -508,7 +517,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                                 size: 20, color: p.inkMuted),
                             const SizedBox(width: 8),
                             Text(
-                              'Image unavailable',
+                              loc.translate('imageUnavailableLabel'),
                               style: TextStyle(color: p.inkMuted, fontSize: 12),
                             ),
                           ],
@@ -545,7 +554,8 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                       const SizedBox(width: 8),
                       Expanded(
                         child: Text(
-                          item.attachmentName ?? 'Attached document',
+                          item.attachmentName ??
+                              loc.translate('attachedDocumentFallback'),
                           style: TextStyle(
                             color: p.ink,
                             fontSize: 12.5,
@@ -586,7 +596,12 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 const SizedBox(width: 7),
                 Expanded(
                   child: Text(
-                    item.authorName.replaceAll(' (Director)', ' · Director'),
+                    item.authorName == 'Center Administration'
+                        ? loc.translate('centerAdministrationTitle')
+                        : item.authorName.replaceAll(
+                            ' (Director)',
+                            ' · ${loc.translate('directorRoleShort')}',
+                          ),
                     style: TextStyle(
                       color: p.inkMuted,
                       fontSize: 11.5,
@@ -602,25 +617,6 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
         ],
       ),
     );
-  }
-
-  String _formatDate(DateTime dt) {
-    const months = [
-      'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-      'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
-    ];
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'Just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24 && now.day == dt.day) return '${diff.inHours}h ago';
-    final yesterday = now.subtract(const Duration(days: 1));
-    if (dt.year == yesterday.year &&
-        dt.month == yesterday.month &&
-        dt.day == yesterday.day) {
-      return 'Yesterday';
-    }
-    return '${months[dt.month - 1]} ${dt.day}';
   }
 
   bool _isImageAttachment(String url, String? name) {

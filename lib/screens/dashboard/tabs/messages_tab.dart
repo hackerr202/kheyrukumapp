@@ -441,9 +441,10 @@ class _MessagesTabState extends State<MessagesTab> {
     String currentUserId,
     AppPalette p,
   ) {
+    final loc = AppLocalizations.of(context);
     final hasUnread = convo.unreadCount > 0;
     final isGroup = convo.isGroup;
-    final badgeInfo = _resolveBadgeInfo(convo, p);
+    final badgeInfo = _resolveBadgeInfo(convo, p, loc);
     final displayTitle =
         MessagingService.instance.displayTitleFor(convo, currentUserId);
 
@@ -460,7 +461,7 @@ class _MessagesTabState extends State<MessagesTab> {
           Icons.attach_file_rounded, p.gold, preview, hasUnread, p);
     } else {
       lastMsgWidget = Text(
-        preview.isNotEmpty ? preview : 'Tap to open conversation',
+        preview.isNotEmpty ? preview : loc.tapToOpenConvo,
         maxLines: 1,
         overflow: TextOverflow.ellipsis,
         style: TextStyle(
@@ -543,7 +544,7 @@ class _MessagesTabState extends State<MessagesTab> {
                       ),
                       const SizedBox(width: 6),
                       Text(
-                        _formatTime(convo.lastMessageTime),
+                        loc.formatChatTimestamp(convo.lastMessageTime),
                         style: TextStyle(
                           fontSize: 11,
                           color: hasUnread ? p.primary : p.inkMuted,
@@ -640,6 +641,7 @@ class _MessagesTabState extends State<MessagesTab> {
 
   void _showTeacherMessageParentSheet(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final assignedHalaqah = AuthSessionService.instance.assignedHalaqahName;
     final classStudents = StudentService.instance.getStudentsForHalaqah(
       assignedHalaqah,
@@ -652,19 +654,18 @@ class _MessagesTabState extends State<MessagesTab> {
       isScrollControlled: true,
       builder: (ctx) {
         return ProBottomSheetShell(
-          title: 'Message Class Parent',
-          subtitle: 'Select a parent from $assignedHalaqah',
+          title: loc.messageClassParentTitle,
+          subtitle: loc.tr('selectParentFromCircle', {'circle': assignedHalaqah}),
           icon: Icons.chat_bubble_rounded,
           iconColor: p.primary,
           heightFactor: 0.65,
           child: classStudents.isEmpty
-              ? const Padding(
-                  padding: EdgeInsets.all(20),
+              ? Padding(
+                  padding: const EdgeInsets.all(20),
                   child: ProEmptyState(
                     icon: Icons.people_outline_rounded,
-                    title: 'No students in class',
-                    message:
-                        'No students are currently assigned to your study circle.',
+                    title: loc.noStudentsInClassTitle,
+                    message: loc.noStudentsInCircleMsg,
                   ),
                 )
               : ListView.separated(
@@ -683,7 +684,8 @@ class _MessagesTabState extends State<MessagesTab> {
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                '${student.fullName} does not have a linked parent account yet.',
+                                loc.tr('noLinkedParentMsg',
+                                    {'name': student.fullName}),
                               ),
                             ),
                           );
@@ -715,7 +717,9 @@ class _MessagesTabState extends State<MessagesTab> {
                           messenger.showSnackBar(
                             SnackBar(
                               content: Text(
-                                'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+                                loc.tr('couldNotOpenChatMsg', {
+                                  'error': SupabaseService.cleanErrorMessage(e),
+                                }),
                               ),
                               backgroundColor: p.danger,
                             ),
@@ -745,7 +749,10 @@ class _MessagesTabState extends State<MessagesTab> {
                                   ),
                                 ),
                                 Text(
-                                  'Student: ${student.fullName} • ${student.parentPhone}',
+                                  loc.tr('studentContactMeta', {
+                                    'name': student.fullName,
+                                    'phone': student.parentPhone,
+                                  }),
                                   overflow: TextOverflow.ellipsis,
                                   style: TextStyle(
                                     fontSize: 11.5,
@@ -773,13 +780,14 @@ class _MessagesTabState extends State<MessagesTab> {
   Future<void> _startParentDirectChat(BuildContext context,
       {required String role}) async {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final children = StudentService.instance.getStudentsForParent(
       AuthSessionService.instance.userId,
       parentEmail: AuthSessionService.instance.userEmail,
     );
     final child = children.isNotEmpty ? children.first : null;
     final childHalaqahId = child?.halaqahId;
-    final childHalaqah = child?.halaqahName ?? 'Study Circle';
+    final childHalaqah = child?.halaqahName ?? loc.studyCircleFallback;
     final halaqahs = HalaqahService.instance.halaqahs;
     final hMatch = (childHalaqahId != null && childHalaqahId.isNotEmpty)
         ? halaqahs.where((h) => h.id == childHalaqahId)
@@ -788,7 +796,7 @@ class _MessagesTabState extends State<MessagesTab> {
     final teacherName =
         (hMatch.isNotEmpty && hMatch.first.teacherName != 'Unassigned')
             ? hMatch.first.teacherName
-            : 'Assigned Ustaz';
+            : loc.translate('assignedUstazTitle');
     final teacherId = hMatch.isNotEmpty ? hMatch.first.teacherId : null;
 
     try {
@@ -796,7 +804,9 @@ class _MessagesTabState extends State<MessagesTab> {
         parentId: AuthSessionService.instance.userId,
         parentName: AuthSessionService.instance.userName,
         targetRole: role,
-        targetName: role == 'teacher' ? teacherName : 'Center Director',
+        targetName: role == 'teacher'
+            ? teacherName
+            : loc.translate('centerDirectorTitle'),
         targetId: role == 'teacher' ? teacherId : null,
         halaqahId: childHalaqahId,
         halaqahName: childHalaqah,
@@ -810,7 +820,9 @@ class _MessagesTabState extends State<MessagesTab> {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Could not start chat: ${SupabaseService.cleanErrorMessage(e)}',
+              loc.tr('couldNotOpenChatMsg', {
+                'error': SupabaseService.cleanErrorMessage(e),
+              }),
             ),
             backgroundColor: p.danger,
           ),
@@ -821,6 +833,7 @@ class _MessagesTabState extends State<MessagesTab> {
 
   void _showAdminActionSheet(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final registeredParents = StudentService.instance.getRegisteredParents();
     final halaqahs = HalaqahService.instance.halaqahs;
 
@@ -829,9 +842,10 @@ class _MessagesTabState extends State<MessagesTab> {
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) {
+        final ctxLoc = AppLocalizations.of(ctx);
         return ProBottomSheetShell(
-          title: 'Admin Messaging Hub',
-          subtitle: 'Start a direct chat or circle group',
+          title: ctxLoc.adminMessagingHubTitle,
+          subtitle: ctxLoc.adminMessagingHubSubtitle,
           icon: Icons.forum_rounded,
           iconColor: p.primary,
           heightFactor: 0.44,
@@ -861,7 +875,7 @@ class _MessagesTabState extends State<MessagesTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Message Teacher or Parent',
+                            ctxLoc.messageTeacherOrParent,
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
@@ -869,7 +883,7 @@ class _MessagesTabState extends State<MessagesTab> {
                             ),
                           ),
                           Text(
-                            'Browse all active staff and parent contacts',
+                            ctxLoc.browseActiveContacts,
                             style: TextStyle(
                               fontSize: 12,
                               color: p.inkSecondary,
@@ -878,7 +892,12 @@ class _MessagesTabState extends State<MessagesTab> {
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded, color: p.inkMuted),
+                    Icon(
+                      Directionality.of(ctx) == TextDirection.rtl
+                          ? Icons.chevron_left_rounded
+                          : Icons.chevron_right_rounded,
+                      color: p.inkMuted,
+                    ),
                   ],
                 ),
               ),
@@ -912,15 +931,17 @@ class _MessagesTabState extends State<MessagesTab> {
                                   .toList();
                               return match.isNotEmpty
                                   ? match.first.parentName
-                                  : 'Parent';
+                                  : loc.roleParent;
                             }).toList()
                           : registeredParents
                               .map((par) => par['name']!)
                               .toList();
 
                   final groupName = firstHalaqah != null
-                      ? '${firstHalaqah.name} Parents Group'
-                      : 'Study Circle Parents Group';
+                      ? loc.tr('circleParentsGroupName', {
+                          'circle': firstHalaqah.name,
+                        })
+                      : loc.translate('studyCircleParentsGroupFallback');
                   try {
                     final convo = await MessagingService.instance.createGroup(
                       title: groupName,
@@ -941,7 +962,9 @@ class _MessagesTabState extends State<MessagesTab> {
                     messenger.showSnackBar(
                       SnackBar(
                         content: Text(
-                          'Failed to create group: ${SupabaseService.cleanErrorMessage(e)}',
+                          loc.tr('failedToCreateGroupMsg', {
+                            'error': SupabaseService.cleanErrorMessage(e),
+                          }),
                         ),
                         backgroundColor: p.danger,
                       ),
@@ -966,7 +989,7 @@ class _MessagesTabState extends State<MessagesTab> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            'Create Parent Halaqah Group',
+                            loc.createParentGroupTitle,
                             style: TextStyle(
                               fontWeight: FontWeight.w700,
                               fontSize: 14,
@@ -974,7 +997,7 @@ class _MessagesTabState extends State<MessagesTab> {
                             ),
                           ),
                           Text(
-                            'Group discussion with circle parents',
+                            loc.createParentGroupSubtitle,
                             style: TextStyle(
                               fontSize: 12,
                               color: p.inkSecondary,
@@ -983,7 +1006,12 @@ class _MessagesTabState extends State<MessagesTab> {
                         ],
                       ),
                     ),
-                    Icon(Icons.chevron_right_rounded, color: p.inkMuted),
+                    Icon(
+                      Directionality.of(context) == TextDirection.rtl
+                          ? Icons.chevron_left_rounded
+                          : Icons.chevron_right_rounded,
+                      color: p.inkMuted,
+                    ),
                   ],
                 ),
               ),
@@ -994,35 +1022,25 @@ class _MessagesTabState extends State<MessagesTab> {
     );
   }
 
-  (String, Color) _resolveBadgeInfo(Conversation convo, AppPalette p) {
+  (String, Color) _resolveBadgeInfo(
+    Conversation convo,
+    AppPalette p,
+    AppLocalizations loc,
+  ) {
     final lowerTitle = convo.title.toLowerCase();
     if (convo.groupType == 'direct_admin' ||
         lowerTitle.contains('director') ||
         lowerTitle.contains('admin')) {
-      return ('Director', p.gold);
+      return (loc.localizedRoleBadge('director'), p.gold);
     } else if (convo.groupType == 'direct_teacher' ||
         lowerTitle.contains('ustaz') ||
         lowerTitle.contains('teacher')) {
-      return ('Ustaz', p.primary);
+      return (loc.localizedRoleBadge('teacher'), p.primary);
     } else if (convo.isGroup) {
-      return ('Group', p.info);
+      return (loc.localizedRoleBadge('group'), p.info);
     } else {
-      return ('Parent', p.gold);
+      return (loc.localizedRoleBadge('parent'), p.gold);
     }
-  }
-
-  String _formatTime(DateTime dt) {
-    final diff = DateTime.now().difference(dt);
-    if (diff.inMinutes < 1) return 'Now';
-    if (diff.inHours < 1) return '${diff.inMinutes}m';
-    if (diff.inDays == 0) {
-      final hour = dt.hour > 12 ? dt.hour - 12 : (dt.hour == 0 ? 12 : dt.hour);
-      final min = dt.minute.toString().padLeft(2, '0');
-      final ampm = dt.hour >= 12 ? 'PM' : 'AM';
-      return '$hour:$min $ampm';
-    }
-    if (diff.inDays == 1) return 'Yesterday';
-    return '${dt.month}/${dt.day}';
   }
 }
 
@@ -1059,27 +1077,29 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
     });
   }
 
-  (String, Color) _roleMeta(String role, AppPalette p) {
+  (String, Color) _roleMeta(String role, AppPalette p, AppLocalizations loc) {
     switch (role.toLowerCase()) {
       case 'superadmin':
-        return ('Superadmin', p.gold);
+        return (loc.localizedRoleBadge('superadmin'), p.gold);
       case 'admin':
-        return ('Director', p.gold);
+        return (loc.localizedRoleBadge('director'), p.gold);
       case 'teacher':
-        return ('Ustaz', p.primary);
+        return (loc.localizedRoleBadge('teacher'), p.primary);
       default:
-        return ('Parent', p.info);
+        return (loc.localizedRoleBadge('parent'), p.info);
     }
   }
 
   Future<void> _selectContact(Map<String, dynamic> contact) async {
     if (_isOpeningChat) return;
     final p = widget.palette;
+    final loc = AppLocalizations.of(context);
     final id = contact['id']?.toString() ?? '';
     final name = contact['full_name']?.toString().trim() ?? '';
     final email = contact['email']?.toString().trim() ?? '';
     final role = contact['role']?.toString() ?? 'parent';
-    final displayName = name.isNotEmpty ? name : (email.isNotEmpty ? email : 'User');
+    final displayName =
+        name.isNotEmpty ? name : (email.isNotEmpty ? email : loc.userFallback);
 
     setState(() => _isOpeningChat = true);
     try {
@@ -1096,7 +1116,9 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Could not start chat: ${SupabaseService.cleanErrorMessage(e)}',
+            loc.tr('couldNotStartChatMsg', {
+              'error': SupabaseService.cleanErrorMessage(e),
+            }),
           ),
           backgroundColor: p.danger,
         ),
@@ -1147,7 +1169,7 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                       icon: Icons.cloud_off_rounded,
                       title: loc.couldNotLoadMessages,
                       message: SupabaseService.cleanErrorMessage(
-                          snapshot.error ?? 'Unknown error'),
+                          snapshot.error ?? loc.unknownError),
                       actionLabel: loc.retry,
                       onAction: _reload,
                     ),
@@ -1191,8 +1213,8 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                     final avatarUrl = contact['avatar_url']?.toString();
                     final displayName = name.isNotEmpty
                         ? name
-                        : (email.isNotEmpty ? email : 'User');
-                    final roleMeta = _roleMeta(role, p);
+                        : (email.isNotEmpty ? email : loc.userFallback);
+                    final roleMeta = _roleMeta(role, p, loc);
 
                     return ProCard(
                       onTap: _isOpeningChat
@@ -1246,7 +1268,12 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                               ],
                             ),
                           ),
-                          Icon(Icons.chevron_right_rounded, color: p.inkMuted),
+                          Icon(
+                            Directionality.of(context) == TextDirection.rtl
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            color: p.inkMuted,
+                          ),
                         ],
                       ),
                     );

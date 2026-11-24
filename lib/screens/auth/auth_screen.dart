@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/localization/locale_notifier.dart';
@@ -7,6 +6,7 @@ import '../../core/routes/app_routes.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/theme/app_theme.dart';
 import '../../widgets/islamic_pattern_painter.dart';
 import '../../widgets/pro_ui_kit.dart';
 
@@ -48,11 +48,12 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Future<void> _handleSignIn() async {
+    final loc = AppLocalizations.of(context);
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
     if (email.isEmpty || password.isEmpty) {
-      _showToast('Please enter your username/email and password.');
+      _showToast(loc.translate('enterCredsMsg'));
       return;
     }
 
@@ -73,22 +74,21 @@ class _AuthScreenState extends State<AuthScreen> {
       final active = await AuthSessionService.instance.syncFromSupabaseProfile();
       if (!mounted) return;
       if (!active || !SupabaseService.instance.isAuthenticated) {
-        _showToast(
-          'Your account is suspended or inactive. Please contact center administration.',
-        );
+        _showToast(loc.translate('suspendedInactiveMsg'));
         return;
       }
       Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
     } else {
-      final msg = res['message'] ?? 'Sign in failed.';
+      final msg = res['message'] ?? loc.translate('signInFailedMsg');
       _showToast(msg);
     }
   }
 
   Future<void> _handleVerifyInvite() async {
+    final loc = AppLocalizations.of(context);
     final code = _inviteCodeCtrl.text.trim().toUpperCase();
     if (code.isEmpty) {
-      _showToast('Please enter your school invite code.');
+      _showToast(loc.translate('enterInviteCodeMsg'));
       return;
     }
 
@@ -111,22 +111,23 @@ class _AuthScreenState extends State<AuthScreen> {
         }
       });
     } else {
-      _showToast(res['message'] ?? 'Invalid invite code.');
+      _showToast(res['message'] ?? loc.translate('invalidInviteCodeMsg'));
     }
   }
 
   Future<void> _handleCreateAccount() async {
+    final loc = AppLocalizations.of(context);
     final name = _nameCtrl.text.trim();
     final email = _emailCtrl.text.trim();
     final password = _passwordCtrl.text;
 
     if (name.isEmpty || email.isEmpty || password.isEmpty) {
-      _showToast('Please complete all fields.');
+      _showToast(loc.translate('completeAllFieldsMsg'));
       return;
     }
 
     if (password.length < 6) {
-      _showToast('Password must be at least 6 characters.');
+      _showToast(loc.translate('passwordMin6Msg'));
       return;
     }
 
@@ -155,8 +156,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
               content: Text(
-                res['message'] ??
-                    'Account created! Please verify your email before logging in.',
+                res['message'] ?? loc.translate('accountCreatedVerifyEmailMsg'),
               ),
               backgroundColor: AppColors.pinePrimary,
               behavior: SnackBarBehavior.floating,
@@ -172,7 +172,7 @@ class _AuthScreenState extends State<AuthScreen> {
         Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
       }
     } else {
-      _showToast(res['message'] ?? 'Registration failed.');
+      _showToast(res['message'] ?? loc.translate('registrationFailedMsg'));
     }
   }
 
@@ -206,13 +206,14 @@ class _AuthScreenState extends State<AuthScreen> {
 
   void _showContactSheet() {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) => ProBottomSheetShell(
-        title: 'Kheyrukum Support',
-        subtitle: 'Addis Ababa, Bethel / Near Bethel Hospital',
+        title: loc.translate('kheyrukumSupportTitle'),
+        subtitle: loc.translate('supportAddressSubtitle'),
         icon: Icons.support_agent_rounded,
         iconColor: p.gold,
         heightFactor: 0.48,
@@ -222,7 +223,7 @@ class _AuthScreenState extends State<AuthScreen> {
             _buildContactTile(
               icon: Icons.send_rounded,
               color: const Color(0xFF0EA5E9),
-              title: 'Telegram Official',
+              title: loc.translate('telegramOfficialLabel'),
               subtitle: '+251 943 42 22 22',
               trailingIcon: Icons.open_in_new_rounded,
               onTap: () {
@@ -234,7 +235,7 @@ class _AuthScreenState extends State<AuthScreen> {
             _buildContactTile(
               icon: Icons.chat_rounded,
               color: p.success,
-              title: 'WhatsApp Official',
+              title: loc.translate('whatsappOfficialLabel'),
               subtitle: '+251 943 42 22 22',
               trailingIcon: Icons.open_in_new_rounded,
               onTap: () {
@@ -246,7 +247,7 @@ class _AuthScreenState extends State<AuthScreen> {
             _buildContactTile(
               icon: Icons.phone_rounded,
               color: p.gold,
-              title: 'Direct Phone Support',
+              title: loc.translate('directPhoneSupportLabel'),
               subtitle: '+251 913 49 44 28',
               trailingIcon: Icons.call_rounded,
               onTap: () {
@@ -390,9 +391,10 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 3),
                       Text(
-                        'Kheyrukum Islamic Center',
+                        loc.appName,
                         textAlign: TextAlign.center,
-                        style: GoogleFonts.plusJakartaSans(
+                        style: TextStyle(
+                          fontFamily: AppTheme.primaryFontFamily,
                           color: AppColors.goldWarm,
                           fontSize: 16.5,
                           fontWeight: FontWeight.w800,
@@ -404,7 +406,8 @@ class _AuthScreenState extends State<AuthScreen> {
                         'خَيْرُكُمْ مَنْ تَعَلَّمَ الْقُرْآنَ وَعَلَّمَهُ',
                         textAlign: TextAlign.center,
                         textDirection: TextDirection.rtl,
-                        style: GoogleFonts.amiri(
+                        style: TextStyle(
+                          fontFamily: AppTheme.amiriFontFamily,
                           color: Colors.white.withOpacity(0.95),
                           fontSize: 18,
                           fontWeight: FontWeight.w700,
@@ -413,7 +416,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       ),
                       const SizedBox(height: 4),
                       Text(
-                        'Parent & Teacher Quranic Collaborative Portal',
+                        loc.portalTagline,
                         textAlign: TextAlign.center,
                         style: TextStyle(
                           color: Colors.white.withOpacity(0.78),
@@ -579,7 +582,7 @@ class _AuthScreenState extends State<AuthScreen> {
                 child: Column(
                   children: [
                     Text(
-                      'Need assistance from center administration?',
+                      loc.translate('needAssistancePrompt'),
                       style: TextStyle(
                         color: p.inkSecondary,
                         fontSize: 12,
@@ -623,7 +626,7 @@ class _AuthScreenState extends State<AuthScreen> {
           p: p,
           controller: _emailCtrl,
           label: loc.email,
-          hintText: 'parent@kheyrukum.com',
+          hintText: loc.translate('parentEmailHint'),
           prefixIcon: Icons.person_outline_rounded,
           keyboardType: TextInputType.emailAddress,
         ),
@@ -644,9 +647,7 @@ class _AuthScreenState extends State<AuthScreen> {
           alignment: AlignmentDirectional.centerEnd,
           child: TextButton(
             onPressed: () {
-              _showToast(
-                'Please contact your center administrator or Ustaz to reset your password.',
-              );
+              _showToast(loc.translate('resetPasswordAdminMsg'));
             },
             style: TextButton.styleFrom(
               padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
@@ -692,7 +693,7 @@ class _AuthScreenState extends State<AuthScreen> {
           ),
           const SizedBox(height: 3),
           Text(
-            'Enter the registration code provided by center administration.',
+            loc.translate('enterRegCodePrompt'),
             style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
           ),
           const SizedBox(height: 18),
@@ -700,7 +701,7 @@ class _AuthScreenState extends State<AuthScreen> {
             p: p,
             controller: _inviteCodeCtrl,
             label: loc.invitationCode,
-            hintText: 'e.g. KHY-TEA-1234',
+            hintText: loc.translate('inviteCodeExampleHint'),
             prefixIcon: Icons.vpn_key_outlined,
             textCapitalization: TextCapitalization.characters,
           ),
@@ -726,7 +727,9 @@ class _AuthScreenState extends State<AuthScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      'Verified as ${_verifiedRole!.toUpperCase()}',
+                      loc.tr('verifiedAsRole', {
+                        'role': loc.localizedRoleBadge(_verifiedRole!),
+                      }),
                       style: TextStyle(
                         color: p.primary,
                         fontSize: 12,
@@ -768,7 +771,7 @@ class _AuthScreenState extends State<AuthScreen> {
             p: p,
             controller: _emailCtrl,
             label: loc.emailAddress,
-            hintText: 'name@example.com',
+            hintText: loc.translate('exampleEmailHint'),
             prefixIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
           ),
@@ -777,7 +780,7 @@ class _AuthScreenState extends State<AuthScreen> {
             p: p,
             controller: _passwordCtrl,
             label: loc.password,
-            hintText: 'Minimum 6 characters',
+            hintText: loc.translate('min6CharsHint'),
             prefixIcon: Icons.lock_outline_rounded,
             isPassword: true,
             obscureText: _obscurePassword,
@@ -906,13 +909,14 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildSocialLinksRow(AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.center,
       children: [
         _buildSocialChip(
           p: p,
           icon: Icons.send_rounded,
-          label: 'Telegram',
+          label: loc.translate('telegramShort'),
           color: const Color(0xFF0EA5E9),
           onTap: () => _launchExternalUrl(telegramLink),
         ),
@@ -920,7 +924,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _buildSocialChip(
           p: p,
           icon: Icons.chat_rounded,
-          label: 'WhatsApp',
+          label: loc.translate('whatsappShort'),
           color: p.success,
           onTap: () => _launchExternalUrl(whatsappLink),
         ),
@@ -928,7 +932,7 @@ class _AuthScreenState extends State<AuthScreen> {
         _buildSocialChip(
           p: p,
           icon: Icons.support_agent_rounded,
-          label: 'Contact',
+          label: loc.translate('contactShort'),
           color: p.gold,
           onTap: _showContactSheet,
         ),
