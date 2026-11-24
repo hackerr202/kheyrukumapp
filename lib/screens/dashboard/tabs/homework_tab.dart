@@ -1754,7 +1754,7 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
       (
         value: 'Jayyid Jiddan (جيد جداً)',
         label: loc.ratingVeryGood,
-        color: p.present,
+        color: p.success,
         icon: Icons.verified_rounded,
       ),
       (
@@ -1766,7 +1766,7 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
       (
         value: 'Needs Revision (يحتاج مراجعة)',
         label: loc.ratingNeedsRevision,
-        color: p.late,
+        color: p.warning,
         icon: Icons.replay_circle_filled_rounded,
       ),
     ];
@@ -1819,7 +1819,7 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
                 return Material(
                   color: isSelected
                       ? opt.color.withValues(alpha: 0.14)
-                      : p.surfaceAlt,
+                      : p.surfaceSubtle,
                   borderRadius: BorderRadius.circular(999),
                   child: InkWell(
                     borderRadius: BorderRadius.circular(999),
@@ -2358,7 +2358,7 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
       width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: p.surfaceAlt,
+        color: p.surfaceSubtle,
         borderRadius: BorderRadius.circular(16),
         border: Border.all(
           color: _isRecording
