@@ -12,6 +12,7 @@ import '../../core/services/storage_service.dart';
 import '../../core/services/student_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/pro_shimmer.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../messages/chat_screen.dart';
 
@@ -140,6 +141,10 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         initialData: PaymentService.instance.allPayments,
         builder: (context, snapshot) {
           final payments = snapshot.data ?? [];
+          if (snapshot.connectionState == ConnectionState.waiting &&
+              payments.isEmpty) {
+            return const ProCardListSkeleton();
+          }
 
           if (!_isSuperAdmin) {
             final user = SupabaseService.instance.currentUser;
@@ -552,7 +557,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               icon: Icons.payments_outlined,
               title: loc.translate('noTuitionIssuedTitle'),
               message: loc.translate('noTuitionIssuedDesc'),
-              actionLabel: loc.translate('issueFirstTuitionAction'),
+              actionLabel: loc.translate('createInvoiceAction'),
               onAction: () => _showIssueInvoiceDialog(context),
             )
           else ...[

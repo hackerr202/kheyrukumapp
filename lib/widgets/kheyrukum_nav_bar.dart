@@ -57,7 +57,7 @@ class KheyrukumNavBar extends StatelessWidget {
           borderRadius: BorderRadius.circular(26),
           child: Container(
             height: 66,
-            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
             decoration: BoxDecoration(
               color: dockBg,
               borderRadius: BorderRadius.circular(26),

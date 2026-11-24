@@ -1,14 +1,22 @@
-import 'dart:ui';
+import 'dart:async';
+import 'dart:io';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:record/record.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/homework.dart';
 import '../../../core/models/student.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/homework_service.dart';
 import '../../../core/services/offline_sync_service.dart';
+import '../../../core/services/storage_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../widgets/audio_waveform_widget.dart';
+import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
 
 /// Flagship Quran & Tajweed Homework Tab:
@@ -28,6 +36,67 @@ class _HomeworkTabState extends State<HomeworkTab> {
 
   Future<void> _handleRefresh() async {
     await HomeworkService.instance.refreshAll();
+  }
+
+  Widget _buildHomeworkSummaryStrip({
+    required int pending,
+    required int reviewed,
+    required int total,
+    required AppLocalizations loc,
+  }) {
+    Widget statItem(String label, int value, {Color? highlight}) {
+      return Expanded(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              '$value',
+              style: TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w800,
+                color: highlight ?? Colors.white,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 2),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                color: Colors.white.withOpacity(0.76),
+              ),
+            ),
+          ],
+        ),
+      );
+    }
+
+    Widget divider() => Container(
+          width: 1,
+          height: 28,
+          color: Colors.white.withOpacity(0.18),
+        );
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+      decoration: BoxDecoration(
+        color: Colors.black.withOpacity(0.16),
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Row(
+        children: [
+          statItem(loc.translate('metricPending'), pending,
+              highlight: AppColors.goldWarm),
+          divider(),
+          statItem(loc.translate('metricReviewed'), reviewed),
+          divider(),
+          statItem(loc.translate('metricTotal'), total),
+        ],
+      ),
+    );
   }
 
   @override
@@ -69,7 +138,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
     return StreamBuilder<List<HomeworkAssignment>>(
       stream: HomeworkService.instance.assignmentsStream,
       initialData: HomeworkService.instance.allAssignments,
-      builder: (context, _) {
+      builder: (context, assignSnap) {
         return StreamBuilder<List<HomeworkSubmission>>(
           stream: HomeworkService.instance.submissionsStream,
           initialData: HomeworkService.instance.allSubmissions,
@@ -78,11 +147,25 @@ class _HomeworkTabState extends State<HomeworkTab> {
                 .getAssignmentsForHalaqah(assignedHalaqah);
             final allSubmissions =
                 subSnap.data ?? HomeworkService.instance.allSubmissions;
+            if ((assignSnap.connectionState == ConnectionState.waiting ||
+                    subSnap.connectionState == ConnectionState.waiting) &&
+                assignments.isEmpty &&
+                allSubmissions.isEmpty) {
+              return const ProCardListSkeleton();
+            }
+
             final submissionsByAssignment = <String, List<HomeworkSubmission>>{};
             for (final sub in allSubmissions) {
               (submissionsByAssignment[sub.assignmentId] ??= []).add(sub);
             }
             final halaqahStudentCounts = <String, int>{};
+
+            final teacherReviewedCount = assignments
+                .where((a) => (submissionsByAssignment[a.id] ?? const [])
+                    .any((s) => s.isReviewed))
+                .length;
+            final teacherPendingCount =
+                assignments.length - teacherReviewedCount;
 
             final filtered = assignments.where((a) {
               if (_teacherFilter == 'active') return !a.isOverdue;
@@ -126,20 +209,23 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                           ),
                                           const SizedBox(height: 3),
                                           Text(
-                                            loc.assignedHomework,
+                                            assignedHalaqah,
                                             style: const TextStyle(
                                               fontSize: 18,
                                               fontWeight: FontWeight.w700,
                                               color: Colors.white,
                                             ),
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
                                           ),
                                           const SizedBox(height: 2),
                                           Text(
-                                            assignedHalaqah,
+                                            loc.assignSurahGoalsHint,
                                             style: TextStyle(
-                                              fontSize: 12,
+                                              fontSize: 11.5,
                                               color:
                                                   Colors.white.withOpacity(0.78),
+                                              height: 1.35,
                                             ),
                                           ),
                                         ],
@@ -163,14 +249,12 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                     ),
                                   ],
                                 ),
-                                const SizedBox(height: 12),
-                                Text(
-                                  loc.assignSurahGoalsHint,
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.white.withOpacity(0.80),
-                                    height: 1.4,
-                                  ),
+                                const SizedBox(height: 14),
+                                _buildHomeworkSummaryStrip(
+                                  pending: teacherPendingCount,
+                                  reviewed: teacherReviewedCount,
+                                  total: assignments.length,
+                                  loc: loc,
                                 ),
                               ],
                             ),
@@ -209,7 +293,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
                             'circle': assignedHalaqah,
                             'action': loc.assignHomework,
                           }),
-                          actionLabel: loc.assignHomework,
+                          actionLabel: loc.translate('assignFirstHomeworkAction'),
                           onAction: () => _showCreateAssignmentDialog(
                               context, assignedHalaqah),
                         ),
@@ -550,12 +634,21 @@ class _HomeworkTabState extends State<HomeworkTab> {
                                           color: p.ink,
                                         ),
                                       ),
-                                      if (sub.parentNote?.isNotEmpty ==
+                                      if (sub.recitationAudioRef != null) ...[
+                                        const SizedBox(height: 4),
+                                        ProStatusPill(
+                                          label: loc.translate(
+                                              'recitationAttachedBadge'),
+                                          icon: Icons.graphic_eq_rounded,
+                                          color: p.primary,
+                                        ),
+                                      ],
+                                      if (sub.cleanParentNote?.isNotEmpty ==
                                           true) ...[
                                         const SizedBox(height: 3),
                                         Text(
                                           loc.tr('parentNoteQuote', {
-                                            'note': '${sub.parentNote}',
+                                            'note': '${sub.cleanParentNote}',
                                           }),
                                           style: TextStyle(
                                             fontSize: 11.5,
@@ -704,7 +797,7 @@ class _HomeworkTabState extends State<HomeworkTab> {
     return StreamBuilder<List<HomeworkAssignment>>(
       stream: HomeworkService.instance.assignmentsStream,
       initialData: HomeworkService.instance.allAssignments,
-      builder: (context, _) {
+      builder: (context, assignSnap) {
         return StreamBuilder<List<HomeworkSubmission>>(
           stream: HomeworkService.instance.submissionsStream,
           initialData: HomeworkService.instance.allSubmissions,
@@ -717,6 +810,13 @@ class _HomeworkTabState extends State<HomeworkTab> {
                 );
             final allSubmissions =
                 subSnap.data ?? HomeworkService.instance.allSubmissions;
+            if ((assignSnap.connectionState == ConnectionState.waiting ||
+                    subSnap.connectionState == ConnectionState.waiting) &&
+                assignments.isEmpty &&
+                allSubmissions.isEmpty) {
+              return const ProCardListSkeleton();
+            }
+
             final childSubmissionsByAssignment =
                 <String, HomeworkSubmission>{};
             for (final sub in allSubmissions) {
@@ -724,6 +824,12 @@ class _HomeworkTabState extends State<HomeworkTab> {
                 childSubmissionsByAssignment[sub.assignmentId] = sub;
               }
             }
+            final parentReviewedCount = assignments
+                .where(
+                    (a) => childSubmissionsByAssignment[a.id]?.isReviewed == true)
+                .length;
+            final parentPendingCount =
+                assignments.length - parentReviewedCount;
 
             return RefreshIndicator(
               color: p.primary,
@@ -801,55 +907,50 @@ class _HomeworkTabState extends State<HomeworkTab> {
 
                           ProHeroCard(
                             padding: const EdgeInsets.all(18),
-                            child: Row(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.stretch,
                               children: [
-                                ProAvatar(
-                                  name: activeChild.fullName,
-                                  radius: 22,
-                                  color: AppColors.goldWarm,
-                                ),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(
-                                        activeChild.fullName,
-                                        style: const TextStyle(
-                                          fontSize: 16.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: Colors.white,
-                                        ),
-                                      ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        activeChild.halaqahName,
-                                        style: TextStyle(
-                                          fontSize: 12,
-                                          color:
-                                              Colors.white.withOpacity(0.78),
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.symmetric(
-                                      horizontal: 10, vertical: 5),
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withOpacity(0.16),
-                                    borderRadius: BorderRadius.circular(20),
-                                  ),
-                                  child: Text(
-                                    loc.tr('tasksCountBadge',
-                                        {'count': '${assignments.length}'}),
-                                    style: const TextStyle(
-                                      fontSize: 11.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
+                                Row(
+                                  children: [
+                                    ProAvatar(
+                                      name: activeChild.fullName,
+                                      radius: 22,
+                                      color: AppColors.goldWarm,
                                     ),
-                                  ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: Column(
+                                        crossAxisAlignment:
+                                            CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            activeChild.fullName,
+                                            style: const TextStyle(
+                                              fontSize: 16.5,
+                                              fontWeight: FontWeight.w700,
+                                              color: Colors.white,
+                                            ),
+                                          ),
+                                          const SizedBox(height: 2),
+                                          Text(
+                                            activeChild.halaqahName,
+                                            style: TextStyle(
+                                              fontSize: 12,
+                                              color: Colors.white
+                                                  .withOpacity(0.78),
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                                const SizedBox(height: 14),
+                                _buildHomeworkSummaryStrip(
+                                  pending: parentPendingCount,
+                                  reviewed: parentReviewedCount,
+                                  total: assignments.length,
+                                  loc: loc,
                                 ),
                               ],
                             ),
@@ -865,10 +966,8 @@ class _HomeworkTabState extends State<HomeworkTab> {
                       sliver: SliverToBoxAdapter(
                         child: ProEmptyState(
                           icon: Icons.menu_book_outlined,
-                          title: loc.noHomeworkAssignedTitle,
-                          message: loc.tr('ustazNoHomeworkYetMsg', {
-                            'name': activeChild.fullName,
-                          }),
+                          title: loc.translate('parentHomeworkCaughtUpTitle'),
+                          message: loc.translate('parentHomeworkCaughtUpDesc'),
                         ),
                       ),
                     )
@@ -1060,10 +1159,20 @@ class _HomeworkTabState extends State<HomeworkTab> {
                         ),
                       ],
                     ),
-                    if (sub.parentNote?.isNotEmpty == true) ...[
+                    if (sub.recitationAudioRef != null) ...[
+                      const SizedBox(height: 6),
+                      ProStatusPill(
+                        label: loc.translate('recitationAttachedBadge'),
+                        icon: Icons.graphic_eq_rounded,
+                        color: p.primary,
+                      ),
+                    ],
+                    if (sub.cleanParentNote?.isNotEmpty == true) ...[
                       const SizedBox(height: 4),
                       Text(
-                        loc.tr('yourNoteQuote', {'note': '${sub.parentNote}'}),
+                        loc.tr('yourNoteQuote', {
+                          'note': '${sub.cleanParentNote}',
+                        }),
                         style: TextStyle(
                           fontSize: 11.5,
                           fontStyle: FontStyle.italic,
@@ -1139,6 +1248,21 @@ class _HomeworkTabState extends State<HomeworkTab> {
       initialData: HomeworkService.instance.allAssignments,
       builder: (context, snapshot) {
         final assignments = snapshot.data ?? [];
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            assignments.isEmpty) {
+          return const ProCardListSkeleton();
+        }
+        final loc = AppLocalizations.of(context);
+        final allSubmissions = HomeworkService.instance.allSubmissions;
+        final subsByAssign = <String, List<HomeworkSubmission>>{};
+        for (final sub in allSubmissions) {
+          (subsByAssign[sub.assignmentId] ??= []).add(sub);
+        }
+        final adminReviewedCount = assignments
+            .where(
+                (a) => (subsByAssign[a.id] ?? const []).any((s) => s.isReviewed))
+            .length;
+        final adminPendingCount = assignments.length - adminReviewedCount;
 
         return RefreshIndicator(
           color: p.primary,
@@ -1156,44 +1280,58 @@ class _HomeworkTabState extends State<HomeworkTab> {
                     children: [
                       ProHeroCard(
                         padding: const EdgeInsets.all(18),
-                        child: Row(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: Colors.white.withOpacity(0.14),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: const Icon(Icons.menu_book_rounded,
-                                  size: 22, color: AppColors.goldWarm),
+                            Row(
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: Colors.white.withOpacity(0.14),
+                                    borderRadius: BorderRadius.circular(14),
+                                  ),
+                                  child: const Icon(Icons.menu_book_rounded,
+                                      size: 22, color: AppColors.goldWarm),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        loc.tajweedAndRecitationHeader,
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          fontWeight: FontWeight.w700,
+                                          letterSpacing: 0.9,
+                                          color: AppColors.goldWarm,
+                                        ),
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        loc.tr(
+                                          'totalAssignmentsMeta',
+                                          {'count': '${assignments.length}'},
+                                        ),
+                                        style: TextStyle(
+                                          fontSize: 13.5,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.white.withOpacity(0.92),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                             ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    AppLocalizations.of(context)
-                                        .assignedHomework,
-                                    style: const TextStyle(
-                                      fontSize: 16.5,
-                                      fontWeight: FontWeight.w700,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Text(
-                                    AppLocalizations.of(context).tr(
-                                      'totalAssignmentsMeta',
-                                      {'count': '${assignments.length}'},
-                                    ),
-                                    style: TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white.withOpacity(0.78),
-                                    ),
-                                  ),
-                                ],
-                              ),
+                            const SizedBox(height: 14),
+                            _buildHomeworkSummaryStrip(
+                              pending: adminPendingCount,
+                              reviewed: adminReviewedCount,
+                              total: assignments.length,
+                              loc: loc,
                             ),
                           ],
                         ),
@@ -1277,6 +1415,292 @@ class _HomeworkTabState extends State<HomeworkTab> {
   }
 }
 
+String _formatRecitationClock(int totalSeconds) {
+  final safe = totalSeconds < 0 ? 0 : totalSeconds;
+  final mins = safe ~/ 60;
+  final secs = safe % 60;
+  return '$mins:${secs.toString().padLeft(2, '0')}';
+}
+
+class _RecitationAudioPlayerCard extends StatefulWidget {
+  final String audioSource;
+  final AppPalette palette;
+  final String title;
+  final int seed;
+  final bool isLocalFile;
+  final bool enabled;
+
+  const _RecitationAudioPlayerCard({
+    super.key,
+    required this.audioSource,
+    required this.palette,
+    required this.title,
+    required this.seed,
+    this.isLocalFile = false,
+    this.enabled = true,
+  });
+
+  @override
+  State<_RecitationAudioPlayerCard> createState() =>
+      _RecitationAudioPlayerCardState();
+}
+
+class _RecitationAudioPlayerCardState extends State<_RecitationAudioPlayerCard> {
+  final AudioPlayer _player = AudioPlayer();
+  final ValueNotifier<Duration> _positionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
+  final ValueNotifier<Duration> _durationNotifier =
+      ValueNotifier<Duration>(Duration.zero);
+  StreamSubscription<PlayerState>? _stateSub;
+  StreamSubscription<Duration>? _posSub;
+  StreamSubscription<Duration>? _durSub;
+  bool _isPlaying = false;
+  bool _isLoading = false;
+  bool _hasStartedSource = false;
+  String? _resolvedUrl;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _stateSub = _player.onPlayerStateChanged.listen((state) {
+      if (!mounted) return;
+      if (state == PlayerState.completed || state == PlayerState.stopped) {
+        _hasStartedSource = false;
+        setState(() => _isPlaying = false);
+        if (state == PlayerState.completed) {
+          _positionNotifier.value = Duration.zero;
+        }
+      } else {
+        setState(() => _isPlaying = state == PlayerState.playing);
+      }
+    });
+    _posSub = _player.onPositionChanged.listen((pos) {
+      if (mounted) _positionNotifier.value = pos;
+    });
+    _durSub = _player.onDurationChanged.listen((dur) {
+      if (mounted && dur > Duration.zero) {
+        _durationNotifier.value = dur;
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecitationAudioPlayerCard oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.audioSource != widget.audioSource) {
+      _resolvedUrl = null;
+      _errorText = null;
+      _hasStartedSource = false;
+      _positionNotifier.value = Duration.zero;
+      _durationNotifier.value = Duration.zero;
+      _player.stop().catchError((_) {});
+    } else if (oldWidget.enabled && !widget.enabled && _isPlaying) {
+      _player.pause().catchError((_) {});
+    }
+  }
+
+  @override
+  void dispose() {
+    _stateSub?.cancel();
+    _posSub?.cancel();
+    _durSub?.cancel();
+    _positionNotifier.dispose();
+    _durationNotifier.dispose();
+    _player.dispose();
+    super.dispose();
+  }
+
+  Future<void> _playSource(Source source) async {
+    if (_hasStartedSource) {
+      await _player.resume();
+    } else {
+      await _player.play(source);
+      _hasStartedSource = true;
+    }
+  }
+
+  Future<void> _togglePlayPause() async {
+    if (!widget.enabled || _isLoading) return;
+    final loc = AppLocalizations.of(context);
+    HapticFeedback.selectionClick();
+    if (_isPlaying) {
+      await _player.pause();
+      return;
+    }
+
+    setState(() {
+      _isLoading = true;
+      _errorText = null;
+    });
+
+    try {
+      if (widget.isLocalFile) {
+        if (!File(widget.audioSource).existsSync()) {
+          throw Exception(loc.translate('voiceFileUnavailableMsg'));
+        }
+        await _playSource(DeviceFileSource(widget.audioSource));
+      } else {
+        final localPath = StorageService.extractLocalPath(widget.audioSource);
+        if (localPath != null && File(localPath).existsSync()) {
+          await _playSource(DeviceFileSource(localPath));
+        } else {
+          final signedUrl = _resolvedUrl ??
+              await StorageService.resolveSignedUrl(widget.audioSource);
+          if (!mounted) return;
+          if (signedUrl == null || signedUrl.isEmpty) {
+            throw Exception(loc.translate('couldNotAccessVoiceMsg'));
+          }
+          _resolvedUrl = signedUrl;
+          await _playSource(UrlSource(signedUrl));
+        }
+      }
+    } catch (e) {
+      _resolvedUrl = null;
+      _hasStartedSource = false;
+      if (!mounted) return;
+      setState(() {
+        _isPlaying = false;
+        _errorText = loc.tr('errorPlayingAudioMsg', {
+          'error': SupabaseService.cleanErrorMessage(e),
+        });
+      });
+    } finally {
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  Future<void> _seekToRatio(double ratio) async {
+    if (!widget.enabled || _isLoading) return;
+    final total = _durationNotifier.value;
+    if (total <= Duration.zero) {
+      await _togglePlayPause();
+      return;
+    }
+    final targetMs = (ratio.clamp(0.0, 1.0) * total.inMilliseconds).round();
+    final target = Duration(milliseconds: targetMs);
+    _positionNotifier.value = target;
+    await _player.seek(target);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: p.primarySoft.withValues(alpha: 0.45),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: p.primary.withValues(alpha: 0.28)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.graphic_eq_rounded, size: 15, color: p.primary),
+              const SizedBox(width: 6),
+              Expanded(
+                child: Text(
+                  widget.title,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w700,
+                    color: p.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Material(
+                color: widget.enabled ? p.primary : p.border,
+                shape: const CircleBorder(),
+                child: InkWell(
+                  customBorder: const CircleBorder(),
+                  onTap: widget.enabled ? _togglePlayPause : null,
+                  child: SizedBox(
+                    width: 40,
+                    height: 40,
+                    child: Center(
+                      child: Icon(
+                        _isLoading
+                            ? Icons.more_horiz_rounded
+                            : (_isPlaying
+                                ? Icons.pause_rounded
+                                : Icons.play_arrow_rounded),
+                        color: p.onPrimary,
+                        size: 22,
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: _isLoading
+                    ? ProShimmer(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: const [
+                            ProShimmerBox(height: 24, borderRadius: 8),
+                            SizedBox(height: 4),
+                            ProShimmerBox(width: 44, height: 10, borderRadius: 4),
+                          ],
+                        ),
+                      )
+                    : ValueListenableBuilder<Duration>(
+                        valueListenable: _durationNotifier,
+                        builder: (context, totalDur, _) {
+                          return ValueListenableBuilder<Duration>(
+                            valueListenable: _positionNotifier,
+                            builder: (context, pos, _) {
+                              final totalMs = totalDur.inMilliseconds;
+                              final progress = totalMs > 0
+                                  ? (pos.inMilliseconds / totalMs)
+                                      .clamp(0.0, 1.0)
+                                  : 0.0;
+                              final durLabel = totalMs > 0
+                                  ? '${_formatRecitationClock(pos.inSeconds)} / ${_formatRecitationClock(totalDur.inSeconds)}'
+                                  : _formatRecitationClock(pos.inSeconds);
+                              return PlaybackWaveformBar(
+                                progress: progress,
+                                activeColor: p.primary,
+                                inactiveColor: p.border,
+                                durationLabel: durLabel,
+                                labelColor: p.inkSecondary,
+                                seed: widget.seed,
+                                barCount: 26,
+                                height: 24,
+                                onSeek: widget.enabled ? _seekToRatio : null,
+                              );
+                            },
+                          );
+                        },
+                      ),
+              ),
+            ],
+          ),
+          if (_errorText != null) ...[
+            const SizedBox(height: 6),
+            Text(
+              _errorText!,
+              style: TextStyle(fontSize: 11, color: p.danger),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
 class _ReviewSubmissionDialog extends StatefulWidget {
   final HomeworkSubmission submission;
   final AppPalette palette;
@@ -1317,56 +1741,145 @@ class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
   Widget build(BuildContext context) {
     final p = widget.palette;
     final loc = AppLocalizations.of(context);
+    final audioRef = widget.submission.recitationAudioRef;
+    final cleanNote = widget.submission.cleanParentNote;
+    final gradeOptions =
+        <({String value, String label, Color color, IconData icon})>[
+      (
+        value: 'Mumtaz (ممتاز)',
+        label: loc.ratingExcellent,
+        color: const Color(0xFFC89B3C),
+        icon: Icons.workspace_premium_rounded,
+      ),
+      (
+        value: 'Jayyid Jiddan (جيد جداً)',
+        label: loc.ratingVeryGood,
+        color: p.present,
+        icon: Icons.verified_rounded,
+      ),
+      (
+        value: 'Jayyid (جيد)',
+        label: loc.ratingGood,
+        color: p.excused,
+        icon: Icons.thumb_up_alt_rounded,
+      ),
+      (
+        value: 'Needs Revision (يحتاج مراجعة)',
+        label: loc.ratingNeedsRevision,
+        color: p.late,
+        icon: Icons.replay_circle_filled_rounded,
+      ),
+    ];
+
     return AlertDialog(
       title: Text(
         loc.tr('gradePracticeTitle', {'name': widget.submission.studentName}),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          DropdownButtonFormField<String>(
-            value: _selectedRating,
-            items: [
-              DropdownMenuItem(
-                value: 'Mumtaz (ممتاز)',
-                child: Text(loc.ratingExcellent),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            if (audioRef != null) ...[
+              _RecitationAudioPlayerCard(
+                key: ValueKey(audioRef),
+                audioSource: audioRef,
+                palette: p,
+                title: loc.translate('listenToRecitationTitle'),
+                seed: widget.submission.id.hashCode,
+                enabled: !_isSubmitting,
               ),
-              DropdownMenuItem(
-                value: 'Jayyid Jiddan (جيد جداً)',
-                child: Text(loc.ratingVeryGood),
-              ),
-              DropdownMenuItem(
-                value: 'Jayyid (جيد)',
-                child: Text(loc.ratingGood),
-              ),
-              DropdownMenuItem(
-                value: 'Needs Revision (يحتاج مراجعة)',
-                child: Text(loc.ratingNeedsRevision),
-              ),
+              const SizedBox(height: 14),
             ],
-            onChanged: _isSubmitting
-                ? null
-                : (val) {
-                    if (val != null) {
-                      setState(() => _selectedRating = val);
-                    }
-                  },
-            decoration: InputDecoration(
-              labelText: loc.translate('recitationRatingLabel'),
+            if (cleanNote?.isNotEmpty == true) ...[
+              Text(
+                loc.tr('parentNoteQuote', {'note': '$cleanNote'}),
+                style: TextStyle(
+                  fontSize: 12,
+                  color: p.inkSecondary,
+                  fontStyle: FontStyle.italic,
+                ),
+              ),
+              const SizedBox(height: 12),
+            ],
+            Text(
+              loc.translate('recitationRatingLabel'),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: p.inkSecondary,
+              ),
             ),
-          ),
-          const SizedBox(height: 12),
-          TextField(
-            controller: _feedbackCtrl,
-            enabled: !_isSubmitting,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: loc.translate('ustazFeedbackLabel'),
-              hintText: loc.translate('ustazFeedbackHint'),
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: gradeOptions.map((opt) {
+                final isSelected = _selectedRating == opt.value;
+                return Material(
+                  color: isSelected
+                      ? opt.color.withValues(alpha: 0.14)
+                      : p.surfaceAlt,
+                  borderRadius: BorderRadius.circular(999),
+                  child: InkWell(
+                    borderRadius: BorderRadius.circular(999),
+                    onTap: _isSubmitting
+                        ? null
+                        : () {
+                            HapticFeedback.lightImpact();
+                            setState(() => _selectedRating = opt.value);
+                          },
+                    child: AnimatedContainer(
+                      duration: const Duration(milliseconds: 160),
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 8,
+                      ),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(999),
+                        border: Border.all(
+                          color: isSelected ? opt.color : p.border,
+                          width: isSelected ? 1.5 : 1,
+                        ),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            isSelected ? Icons.check_circle_rounded : opt.icon,
+                            size: 15,
+                            color: isSelected ? opt.color : p.inkMuted,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            opt.label,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: isSelected
+                                  ? FontWeight.w700
+                                  : FontWeight.w600,
+                              color: isSelected ? opt.color : p.inkSecondary,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            TextField(
+              controller: _feedbackCtrl,
+              enabled: !_isSubmitting,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: loc.translate('ustazFeedbackLabel'),
+                hintText: loc.translate('ustazFeedbackHint'),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
@@ -1671,6 +2184,17 @@ class _MarkPracticedDialog extends StatefulWidget {
 }
 
 class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
+  final AudioRecorder _recorder = AudioRecorder();
+  StreamSubscription<Amplitude>? _amplitudeSub;
+  Timer? _recordTimer;
+  final ValueNotifier<List<double>> _amplitudesNotifier =
+      ValueNotifier<List<double>>(const []);
+  final ValueNotifier<int> _recordSecondsNotifier = ValueNotifier<int>(0);
+  bool _isStartingRecording = false;
+  bool _isRecording = false;
+  String? _recordedPath;
+  int _recordedSeconds = 0;
+
   int _repetitionCount = 3;
   final _notesCtrl = TextEditingController();
   bool _didInitLocalizedDefaults = false;
@@ -1686,10 +2210,334 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
     }
   }
 
+  void _deleteTempRecordingFile(String? path) {
+    if (path == null || path.isEmpty) return;
+    try {
+      final f = File(path);
+      if (f.existsSync()) f.deleteSync();
+    } catch (_) {}
+  }
+
   @override
   void dispose() {
+    _recordTimer?.cancel();
+    _amplitudeSub?.cancel();
+    _amplitudesNotifier.dispose();
+    _recordSecondsNotifier.dispose();
+    _deleteTempRecordingFile(_recordedPath);
+    _recorder.dispose();
     _notesCtrl.dispose();
     super.dispose();
+  }
+
+  Future<void> _startRecording() async {
+    if (_isStartingRecording || _isRecording || _isSubmitting) return;
+    final loc = AppLocalizations.of(context);
+    final p = widget.palette;
+    HapticFeedback.lightImpact();
+    _isStartingRecording = true;
+    try {
+      final hasPermission = await _recorder.hasPermission();
+      if (!mounted) return;
+      if (!hasPermission) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(loc.translate('micPermissionRequiredMsg')),
+            backgroundColor: p.danger,
+          ),
+        );
+        return;
+      }
+
+      _deleteTempRecordingFile(_recordedPath);
+      final dir = await getTemporaryDirectory();
+      if (!mounted) return;
+      final path =
+          '${dir.path}/recitation_${widget.assignment.id}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      _amplitudesNotifier.value = const [];
+      _recordSecondsNotifier.value = 0;
+
+      await _recorder.start(
+        const RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 128000,
+          sampleRate: 44100,
+        ),
+        path: path,
+      );
+
+      if (!mounted) {
+        await _recorder.stop().catchError((_) => null);
+        return;
+      }
+
+      setState(() {
+        _isRecording = true;
+        _recordedPath = null;
+        _recordedSeconds = 0;
+      });
+
+      _amplitudeSub?.cancel();
+      _amplitudeSub = _recorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
+          .listen((amp) {
+        if (!mounted || !_isRecording) return;
+        final normalized = ((amp.current + 55.0) / 55.0).clamp(0.14, 1.0);
+        final prev = _amplitudesNotifier.value;
+        final next = prev.length >= 30
+            ? [...prev.sublist(prev.length - 29), normalized]
+            : [...prev, normalized];
+        _amplitudesNotifier.value = next;
+      });
+
+      _recordTimer?.cancel();
+      _recordTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+        if (!mounted || !_isRecording) {
+          timer.cancel();
+          return;
+        }
+        final nextSec = _recordSecondsNotifier.value + 1;
+        _recordSecondsNotifier.value = nextSec;
+        if (nextSec >= 90) {
+          _stopRecording();
+        }
+      });
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            loc.tr('couldNotStartRecordingMsg', {
+              'error': SupabaseService.cleanErrorMessage(e),
+            }),
+          ),
+          backgroundColor: p.danger,
+        ),
+      );
+    } finally {
+      _isStartingRecording = false;
+    }
+  }
+
+  Future<void> _stopRecording() async {
+    if (!_isRecording) return;
+    HapticFeedback.lightImpact();
+    _recordTimer?.cancel();
+    _recordTimer = null;
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    final duration = _recordSecondsNotifier.value;
+    String? stoppedPath;
+    try {
+      stoppedPath = await _recorder.stop();
+    } catch (_) {
+      stoppedPath = null;
+    }
+    if (!mounted) return;
+    final valid = stoppedPath != null && File(stoppedPath).existsSync();
+    setState(() {
+      _isRecording = false;
+      _recordedPath = valid ? stoppedPath : null;
+      _recordedSeconds = valid ? (duration > 0 ? duration : 1) : 0;
+      _amplitudesNotifier.value = const [];
+    });
+  }
+
+  void _discardRecording() {
+    HapticFeedback.selectionClick();
+    _deleteTempRecordingFile(_recordedPath);
+    setState(() {
+      _recordedPath = null;
+      _recordedSeconds = 0;
+    });
+  }
+
+  Widget _buildRecitationStudioCard(AppPalette p, AppLocalizations loc) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: p.surfaceAlt,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(
+          color: _isRecording
+              ? p.danger.withValues(alpha: 0.45)
+              : p.border,
+        ),
+      ),
+      child: _isRecording
+          ? Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: p.danger,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        loc.translate('recordingInProgress'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                          color: p.danger,
+                        ),
+                      ),
+                    ),
+                    ValueListenableBuilder<int>(
+                      valueListenable: _recordSecondsNotifier,
+                      builder: (context, sec, _) {
+                        return Text(
+                          _formatRecitationClock(sec),
+                          style: TextStyle(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w800,
+                            color: p.danger,
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 10),
+                LiveRecordingWaveform(
+                  amplitudesNotifier: _amplitudesNotifier,
+                  activeColor: p.primary,
+                  inactiveColor: p.border,
+                  barCount: 28,
+                  height: 32,
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: _stopRecording,
+                    icon: const Icon(Icons.stop_rounded, size: 18),
+                    label: Text(loc.translate('stopRecordingAction')),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: p.danger,
+                      foregroundColor: Colors.white,
+                      minimumSize: const Size(0, 42),
+                    ),
+                  ),
+                ),
+              ],
+            )
+          : _recordedPath != null
+              ? Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    _RecitationAudioPlayerCard(
+                      key: ValueKey(_recordedPath),
+                      audioSource: _recordedPath!,
+                      isLocalFile: true,
+                      enabled: !_isSubmitting,
+                      palette: p,
+                      title: loc.translate('previewRecitationAction'),
+                      seed: widget.assignment.id.hashCode ^ _recordedSeconds,
+                    ),
+                    const SizedBox(height: 6),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton.icon(
+                          onPressed: _isSubmitting
+                              ? null
+                              : () async {
+                                  _discardRecording();
+                                  await _startRecording();
+                                },
+                          icon: const Icon(Icons.refresh_rounded, size: 16),
+                          label: Text(loc.translate('reRecordAction')),
+                        ),
+                        IconButton(
+                          onPressed: _isSubmitting ? null : _discardRecording,
+                          icon: Icon(
+                            Icons.delete_outline_rounded,
+                            size: 19,
+                            color: p.inkMuted,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                )
+              : Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 30,
+                          height: 30,
+                          decoration: BoxDecoration(
+                            color: p.primarySoft,
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Icon(
+                            Icons.mic_rounded,
+                            size: 17,
+                            color: p.primary,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                loc.translate('recitationStudioTitle'),
+                                style: TextStyle(
+                                  fontSize: 12.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: p.ink,
+                                ),
+                              ),
+                              Text(
+                                loc.translate('recitationStudioSubtitle'),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: p.inkSecondary,
+                                  height: 1.35,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 10),
+                    SizedBox(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        onPressed: _isSubmitting ? null : _startRecording,
+                        icon: const Icon(Icons.mic_none_rounded, size: 18),
+                        label: Text(loc.translate('tapToRecordRecitation')),
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: p.primary,
+                          side: BorderSide(
+                            color: p.primary.withValues(alpha: 0.45),
+                          ),
+                          minimumSize: const Size(0, 42),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+    );
   }
 
   @override
@@ -1700,91 +2548,132 @@ class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
       title: Text(
         loc.tr('practiceForStudentTitle', {'name': widget.student.fullName}),
       ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            loc.tr('surahAyahRange', {
-              'surah': widget.assignment.surahName,
-              'from': '${widget.assignment.fromAyah}',
-              'to': '${widget.assignment.toAyah}',
-            }),
-            style: TextStyle(
-              fontSize: 12.5,
-              fontWeight: FontWeight.w700,
-              color: p.primary,
-            ),
-          ),
-          const SizedBox(height: 14),
-          Text(
-            loc.translate('repetitionsQuestion'),
-            style: const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-          ),
-          const SizedBox(height: 10),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              IconButton(
-                onPressed: (!_isSubmitting && _repetitionCount > 1)
-                    ? () => setState(() => _repetitionCount--)
-                    : null,
-                icon: const Icon(Icons.remove_circle_outline),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              loc.tr('surahAyahRange', {
+                'surah': widget.assignment.surahName,
+                'from': '${widget.assignment.fromAyah}',
+                'to': '${widget.assignment.toAyah}',
+              }),
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: p.primary,
               ),
-              Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
-                decoration: BoxDecoration(
-                  color: p.primarySoft,
-                  borderRadius: BorderRadius.circular(12),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              loc.translate('repetitionsQuestion'),
+              style:
+                  const TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+            ),
+            const SizedBox(height: 10),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: [
+                IconButton(
+                  onPressed: (!_isSubmitting && _repetitionCount > 1)
+                      ? () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _repetitionCount--);
+                        }
+                      : null,
+                  icon: const Icon(Icons.remove_circle_outline),
                 ),
-                child: Text(
-                  loc.tr('repetitionsCountLabel', {
-                    'count': '$_repetitionCount',
-                  }),
-                  style: TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w700,
-                    color: p.primary,
+                Container(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                  decoration: BoxDecoration(
+                    color: p.primarySoft,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Text(
+                    loc.tr('repetitionsCountLabel', {
+                      'count': '$_repetitionCount',
+                    }),
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w700,
+                      color: p.primary,
+                    ),
                   ),
                 ),
-              ),
-              IconButton(
-                onPressed: _isSubmitting
-                    ? null
-                    : () => setState(() => _repetitionCount++),
-                icon: const Icon(Icons.add_circle_outline),
-              ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          TextField(
-            controller: _notesCtrl,
-            enabled: !_isSubmitting,
-            maxLines: 2,
-            decoration: InputDecoration(
-              labelText: loc.translate('parentNotesOptionalLabel'),
-              hintText: loc.translate('parentNotesHint'),
+                IconButton(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _repetitionCount++);
+                        },
+                  icon: const Icon(Icons.add_circle_outline),
+                ),
+              ],
             ),
-          ),
-        ],
+            const SizedBox(height: 14),
+            _buildRecitationStudioCard(p, loc),
+            const SizedBox(height: 14),
+            TextField(
+              controller: _notesCtrl,
+              enabled: !_isSubmitting,
+              maxLines: 2,
+              decoration: InputDecoration(
+                labelText: loc.translate('parentNotesOptionalLabel'),
+                hintText: loc.translate('parentNotesHint'),
+              ),
+            ),
+          ],
+        ),
       ),
       actions: [
         TextButton(
-          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          onPressed: (_isSubmitting || _isRecording)
+              ? null
+              : () => Navigator.of(context).pop(),
           child: Text(loc.cancel),
         ),
         ElevatedButton(
-          onPressed: _isSubmitting
+          onPressed: (_isSubmitting || _isRecording)
               ? null
               : () async {
+                  HapticFeedback.lightImpact();
                   setState(() => _isSubmitting = true);
                   try {
+                    String? uploadedAudioRef;
+                    if (_recordedPath != null) {
+                      final file = File(_recordedPath!);
+                      if (!await file.exists()) {
+                        throw Exception(
+                            loc.translate('voiceFileUnavailableMsg'));
+                      }
+                      final bytes = await file.readAsBytes();
+                      final fileName =
+                          'recitation_${widget.assignment.id}_${DateTime.now().millisecondsSinceEpoch}.m4a';
+                      uploadedAudioRef = await StorageService.uploadVoiceNote(
+                        fileName: fileName,
+                        bytes: bytes,
+                        conversationId: 'homework_${widget.assignment.id}',
+                      );
+                      if (uploadedAudioRef == null ||
+                          uploadedAudioRef.isEmpty) {
+                        throw Exception(
+                            loc.translate('voiceUrlUnavailableMsg'));
+                      }
+                    }
+
+                    final composedNote = HomeworkSubmission.composeParentNote(
+                      _notesCtrl.text.trim(),
+                      audioRef: uploadedAudioRef,
+                    );
+
                     await HomeworkService.instance.markCompletedByParent(
                       assignmentId: widget.assignment.id,
                       studentId: widget.student.id,
                       repetitionCount: _repetitionCount,
-                      notes: _notesCtrl.text.trim(),
+                      notes: composedNote,
                     );
                     if (!mounted) return;
                     Navigator.of(context).pop(true);

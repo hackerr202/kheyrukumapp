@@ -453,10 +453,11 @@ class MoreTab extends StatelessWidget {
       child: Text(
         text,
         style: TextStyle(
-          fontSize: 11,
-          fontWeight: FontWeight.w700,
-          letterSpacing: 0.9,
-          color: p.inkMuted,
+          fontSize: 12.5,
+          fontWeight: FontWeight.w600,
+          letterSpacing: 0.4,
+          color: p.isDark ? const Color(0xFFA5BCB3) : const Color(0xFF4F5D57),
+          height: 1.4,
         ),
       ),
     );

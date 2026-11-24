@@ -1,5 +1,5 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/attendance.dart';
@@ -16,6 +16,7 @@ import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/add_student_dialog.dart';
+import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
 import '../../messages/chat_screen.dart';
 
@@ -57,6 +58,10 @@ class _StudentsTabState extends State<StudentsTab> {
           initialData: StudentService.instance.allStudents,
           builder: (context, snapshot) {
             final students = snapshot.data ?? [];
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                students.isEmpty) {
+              return const ProCardListSkeleton();
+            }
 
             if (currentRole == 'teacher') {
               return _buildTeacherView(context, p);
@@ -901,6 +906,7 @@ class _StudentsTabState extends State<StudentsTab> {
     return Expanded(
       child: InkWell(
         onTap: () async {
+          HapticFeedback.lightImpact();
           final loc = AppLocalizations.of(context);
           try {
             await StudentService.instance.recordDailyAttendance(

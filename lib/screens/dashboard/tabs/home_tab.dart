@@ -1,8 +1,9 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/announcement.dart';
+import '../../../core/models/homework.dart';
 import '../../../core/models/invitation_code.dart';
 import '../../../core/models/student.dart';
 import '../../../core/services/absence_service.dart';
@@ -16,6 +17,7 @@ import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../core/utils/json_parsers.dart';
 import '../../../widgets/add_student_dialog.dart';
+import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
 import '../../admin/halaqah_management_sheet.dart';
 import '../../admin/invite_codes_bottom_sheet.dart';
@@ -115,6 +117,13 @@ class _HomeTabState extends State<HomeTab> {
             final halaqahs = HalaqahService.instance.halaqahs;
             final students =
                 studentSnapshot.data ?? StudentService.instance.allStudents;
+            if (studentSnapshot.connectionState == ConnectionState.waiting &&
+                students.isEmpty &&
+                halaqahs.isEmpty) {
+              return const ProShimmer(
+                child: ProShimmerBox(height: 196, borderRadius: 24),
+              );
+            }
 
             final hasHalaqah = halaqahs.isNotEmpty;
             final hasStudent = students.isNotEmpty;
@@ -518,10 +527,15 @@ class _HomeTabState extends State<HomeTab> {
   }) {
     return Expanded(
       child: ProCard(
-        onTap: onTap,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
         borderRadius: 18,
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
-        child: Row(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 46),
+          child: Row(
           children: [
             Container(
               width: 38,
@@ -563,6 +577,7 @@ class _HomeTabState extends State<HomeTab> {
               ),
             ),
           ],
+          ),
         ),
       ),
     );
@@ -593,6 +608,11 @@ class _HomeTabState extends State<HomeTab> {
         final total = classStudents.length;
         final ratio = total > 0 ? (markedToday / total).clamp(0.0, 1.0) : 0.0;
 
+        final openAssignments = HomeworkService.instance
+            .getAssignmentsForHalaqah(className)
+            .where((a) => !a.isOverdue)
+            .length;
+
         return StreamBuilder<List<AbsenceRequest>>(
           stream: AbsenceService.instance.requestsStream,
           initialData: AbsenceService.instance.allRequests,
@@ -602,7 +622,395 @@ class _HomeTabState extends State<HomeTab> {
                 .getPendingRequestsForHalaqah(className, halaqahId: classId)
                 .length;
 
-            return ProHeroCard(
+            return Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                ProHeroCard(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  loc.translate('assignedStudyCircleHeader'),
+                                  style: const TextStyle(
+                                    fontSize: 10.5,
+                                    fontWeight: FontWeight.w700,
+                                    letterSpacing: 1.0,
+                                    color: Color(0xFFF6CE6B),
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                Text(
+                                  className.isNotEmpty
+                                      ? className
+                                      : loc.assignedCircle,
+                                  style: const TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
+                                    letterSpacing: -0.2,
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 5,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.14),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: Text(
+                              total == 1
+                                  ? loc.translate('studentBadgeOne')
+                                  : loc.tr('studentsBadgeLabel',
+                                      {'count': '$total'}),
+                              style: const TextStyle(
+                                fontSize: 11.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            loc.translate('todaysAttendanceLabel'),
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withOpacity(0.82),
+                            ),
+                          ),
+                          Text(
+                            loc.tr('markedProgressLabel', {
+                              'marked': '$markedToday',
+                              'total': '$total',
+                            }),
+                            style: const TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              fontFeatures: [FontFeature.tabularFigures()],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 8),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(6),
+                        child: LinearProgressIndicator(
+                          value: ratio,
+                          minHeight: 6,
+                          backgroundColor: Colors.white.withOpacity(0.18),
+                          valueColor: const AlwaysStoppedAnimation<Color>(
+                            AppColors.goldWarm,
+                          ),
+                        ),
+                      ),
+                      if (pendingExcuses > 0) ...[
+                        const SizedBox(height: 12),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: AppColors.goldWarm.withOpacity(0.18),
+                            borderRadius: BorderRadius.circular(10),
+                            border: Border.all(
+                              color: AppColors.goldWarm.withOpacity(0.4),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.mark_email_unread_rounded,
+                                size: 14,
+                                color: AppColors.goldWarm,
+                              ),
+                              const SizedBox(width: 6),
+                              Text(
+                                pendingExcuses == 1
+                                    ? loc.translate('pendingExcusesNoticeOne')
+                                    : loc.tr('pendingExcusesNoticeMany',
+                                        {'count': '$pendingExcuses'}),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: ElevatedButton.icon(
+                              onPressed: () {
+                                HapticFeedback.selectionClick();
+                                widget.onNavigateToTab?.call(1);
+                              },
+                              icon:
+                                  const Icon(Icons.fact_check_rounded, size: 16),
+                              label: Text(loc.translate('takeAttendanceAction')),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppColors.goldWarm,
+                                foregroundColor: const Color(0xFF102322),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: () {
+                                HapticFeedback.selectionClick();
+                                widget.onNavigateToTab?.call(3);
+                              },
+                              icon: const Icon(
+                                Icons.assignment_turned_in_rounded,
+                                size: 16,
+                                color: Colors.white,
+                              ),
+                              label: Text(
+                                loc.navHomework,
+                                style: const TextStyle(color: Colors.white),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(
+                                  color: Colors.white.withOpacity(0.32),
+                                ),
+                                padding:
+                                    const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    _buildExecutiveKpiCard(
+                      p: p,
+                      icon: Icons.people_alt_rounded,
+                      accent: p.primary,
+                      value: '$total',
+                      label: loc.studentsCount,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        widget.onNavigateToTab?.call(1);
+                      },
+                    ),
+                    const SizedBox(width: 12),
+                    _buildExecutiveKpiCard(
+                      p: p,
+                      icon: Icons.assignment_turned_in_rounded,
+                      accent: p.gold,
+                      value: '$openAssignments',
+                      label: loc.navHomework,
+                      onTap: () {
+                        HapticFeedback.selectionClick();
+                        widget.onNavigateToTab?.call(3);
+                      },
+                    ),
+                  ],
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
+  Widget _buildExecutiveKpiCard({
+    required AppPalette p,
+    required IconData icon,
+    required Color accent,
+    required String value,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: ProCard(
+        onTap: onTap,
+        borderRadius: 18,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 54),
+          child: Row(
+            children: [
+              Container(
+                width: 40,
+                height: 40,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(p.isDark ? 0.18 : 0.12),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Icon(icon, size: 20, color: accent),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      value,
+                      style: TextStyle(
+                        fontSize: 19,
+                        fontWeight: FontWeight.w800,
+                        color: p.ink,
+                        height: 1.05,
+                        fontFeatures: const [FontFeature.tabularFigures()],
+                      ),
+                    ),
+                    const SizedBox(height: 3),
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: p.inkSecondary,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  String? _latestQualitativeRatingForStudent(String studentId) {
+    HomeworkSubmission? latestSub;
+    for (final s in HomeworkService.instance.allSubmissions) {
+      if (s.studentId == studentId &&
+          s.isReviewed &&
+          s.teacherRating != null &&
+          s.teacherRating!.isNotEmpty) {
+        if (latestSub == null ||
+            (s.reviewedAt ?? DateTime(2000))
+                .isAfter(latestSub.reviewedAt ?? DateTime(2000))) {
+          latestSub = s;
+        }
+      }
+    }
+    if (latestSub != null) return latestSub.teacherRating;
+
+    final reports = StudentService.instance.getWeeklyReportsForStudent(studentId);
+    if (reports.isNotEmpty) {
+      return reports.first.tajweedRating;
+    }
+    return null;
+  }
+
+  List<({DateTime day, bool isActive})> _computeSevenDayStreak(
+    String studentId,
+  ) {
+    final activeDateKeys = <String>{};
+    for (final att in StudentService.instance.getAttendanceForStudent(studentId)) {
+      if (att.status == 'present' || att.status == 'late') {
+        final d = att.date.toLocal();
+        activeDateKeys.add('${d.year}-${d.month}-${d.day}');
+      }
+    }
+    for (final sub in HomeworkService.instance.allSubmissions) {
+      if (sub.studentId == studentId && sub.practicedAt != null) {
+        final d = sub.practicedAt!.toLocal();
+        activeDateKeys.add('${d.year}-${d.month}-${d.day}');
+      }
+    }
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    return List.generate(7, (i) {
+      final day = today.subtract(Duration(days: 6 - i));
+      final key = '${day.year}-${day.month}-${day.day}';
+      return (day: day, isActive: activeDateKeys.contains(key));
+    });
+  }
+
+  String _weekdayInitial(DateTime day, AppLocalizations loc) {
+    const keys = [
+      'dayLetterMon',
+      'dayLetterTue',
+      'dayLetterWed',
+      'dayLetterThu',
+      'dayLetterFri',
+      'dayLetterSat',
+      'dayLetterSun',
+    ];
+    return loc.translate(keys[(day.weekday - 1).clamp(0, 6)]);
+  }
+
+  // ===========================================================================
+  // PARENT OVERVIEW HERO CARD ("QURAN JOURNEY")
+  // ===========================================================================
+  Widget _buildParentOverviewCard(AppPalette p) {
+    return StreamBuilder<List<Student>>(
+      stream: StudentService.instance.studentsStream,
+      initialData: StudentService.instance.allStudents,
+      builder: (context, snapshot) {
+        final loc = AppLocalizations.of(context);
+        final children = StudentService.instance.getStudentsForParent(
+          AuthSessionService.instance.userId,
+          parentEmail: AuthSessionService.instance.userEmail,
+        );
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            children.isEmpty &&
+            StudentService.instance.allStudents.isEmpty) {
+          return const ProShimmer(
+            child: ProShimmerBox(height: 256, borderRadius: 24),
+          );
+        }
+
+        final activeChild = children.isNotEmpty ? children.first : null;
+        final juzProgress = activeChild != null
+            ? (activeChild.currentJuz / 30.0).clamp(0.03, 1.0)
+            : 0.0;
+        final latestRawRating = activeChild != null
+            ? _latestQualitativeRatingForStudent(activeChild.id)
+            : null;
+        final isMumtaz = latestRawRating != null &&
+            (latestRawRating.contains('Mumtaz') ||
+                latestRawRating == 'Excellent');
+        final streakDays = activeChild != null
+            ? _computeSevenDayStreak(activeChild.id)
+            : const <({DateTime day, bool isActive})>[];
+        final activeStreakCount = streakDays.where((d) => d.isActive).length;
+
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            ProHeroCard(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -614,7 +1022,7 @@ class _HomeTabState extends State<HomeTab> {
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
                             Text(
-                              loc.translate('assignedStudyCircleHeader'),
+                              loc.translate('quranJourneyHeader'),
                               style: const TextStyle(
                                 fontSize: 10.5,
                                 fontWeight: FontWeight.w700,
@@ -622,11 +1030,11 @@ class _HomeTabState extends State<HomeTab> {
                                 color: Color(0xFFF6CE6B),
                               ),
                             ),
-                            const SizedBox(height: 4),
+                            const SizedBox(height: 3),
                             Text(
-                              className.isNotEmpty
-                                  ? className
-                                  : loc.assignedCircle,
+                              activeChild != null
+                                  ? activeChild.fullName
+                                  : loc.translate('welcomeParentFallback'),
                               style: const TextStyle(
                                 fontSize: 18,
                                 fontWeight: FontWeight.w700,
@@ -636,341 +1044,369 @@ class _HomeTabState extends State<HomeTab> {
                               maxLines: 1,
                               overflow: TextOverflow.ellipsis,
                             ),
+                            if (activeChild != null) ...[
+                              const SizedBox(height: 2),
+                              Text(
+                                activeChild.halaqahName,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.white.withOpacity(0.76),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
                           ],
                         ),
                       ),
                       const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 5,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withOpacity(0.14),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Text(
-                          total == 1
-                              ? loc.translate('studentBadgeOne')
-                              : loc.tr('studentsBadgeLabel',
-                                  {'count': '$total'}),
-                          style: const TextStyle(
-                            fontSize: 11.5,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
+                      if (latestRawRating != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: isMumtaz
+                                ? AppColors.goldWarm.withOpacity(0.22)
+                                : AppColors.statusSuccessDark.withOpacity(0.22),
+                            borderRadius: BorderRadius.circular(20),
+                            border: Border.all(
+                              color: (isMumtaz
+                                      ? AppColors.goldWarm
+                                      : AppColors.statusSuccessDark)
+                                  .withOpacity(0.55),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (isMumtaz) ...[
+                                const Icon(
+                                  Icons.star_rounded,
+                                  size: 13,
+                                  color: AppColors.goldWarm,
+                                ),
+                                const SizedBox(width: 4),
+                              ],
+                              Text(
+                                loc.localizedTajweedRating(latestRawRating),
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w800,
+                                  color: isMumtaz
+                                      ? AppColors.goldWarm
+                                      : const Color(0xFF6EE7B7),
+                                ),
+                              ),
+                            ],
+                          ),
+                        )
+                      else
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.14),
+                            borderRadius: BorderRadius.circular(20),
+                          ),
+                          child: Text(
+                            loc.tr('enrolledCountBadge',
+                                {'count': '${children.length}'}),
+                            style: const TextStyle(
+                              fontSize: 11.5,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                            ),
                           ),
                         ),
-                      ),
                     ],
                   ),
                   const SizedBox(height: 16),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        loc.translate('todaysAttendanceLabel'),
-                        style: TextStyle(
-                          fontSize: 12,
-                          color: Colors.white.withOpacity(0.82),
+                  if (activeChild != null) ...[
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Expanded(
+                          child: Text(
+                            loc.tr('juzSurahAyahSummary', {
+                              'juz': '${activeChild.currentJuz}',
+                              'surah': '${activeChild.currentSurah}',
+                              'ayah': '${activeChild.currentAyah}',
+                            }),
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: Colors.white.withOpacity(0.90),
+                              fontWeight: FontWeight.w600,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
                         ),
-                      ),
-                      Text(
-                        loc.tr('markedProgressLabel', {
-                          'marked': '$markedToday',
-                          'total': '$total',
-                        }),
-                        style: const TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          fontFeatures: [FontFeature.tabularFigures()],
+                        const SizedBox(width: 8),
+                        Text(
+                          '${activeChild.currentJuz}/30',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w800,
+                            color: AppColors.goldWarm,
+                            fontFeatures: [FontFeature.tabularFigures()],
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  ClipRRect(
-                    borderRadius: BorderRadius.circular(6),
-                    child: LinearProgressIndicator(
-                      value: ratio,
-                      minHeight: 6,
-                      backgroundColor: Colors.white.withOpacity(0.18),
-                      valueColor: const AlwaysStoppedAnimation<Color>(
-                        AppColors.goldWarm,
+                      ],
+                    ),
+                    const SizedBox(height: 8),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(6),
+                      child: LinearProgressIndicator(
+                        value: juzProgress,
+                        minHeight: 7,
+                        backgroundColor: Colors.white.withOpacity(0.18),
+                        valueColor: const AlwaysStoppedAnimation<Color>(
+                          AppColors.goldWarm,
+                        ),
                       ),
                     ),
-                  ),
-                  if (pendingExcuses > 0) ...[
-                    const SizedBox(height: 12),
+                    const SizedBox(height: 16),
                     Container(
                       padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 6,
+                        horizontal: 12,
+                        vertical: 10,
                       ),
                       decoration: BoxDecoration(
-                        color: AppColors.goldWarm.withOpacity(0.18),
-                        borderRadius: BorderRadius.circular(10),
-                        border: Border.all(
-                          color: AppColors.goldWarm.withOpacity(0.4),
-                        ),
+                        color: Colors.black.withOpacity(0.16),
+                        borderRadius: BorderRadius.circular(14),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
+                      child: Column(
                         children: [
-                          const Icon(
-                            Icons.mark_email_unread_rounded,
-                            size: 14,
-                            color: AppColors.goldWarm,
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                loc.translate('sevenDayStreakLabel'),
+                                style: TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: Colors.white.withOpacity(0.84),
+                                ),
+                              ),
+                              Text(
+                                loc.tr('streakDaysCount', {
+                                  'count': '$activeStreakCount',
+                                }),
+                                style: const TextStyle(
+                                  fontSize: 11.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: AppColors.goldWarm,
+                                  fontFeatures: [FontFeature.tabularFigures()],
+                                ),
+                              ),
+                            ],
                           ),
-                          const SizedBox(width: 6),
-                          Text(
-                            pendingExcuses == 1
-                                ? loc.translate('pendingExcusesNoticeOne')
-                                : loc.tr('pendingExcusesNoticeMany',
-                                    {'count': '$pendingExcuses'}),
-                            style: const TextStyle(
-                              fontSize: 11.5,
-                              fontWeight: FontWeight.w600,
-                              color: Colors.white,
-                            ),
+                          const SizedBox(height: 10),
+                          Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              for (final entry in streakDays)
+                                Container(
+                                  width: 34,
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: entry.isActive
+                                        ? AppColors.statusSuccessDark
+                                            .withOpacity(0.24)
+                                        : Colors.white.withOpacity(0.06),
+                                    borderRadius: BorderRadius.circular(10),
+                                    border: Border.all(
+                                      color: entry.isActive
+                                          ? AppColors.goldWarm.withOpacity(0.75)
+                                          : Colors.white.withOpacity(0.16),
+                                      width: entry.isActive ? 1.3 : 1,
+                                    ),
+                                  ),
+                                  child: Column(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      Text(
+                                        _weekdayInitial(entry.day, loc),
+                                        style: TextStyle(
+                                          fontSize: 10,
+                                          fontWeight: FontWeight.w700,
+                                          color: entry.isActive
+                                              ? Colors.white
+                                              : Colors.white.withOpacity(0.62),
+                                        ),
+                                      ),
+                                      const SizedBox(height: 4),
+                                      Icon(
+                                        entry.isActive
+                                            ? Icons.check_circle_rounded
+                                            : Icons.circle_outlined,
+                                        size: 13,
+                                        color: entry.isActive
+                                            ? AppColors.goldWarm
+                                            : Colors.white.withOpacity(0.32),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                            ],
                           ),
                         ],
                       ),
                     ),
-                  ],
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: ElevatedButton.icon(
-                          onPressed: () => widget.onNavigateToTab?.call(1),
-                          icon: const Icon(Icons.fact_check_rounded, size: 16),
-                          label: Text(loc.translate('takeAttendanceAction')),
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: AppColors.goldWarm,
-                            foregroundColor: const Color(0xFF102322),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
-                          ),
+                  ] else
+                    Text(
+                      loc.translate('noChildrenLinkedBanner'),
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        color: Colors.white.withOpacity(0.82),
+                        height: 1.4,
+                      ),
+                    ),
+                  const SizedBox(height: 14),
+                  InkWell(
+                    onTap: () {
+                      HapticFeedback.selectionClick();
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (_) => const PaymentsScreen(),
+                        ),
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(12),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 12,
+                        vertical: 9,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.12),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(
+                          color: Colors.white.withOpacity(0.20),
                         ),
                       ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: OutlinedButton.icon(
-                          onPressed: () => widget.onNavigateToTab?.call(3),
-                          icon: const Icon(
-                            Icons.menu_book_rounded,
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.receipt_long_rounded,
                             size: 16,
-                            color: Colors.white,
+                            color: AppColors.goldWarm,
                           ),
-                          label: Text(
-                            loc.translate('homeworkLabel'),
-                            style: const TextStyle(color: Colors.white),
-                          ),
-                          style: OutlinedButton.styleFrom(
-                            side: BorderSide(
-                              color: Colors.white.withOpacity(0.32),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              loc.tuitionAndFees,
+                              style: const TextStyle(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
                             ),
-                            padding: const EdgeInsets.symmetric(vertical: 12),
                           ),
-                        ),
+                          Icon(
+                            Directionality.of(context) == TextDirection.rtl
+                                ? Icons.chevron_left_rounded
+                                : Icons.chevron_right_rounded,
+                            size: 18,
+                            color: Colors.white.withOpacity(0.8),
+                          ),
+                        ],
                       ),
-                    ],
+                    ),
                   ),
                 ],
               ),
-            );
-          },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                _buildParentQuickActionButton(
+                  p: p,
+                  icon: Icons.assignment_turned_in_rounded,
+                  label: loc.translate('homeworkActionShort'),
+                  accent: p.primary,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    widget.onNavigateToTab?.call(3);
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildParentQuickActionButton(
+                  p: p,
+                  icon: Icons.chat_bubble_rounded,
+                  label: loc.translate('messageUstazAction'),
+                  accent: p.gold,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    widget.onNavigateToTab?.call(2);
+                  },
+                ),
+                const SizedBox(width: 8),
+                _buildParentQuickActionButton(
+                  p: p,
+                  icon: Icons.event_note_rounded,
+                  label: loc.translate('absenceActionShort'),
+                  accent: p.excused,
+                  onTap: () {
+                    HapticFeedback.selectionClick();
+                    widget.onNavigateToTab?.call(1);
+                  },
+                ),
+              ],
+            ),
+          ],
         );
       },
     );
   }
 
-  // ===========================================================================
-  // PARENT OVERVIEW HERO CARD
-  // ===========================================================================
-  Widget _buildParentOverviewCard(AppPalette p) {
-    return StreamBuilder<List<Student>>(
-      stream: StudentService.instance.studentsStream,
-      initialData: StudentService.instance.allStudents,
-      builder: (context, _) {
-        final loc = AppLocalizations.of(context);
-        final children = StudentService.instance.getStudentsForParent(
-          AuthSessionService.instance.userId,
-          parentEmail: AuthSessionService.instance.userEmail,
-        );
-        final activeChild = children.isNotEmpty ? children.first : null;
-        final todayAtt = activeChild != null
-            ? StudentService.instance.getTodayAttendanceForStudent(activeChild.id)
-            : null;
-        final juzProgress = activeChild != null
-            ? (activeChild.currentJuz / 30.0).clamp(0.03, 1.0)
-            : 0.0;
-
-        return ProHeroCard(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        loc.translate('familyLearningHubHeader'),
-                        style: const TextStyle(
-                          fontSize: 10.5,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 1.0,
-                          color: Color(0xFFF6CE6B),
-                        ),
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        activeChild != null
-                            ? activeChild.fullName
-                            : loc.translate('welcomeParentFallback'),
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
-                          letterSpacing: -0.2,
-                        ),
-                      ),
-                    ],
-                  ),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 10,
-                      vertical: 5,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.14),
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      loc.tr('enrolledCountBadge',
-                          {'count': '${children.length}'}),
-                      style: const TextStyle(
-                        fontSize: 11.5,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ),
-                ],
+  Widget _buildParentQuickActionButton({
+    required AppPalette p,
+    required IconData icon,
+    required String label,
+    required Color accent,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: ProCard(
+        onTap: onTap,
+        borderRadius: 16,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              width: 34,
+              height: 34,
+              decoration: BoxDecoration(
+                color: accent.withOpacity(p.isDark ? 0.18 : 0.12),
+                borderRadius: BorderRadius.circular(10),
               ),
-              const SizedBox(height: 14),
-              if (activeChild != null) ...[
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    Text(
-                      loc.tr('juzSurahAyahSummary', {
-                        'juz': '${activeChild.currentJuz}',
-                        'surah': '${activeChild.currentSurah}',
-                        'ayah': '${activeChild.currentAyah}',
-                      }),
-                      style: TextStyle(
-                        fontSize: 12.5,
-                        color: Colors.white.withOpacity(0.88),
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                    if (todayAtt != null)
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 2,
-                        ),
-                        decoration: BoxDecoration(
-                          color: AppColors.goldWarm.withOpacity(0.22),
-                          borderRadius: BorderRadius.circular(10),
-                        ),
-                        child: Text(
-                          loc.tr('todayAttBadge', {
-                            'status':
-                                loc.localizedAttendanceStatus(todayAtt.status),
-                          }),
-                          style: const TextStyle(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: AppColors.goldWarm,
-                          ),
-                        ),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 8),
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(6),
-                  child: LinearProgressIndicator(
-                    value: juzProgress,
-                    minHeight: 6,
-                    backgroundColor: Colors.white.withOpacity(0.18),
-                    valueColor: const AlwaysStoppedAnimation<Color>(
-                      AppColors.goldWarm,
-                    ),
-                  ),
-                ),
-              ] else
-                Text(
-                  loc.translate('noChildrenLinkedBanner'),
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    color: Colors.white.withOpacity(0.82),
-                    height: 1.4,
-                  ),
-                ),
-              const SizedBox(height: 18),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: () => widget.onNavigateToTab?.call(1),
-                      icon: const Icon(Icons.auto_stories_rounded, size: 16),
-                      label: Text(loc.translate('learningProgressAction')),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppColors.goldWarm,
-                        foregroundColor: const Color(0xFF102322),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: OutlinedButton.icon(
-                      onPressed: () {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => const PaymentsScreen(),
-                          ),
-                        );
-                      },
-                      icon: const Icon(
-                        Icons.receipt_long_rounded,
-                        size: 16,
-                        color: Colors.white,
-                      ),
-                      label: Text(
-                        loc.tuitionAndFees,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      style: OutlinedButton.styleFrom(
-                        side: BorderSide(
-                          color: Colors.white.withOpacity(0.32),
-                        ),
-                        padding: const EdgeInsets.symmetric(vertical: 12),
-                      ),
-                    ),
-                  ),
-                ],
+              child: Icon(icon, size: 18, color: accent),
+            ),
+            const SizedBox(height: 7),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: TextStyle(
+                fontSize: 11.5,
+                fontWeight: FontWeight.w700,
+                color: p.ink,
               ),
-            ],
-          ),
-        );
-      },
+            ),
+          ],
+        ),
+      ),
     );
   }
 
@@ -1018,6 +1454,19 @@ class _HomeTabState extends State<HomeTab> {
           builder: (context, snapshot) {
             final loc = AppLocalizations.of(context);
             final announcements = snapshot.data ?? [];
+
+            if (snapshot.connectionState == ConnectionState.waiting &&
+                announcements.isEmpty) {
+              return const ProShimmer(
+                child: Column(
+                  children: [
+                    ProShimmerBox(height: 112, borderRadius: 20),
+                    SizedBox(height: 12),
+                    ProShimmerBox(height: 112, borderRadius: 20),
+                  ],
+                ),
+              );
+            }
 
             if (announcements.isEmpty) {
               return ProEmptyState(
@@ -1169,13 +1618,10 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         mediaRef: item.attachmentUrl!,
                         fit: BoxFit.contain,
                         width: double.infinity,
-                        placeholder: SizedBox(
-                          height: 130,
-                          child: Center(
-                            child: CircularProgressIndicator(
-                              strokeWidth: 2,
-                              color: p.primary,
-                            ),
+                        placeholder: const ProShimmer(
+                          child: ProShimmerBox(
+                            height: 130,
+                            borderRadius: 14,
                           ),
                         ),
                       ),

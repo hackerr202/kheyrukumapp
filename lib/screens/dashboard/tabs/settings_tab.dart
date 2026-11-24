@@ -553,10 +553,13 @@ class _SettingsTabState extends State<SettingsTab> {
                       Text(
                         loc.accountAndSecurity,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: p.inkMuted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                          color: p.isDark
+                              ? const Color(0xFFA5BCB3)
+                              : const Color(0xFF4F5D57),
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -611,10 +614,13 @@ class _SettingsTabState extends State<SettingsTab> {
                       Text(
                         loc.language,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: p.inkMuted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                          color: p.isDark
+                              ? const Color(0xFFA5BCB3)
+                              : const Color(0xFF4F5D57),
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -667,10 +673,13 @@ class _SettingsTabState extends State<SettingsTab> {
                       Text(
                         loc.appearance,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: p.inkMuted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                          color: p.isDark
+                              ? const Color(0xFFA5BCB3)
+                              : const Color(0xFF4F5D57),
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -738,10 +747,13 @@ class _SettingsTabState extends State<SettingsTab> {
                       Text(
                         loc.notifications,
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          letterSpacing: 0.8,
-                          color: p.inkMuted,
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          letterSpacing: 0.4,
+                          color: p.isDark
+                              ? const Color(0xFFA5BCB3)
+                              : const Color(0xFF4F5D57),
+                          height: 1.4,
                         ),
                       ),
                       const SizedBox(height: 10),

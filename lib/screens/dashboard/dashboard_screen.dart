@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import '../../core/localization/app_localizations.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
@@ -21,6 +22,7 @@ import '../../core/services/student_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
+import '../../core/utils/hijri_date_helper.dart';
 import '../../widgets/announcement_banner.dart';
 import '../../widgets/kheyrukum_nav_bar.dart';
 import '../../widgets/offline_status_banner.dart';
@@ -48,6 +50,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
   late final ValueNotifier<int> _unreadTotalNotifier =
       ValueNotifier<int>(_unreadNotificationsCount);
   final ValueNotifier<int> _unreadMessagesNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<int> _messagesNewChatTrigger = ValueNotifier<int>(0);
   final ValueNotifier<Announcement?> _activeAlertNotifier =
       ValueNotifier<Announcement?>(null);
   Timer? _alertDismissTimer;
@@ -271,6 +274,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
     _reconnectedSub?.cancel();
     _unreadTotalNotifier.dispose();
     _unreadMessagesNotifier.dispose();
+    _messagesNewChatTrigger.dispose();
     _activeAlertNotifier.dispose();
     super.dispose();
   }
@@ -284,7 +288,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
       },
     ),
     const StudentsTab(),
-    const MessagesTab(),
+    MessagesTab(newChatTrigger: _messagesNewChatTrigger),
     const HomeworkTab(),
     const MoreTab(),
   ];
@@ -339,7 +343,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                         } else if (_currentTabIndex == 2) {
                           pageTitle = loc.navMessages;
                         } else if (_currentTabIndex == 3) {
-                          pageTitle = loc.assignedHomework;
+                          pageTitle = loc.navHomework;
                         } else if (_currentTabIndex == 4) {
                           pageTitle = loc.navMore;
                         }
@@ -379,12 +383,22 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     children: [
                                       Row(
                                         children: [
-                                          Text(
-                                            loc.greeting,
-                                            style: TextStyle(
-                                              fontSize: 11.5,
-                                              color: p.inkSecondary,
-                                              fontWeight: FontWeight.w500,
+                                          Flexible(
+                                            child: Text(
+                                              loc.tr('assalamuAlaikumUser', {
+                                                'name': displayName
+                                                    .trim()
+                                                    .split(RegExp(r'\s+'))
+                                                    .first,
+                                              }),
+                                              style: TextStyle(
+                                                fontSize: 16.5,
+                                                fontWeight: FontWeight.w700,
+                                                color: p.ink,
+                                                letterSpacing: -0.3,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
                                             ),
                                           ),
                                           const SizedBox(width: 7),
@@ -404,32 +418,82 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                               ),
                                             ),
                                             child: Text(
-                                              roleLabel.toUpperCase(),
+                                              roleLabel,
                                               style: TextStyle(
-                                                fontSize: 9,
+                                                fontSize: 9.5,
                                                 fontWeight: FontWeight.w800,
                                                 color: roleColor,
-                                                letterSpacing: 0.5,
+                                                letterSpacing: 0.3,
                                               ),
                                             ),
                                           ),
                                         ],
                                       ),
-                                      const SizedBox(height: 2),
-                                      Text(
-                                        displayName,
-                                        style: TextStyle(
-                                          fontSize: 17.5,
-                                          fontWeight: FontWeight.w700,
-                                          color: p.ink,
-                                          letterSpacing: -0.3,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
+                                      const SizedBox(height: 3),
+                                      Row(
+                                        children: [
+                                          Icon(
+                                            Icons.nights_stay_outlined,
+                                            size: 12,
+                                            color: p.gold,
+                                          ),
+                                          const SizedBox(width: 4),
+                                          Expanded(
+                                            child: Text(
+                                              '${HijriDateHelper.format(DateTime.now(), loc)} • ${loc.formatTodayDateBanner()}',
+                                              style: TextStyle(
+                                                fontSize: 11.5,
+                                                color: p.inkSecondary,
+                                                fontWeight: FontWeight.w500,
+                                              ),
+                                              maxLines: 1,
+                                              overflow: TextOverflow.ellipsis,
+                                            ),
+                                          ),
+                                        ],
                                       ),
                                     ],
                                   ),
                                 ),
+                              ],
+                              if (_currentTabIndex == 2) ...[
+                                InkWell(
+                                  onTap: () {
+                                    HapticFeedback.selectionClick();
+                                    _messagesNewChatTrigger.value++;
+                                  },
+                                  borderRadius: BorderRadius.circular(18),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(
+                                      horizontal: 11,
+                                      vertical: 7,
+                                    ),
+                                    decoration: BoxDecoration(
+                                      color: p.primary,
+                                      borderRadius: BorderRadius.circular(18),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(
+                                          Icons.add_rounded,
+                                          size: 16,
+                                          color: p.onPrimary,
+                                        ),
+                                        const SizedBox(width: 4),
+                                        Text(
+                                          loc.translate('newShortButton'),
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w700,
+                                            color: p.onPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 8),
                               ],
                               // Notification Bell
                               ValueListenableBuilder<int>(
@@ -592,9 +656,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 badgeCount: unreadMessages,
                               ),
                               KheyrukumNavItem(
-                                icon: Icons.auto_stories_outlined,
-                                activeIcon: Icons.auto_stories_rounded,
-                                label: loc.navResources,
+                                icon: Icons.assignment_turned_in_outlined,
+                                activeIcon: Icons.assignment_turned_in_rounded,
+                                label: loc.navHomework,
                               ),
                               KheyrukumNavItem(
                                 icon: Icons.grid_view_outlined,

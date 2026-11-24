@@ -122,8 +122,56 @@ class HomeworkSubmission {
     this.reviewedAt,
   });
 
+  static const String _audioTagPrefix = '[recitation_audio:';
+
   bool get isCompleted => status == 'completed_at_home' || status == 'reviewed';
   bool get isReviewed => status == 'reviewed';
+
+  /// Extracts an embedded recitation storage reference from [parentNote], if any.
+  String? get recitationAudioRef {
+    final raw = parentNote;
+    if (raw == null || raw.isEmpty) return null;
+    final start = raw.indexOf(_audioTagPrefix);
+    if (start == -1) return null;
+    final contentStart = start + _audioTagPrefix.length;
+    final end = raw.indexOf(']', contentStart);
+    if (end == -1) return null;
+    final ref = raw.substring(contentStart, end).trim();
+    return ref.isEmpty ? null : ref;
+  }
+
+  /// Returns [parentNote] without any embedded recitation audio tag.
+  String? get cleanParentNote {
+    final raw = parentNote;
+    if (raw == null || raw.isEmpty) return null;
+    final start = raw.indexOf(_audioTagPrefix);
+    if (start == -1) {
+      final trimmed = raw.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+    final end = raw.indexOf(']', start + _audioTagPrefix.length);
+    if (end == -1) {
+      final trimmed = raw.trim();
+      return trimmed.isEmpty ? null : trimmed;
+    }
+    final before = raw.substring(0, start).trimRight();
+    final after = raw.substring(end + 1).trimLeft();
+    final combined = [
+      if (before.isNotEmpty) before,
+      if (after.isNotEmpty) after,
+    ].join('\n').trim();
+    return combined.isEmpty ? null : combined;
+  }
+
+  /// Encodes an optional [audioRef] cleanly inside the persisted parent note.
+  static String composeParentNote(String note, {String? audioRef}) {
+    final clean = note.trim();
+    final ref = audioRef?.trim();
+    if (ref == null || ref.isEmpty) return clean;
+    final tag = '$_audioTagPrefix$ref]';
+    if (clean.isEmpty) return tag;
+    return '$clean\n$tag';
+  }
 
   HomeworkSubmission copyWith({
     String? id,

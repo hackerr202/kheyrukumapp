@@ -180,8 +180,12 @@ class ProSectionHeader extends StatelessWidget {
                 Text(
                   subtitle!,
                   style: TextStyle(
-                    fontSize: 12,
-                    color: p.inkSecondary,
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: p.isDark
+                        ? const Color(0xFFA5BCB3)
+                        : const Color(0xFF4F5D57),
+                    height: 1.4,
                   ),
                 ),
               ],

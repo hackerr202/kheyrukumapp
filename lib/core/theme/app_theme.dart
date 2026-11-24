@@ -103,6 +103,7 @@ class AppTheme {
       FontWeight fontWeight = FontWeight.w400,
       required Color color,
       double? letterSpacing,
+      double? height,
     }) {
       return TextStyle(
         fontFamily: primaryFontFamily,
@@ -111,6 +112,7 @@ class AppTheme {
         fontWeight: fontWeight,
         color: color,
         letterSpacing: letterSpacing,
+        height: height,
       );
     }
 
@@ -290,6 +292,7 @@ class AppTheme {
       FontWeight fontWeight,
       required Color color,
       double? letterSpacing,
+      double? height,
     }) styleWithFallback,
   ) {
     return base.copyWith(
@@ -321,9 +324,9 @@ class AppTheme {
         fontWeight: FontWeight.w600,
         color: p.ink,
       ),
-      bodyLarge: styleWithFallback(15, color: p.ink),
-      bodyMedium: styleWithFallback(13.5, color: p.inkSecondary),
-      bodySmall: styleWithFallback(12, color: p.inkMuted),
+      bodyLarge: styleWithFallback(15, color: p.ink, height: 1.4),
+      bodyMedium: styleWithFallback(13.5, color: p.inkSecondary, height: 1.4),
+      bodySmall: styleWithFallback(12, color: p.inkMuted, height: 1.4),
       labelLarge: styleWithFallback(
         13.5,
         fontWeight: FontWeight.w700,

@@ -19,6 +19,7 @@ import '../../core/services/offline_sync_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../widgets/audio_waveform_widget.dart';
 import '../../widgets/islamic_pattern_painter.dart';
 import '../../widgets/offline_status_banner.dart';
 import '../../widgets/pro_ui_kit.dart';
@@ -58,6 +59,9 @@ class _ChatScreenState extends State<ChatScreen>
   bool _isStartingRecording = false;
   bool _isRecordingVoice = false;
   final ValueNotifier<int> _recordingSecondsNotifier = ValueNotifier<int>(0);
+  final ValueNotifier<List<double>> _recordingAmplitudesNotifier =
+      ValueNotifier<List<double>>(const []);
+  StreamSubscription<Amplitude>? _amplitudeSub;
   Timer? _recordingTimer;
   String? _failedRecordingPath;
   int _failedRecordingDuration = 0;
@@ -155,6 +159,7 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void dispose() {
     _recordingTimer?.cancel();
+    _amplitudeSub?.cancel();
     _playerStateSub?.cancel();
     _playerPositionSub?.cancel();
     _playerDurationSub?.cancel();
@@ -168,6 +173,7 @@ class _ChatScreenState extends State<ChatScreen>
 
     _msgCtrl.removeListener(_onMsgTextChanged);
     _recordingSecondsNotifier.dispose();
+    _recordingAmplitudesNotifier.dispose();
     _playbackPositionNotifier.dispose();
     _hasTextNotifier.dispose();
 
@@ -302,8 +308,23 @@ class _ChatScreenState extends State<ChatScreen>
       }
 
       _recordingSecondsNotifier.value = 0;
+      _recordingAmplitudesNotifier.value = const [];
+      HapticFeedback.lightImpact();
       setState(() {
         _isRecordingVoice = true;
+      });
+
+      _amplitudeSub?.cancel();
+      _amplitudeSub = _audioRecorder
+          .onAmplitudeChanged(const Duration(milliseconds: 100))
+          .listen((amp) {
+        if (!mounted || !_isRecordingVoice) return;
+        final normalized = ((amp.current + 55.0) / 55.0).clamp(0.14, 1.0);
+        final prev = _recordingAmplitudesNotifier.value;
+        final next = prev.length >= 30
+            ? [...prev.sublist(prev.length - 29), normalized]
+            : [...prev, normalized];
+        _recordingAmplitudesNotifier.value = next;
       });
 
       _recordingTimer?.cancel();
@@ -336,6 +357,10 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _cancelVoiceRecording() async {
     _recordingTimer?.cancel();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    _recordingAmplitudesNotifier.value = const [];
+    HapticFeedback.lightImpact();
     try {
       if (await _audioRecorder.isRecording()) {
         await _audioRecorder.stop();
@@ -536,6 +561,10 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _finishAndSendVoiceRecording() async {
     _recordingTimer?.cancel();
+    await _amplitudeSub?.cancel();
+    _amplitudeSub = null;
+    _recordingAmplitudesNotifier.value = const [];
+    HapticFeedback.lightImpact();
     final duration =
         _recordingSecondsNotifier.value > 0 ? _recordingSecondsNotifier.value : 1;
     _recordingSecondsNotifier.value = 0;
@@ -1547,9 +1576,30 @@ class _ChatScreenState extends State<ChatScreen>
         ),
         const SizedBox(width: 12),
         Expanded(
-          child: Text(
-            AppLocalizations.of(context).translate('recordingVoiceNoteLabel'),
-            style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              LiveRecordingWaveform(
+                amplitudesNotifier: _recordingAmplitudesNotifier,
+                activeColor: p.primary,
+                inactiveColor: p.border,
+                barCount: 30,
+                height: 22,
+              ),
+              const SizedBox(height: 2),
+              Text(
+                AppLocalizations.of(context)
+                    .translate('recordingVoiceNoteLabel'),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11,
+                  color: p.inkSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
           ),
         ),
         IconButton(
@@ -1724,61 +1774,19 @@ class _ChatScreenState extends State<ChatScreen>
     required Color textColor,
     required Color timeColor,
     required String durationLabel,
+    required int seed,
+    ValueChanged<double>? onSeek,
   }) {
-    const heights = [
-      10,
-      16,
-      7,
-      14,
-      22,
-      12,
-      18,
-      20,
-      8,
-      14,
-      18,
-      10,
-      22,
-      14,
-      8,
-      16,
-      12,
-      8,
-      14,
-      7
-    ];
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: List.generate(20, (index) {
-            final h = heights[index % heights.length].toDouble();
-            final barThreshold = index / 20.0;
-            final isBarActive = isCurrentMsg && progressRatio >= barThreshold;
-
-            return Container(
-              margin: const EdgeInsets.symmetric(horizontal: 1.2),
-              width: 2.5,
-              height: h,
-              decoration: BoxDecoration(
-                color: isBarActive
-                    ? (isMe ? AppColors.goldWarm : p.primary)
-                    : textColor.withOpacity(0.32),
-                borderRadius: BorderRadius.circular(2),
-              ),
-            );
-          }),
-        ),
-        const SizedBox(height: 5),
-        Text(
-          durationLabel,
-          style: TextStyle(
-            fontSize: 10.5,
-            color: timeColor,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
-        ),
-      ],
+    return PlaybackWaveformBar(
+      progress: isCurrentMsg ? progressRatio : 0.0,
+      activeColor: isMe ? AppColors.goldWarm : p.primary,
+      inactiveColor: textColor.withValues(alpha: 0.32),
+      durationLabel: durationLabel,
+      labelColor: timeColor,
+      seed: seed,
+      barCount: 24,
+      height: 22,
+      onSeek: onSeek,
     );
   }
 
@@ -1836,6 +1844,18 @@ class _ChatScreenState extends State<ChatScreen>
                       timeColor: timeColor,
                       durationLabel:
                           '${_formatDuration(playbackPosition.inSeconds)} / ${_formatDuration(_playbackDuration.inSeconds > 0 ? _playbackDuration.inSeconds : durationSec)}',
+                      seed: msg.id.hashCode,
+                      onSeek: (ratio) {
+                        final totalMs = _playbackDuration.inMilliseconds > 0
+                            ? _playbackDuration.inMilliseconds
+                            : durationSec * 1000;
+                        if (totalMs <= 0) return;
+                        final target = Duration(
+                          milliseconds: (ratio.clamp(0.0, 1.0) * totalMs).round(),
+                        );
+                        _playbackPositionNotifier.value = target;
+                        _audioPlayer.seek(target);
+                      },
                     );
                   },
                 )
@@ -1847,6 +1867,8 @@ class _ChatScreenState extends State<ChatScreen>
                   textColor: textColor,
                   timeColor: timeColor,
                   durationLabel: _formatDuration(durationSec),
+                  seed: msg.id.hashCode,
+                  onSeek: (_) => _togglePlayVoice(msg),
                 ),
         ),
       ],

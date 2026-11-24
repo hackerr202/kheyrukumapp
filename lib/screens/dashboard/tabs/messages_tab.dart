@@ -7,15 +7,18 @@ import '../../../core/services/messaging_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../widgets/pro_shimmer.dart';
 import '../../../widgets/pro_ui_kit.dart';
 import '../../messages/chat_screen.dart';
 
 /// Flagship Messages Hub:
-/// - Lazy CustomScrollView + SliverList rendering with loading, retryable error & empty states
-/// - Real-time conversation list with role-aware display titles, badges & unread counts
-/// - Role-scoped New Chat contact picker powered by get_messageable_contacts() RPC
+/// - Lazy CustomScrollView + SliverList rendering with shimmer loading, retryable error & empty states
+/// - Real-time conversation list with role-aware display titles, group deduplication & unread counts
+/// - Role-scoped New Chat contact picker triggered from the top bar `+ New` pill
 class MessagesTab extends StatefulWidget {
-  const MessagesTab({super.key});
+  final ValueNotifier<int>? newChatTrigger;
+
+  const MessagesTab({super.key, this.newChatTrigger});
 
   @override
   State<MessagesTab> createState() => _MessagesTabState();
@@ -28,15 +31,54 @@ class _MessagesTabState extends State<MessagesTab> {
   @override
   void initState() {
     super.initState();
+    widget.newChatTrigger?.addListener(_onExternalNewChatTrigger);
     if (MessagingService.instance.allConversations.isEmpty) {
       MessagingService.instance.refreshAndSubscribe();
     }
   }
 
   @override
+  void didUpdateWidget(covariant MessagesTab oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.newChatTrigger != widget.newChatTrigger) {
+      oldWidget.newChatTrigger?.removeListener(_onExternalNewChatTrigger);
+      widget.newChatTrigger?.addListener(_onExternalNewChatTrigger);
+    }
+  }
+
+  @override
   void dispose() {
+    widget.newChatTrigger?.removeListener(_onExternalNewChatTrigger);
     _searchCtrl.dispose();
     super.dispose();
+  }
+
+  void _onExternalNewChatTrigger() {
+    if (!mounted) return;
+    if (AuthSessionService.instance.isAdmin) {
+      _showAdminActionSheet(context);
+    } else {
+      _openNewChatSheet(context);
+    }
+  }
+
+  List<Conversation> _deduplicateConversations(List<Conversation> convos) {
+    final seen = <String, Conversation>{};
+    for (final c in convos) {
+      final isCircleOrBroadcast = c.isGroup ||
+          c.groupType == 'parent_group' ||
+          c.groupType == 'broadcast';
+      final key = isCircleOrBroadcast
+          ? 'group::${c.groupType}::${(c.halaqahId != null && c.halaqahId!.isNotEmpty) ? c.halaqahId! : c.title.trim().toLowerCase()}'
+          : 'direct::${c.id}';
+      final existing = seen[key];
+      if (existing == null ||
+          c.lastMessageTime.isAfter(existing.lastMessageTime)) {
+        seen[key] = c;
+      }
+    }
+    return seen.values.toList()
+      ..sort((a, b) => b.lastMessageTime.compareTo(a.lastMessageTime));
   }
 
   Future<void> _handleRefresh() async {
@@ -99,9 +141,11 @@ class _MessagesTabState extends State<MessagesTab> {
           stream: messaging.conversationsStream,
           initialData: messaging.allConversations,
           builder: (context, _) {
-            final allConvos = messaging.getConversationsForUser(
-              currentUserId,
-              role: currentRole,
+            final allConvos = _deduplicateConversations(
+              messaging.getConversationsForUser(
+                currentUserId,
+                role: currentRole,
+              ),
             );
 
             final filteredConvos = _searchQuery.isEmpty
@@ -221,24 +265,10 @@ class _MessagesTabState extends State<MessagesTab> {
                       ),
                     ),
                     if (isLoading && allConvos.isEmpty)
-                      SliverFillRemaining(
-                        hasScrollBody: false,
-                        child: Center(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              CircularProgressIndicator(color: p.primary),
-                              const SizedBox(height: 12),
-                              Text(
-                                loc.loadingConversations,
-                                style: TextStyle(
-                                  fontSize: 13,
-                                  color: p.inkSecondary,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ],
-                          ),
+                      const SliverPadding(
+                        padding: EdgeInsets.fromLTRB(20, 0, 20, 140),
+                        sliver: SliverToBoxAdapter(
+                          child: ProChatListSkeleton(),
                         ),
                       )
                     else if (errorMsg != null && allConvos.isEmpty)
@@ -265,22 +295,30 @@ class _MessagesTabState extends State<MessagesTab> {
                                 : loc.noConversationsYet,
                             message: _searchQuery.isNotEmpty
                                 ? loc.searchChatsHint
-                                : (isTeacher
-                                    ? loc.messagesSubtitleTeacher
-                                    : (isParent
-                                        ? loc.messagesSubtitleParent
+                                : (isParent
+                                    ? loc.translate('parentMessagesEmptyDesc')
+                                    : (isTeacher
+                                        ? loc.messagesSubtitleTeacher
                                         : loc.messagesSubtitleAdmin)),
                             actionLabel: _searchQuery.isNotEmpty
                                 ? loc.clearSearch
-                                : loc.startNewChat,
-                            onAction: () {
-                              if (_searchQuery.isNotEmpty) {
-                                _searchCtrl.clear();
-                                setState(() => _searchQuery = '');
-                              } else {
-                                _openNewChatSheet(context);
-                              }
-                            },
+                                : (isParent
+                                    ? null
+                                    : loc.translate('startNewChatAction')),
+                            onAction: _searchQuery.isNotEmpty
+                                ? () {
+                                    _searchCtrl.clear();
+                                    setState(() => _searchQuery = '');
+                                  }
+                                : (isParent
+                                    ? null
+                                    : () {
+                                        if (isAdmin) {
+                                          _showAdminActionSheet(context);
+                                        } else {
+                                          _openNewChatSheet(context);
+                                        }
+                                      }),
                           ),
                         ),
                       )
@@ -326,31 +364,6 @@ class _MessagesTabState extends State<MessagesTab> {
                         ),
                       ),
                   ],
-                ),
-              ),
-              floatingActionButton: Padding(
-                padding: EdgeInsetsDirectional.only(
-                  bottom: MediaQuery.of(context).padding.bottom + 84,
-                ),
-                child: FloatingActionButton.extended(
-                  onPressed: () {
-                    if (isAdmin) {
-                      _showAdminActionSheet(context);
-                    } else {
-                      _openNewChatSheet(context);
-                    }
-                  },
-                  backgroundColor: p.primary,
-                  foregroundColor: p.onPrimary,
-                  elevation: 4,
-                  icon: const Icon(Icons.add_comment_rounded, size: 19),
-                  label: Text(
-                    loc.newChat,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
                 ),
               ),
             );
@@ -478,28 +491,11 @@ class _MessagesTabState extends State<MessagesTab> {
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
         child: Row(
           children: [
-            Stack(
-              children: [
-                ProAvatar(
-                  name: displayTitle,
-                  radius: 23,
-                  color: badgeInfo.$2,
-                  icon: isGroup ? Icons.groups_rounded : null,
-                ),
-                PositionedDirectional(
-                  bottom: 0,
-                  end: 0,
-                  child: Container(
-                    width: 11,
-                    height: 11,
-                    decoration: BoxDecoration(
-                      color: p.success,
-                      shape: BoxShape.circle,
-                      border: Border.all(color: p.surface, width: 2),
-                    ),
-                  ),
-                ),
-              ],
+            ProAvatar(
+              name: displayTitle,
+              radius: 23,
+              color: badgeInfo.$2,
+              icon: isGroup ? Icons.groups_rounded : null,
             ),
             const SizedBox(width: 12),
             Expanded(
