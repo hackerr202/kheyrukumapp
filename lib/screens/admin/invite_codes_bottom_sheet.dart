@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/invitation_code.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
@@ -35,10 +36,11 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return ProBottomSheetShell(
-      title: 'Invite Codes',
-      subtitle: 'Onboard teachers to circles and link parents',
+      title: loc.inviteCodes,
+      subtitle: loc.generateInviteCode,
       icon: Icons.vpn_key_rounded,
       iconColor: p.gold,
       heightFactor: 0.65,
@@ -64,8 +66,9 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
                         InviteCodeDialog.show(hostContext, initialRole: 'teacher');
                       },
                       icon: const Icon(Icons.school_rounded, size: 17),
-                      label: const Text('Teacher Code',
-                          style: TextStyle(fontSize: 13)),
+                      label: Text(loc.teachersTab,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13)),
                     ),
                   ),
                 ),
@@ -82,7 +85,8 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
                       icon: Icon(Icons.family_restroom_rounded,
                           size: 17, color: p.gold),
                       label: Text(
-                        'Parent Code',
+                        loc.parentsTab,
+                        overflow: TextOverflow.ellipsis,
                         style: TextStyle(color: p.gold, fontSize: 13),
                       ),
                       style: OutlinedButton.styleFrom(
@@ -95,7 +99,7 @@ class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
             ),
             const SizedBox(height: 22),
             Text(
-              'ACTIVE CODES',
+              loc.invitesTab.toUpperCase(),
               style: TextStyle(
                 fontSize: 11,
                 fontWeight: FontWeight.w700,

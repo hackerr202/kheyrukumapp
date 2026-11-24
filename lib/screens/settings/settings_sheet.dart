@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_notifier.dart';
 import '../../core/theme/app_colors.dart';
 import '../../core/theme/app_theme.dart';
 import '../../widgets/pro_ui_kit.dart';
@@ -15,17 +17,21 @@ class SettingsSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => ValueListenableBuilder<ThemeMode>(
         valueListenable: AppTheme.themeModeNotifier,
-        builder: (context, __, ___) {
-          final p = AppColors.of(context);
-          return ProBottomSheetShell(
-            title: 'Portal Settings',
-            subtitle: 'Appearance & account preferences',
-            icon: Icons.settings_rounded,
-            iconColor: p.primary,
-            heightFactor: 0.78,
-            child: const SettingsTab(),
-          );
-        },
+        builder: (_, __, ___) => ValueListenableBuilder<Locale>(
+          valueListenable: LocaleNotifier.instance,
+          builder: (sheetCtx, ___, ____) {
+            final p = AppColors.of(sheetCtx);
+            final loc = AppLocalizations.of(sheetCtx);
+            return ProBottomSheetShell(
+              title: loc.portalSettings,
+              subtitle: loc.portalSettingsSubtitle,
+              icon: Icons.settings_rounded,
+              iconColor: p.primary,
+              heightFactor: 0.88,
+              child: const SettingsTab(),
+            );
+          },
+        ),
       ),
     );
   }

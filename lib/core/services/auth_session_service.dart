@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'push_notification_service.dart';
 import 'storage_service.dart';
 import 'supabase_service.dart';
@@ -178,5 +179,64 @@ class AuthSessionService {
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
     // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     roleNotifier.notifyListeners();
+  }
+
+  /// Update the signed-in user's full name and phone number in `public.profiles`
+  /// and broadcast immediately to all listeners.
+  Future<void> updateProfile({
+    required String fullName,
+    required String phone,
+  }) async {
+    final cleanName = fullName.trim();
+    final cleanPhone = phone.trim();
+    if (cleanName.isEmpty) {
+      throw Exception('Full name cannot be empty.');
+    }
+    final client = SupabaseService.instance.client;
+    final uid = SupabaseService.instance.currentUser?.id ?? _userId;
+    if (client == null || uid.isEmpty) {
+      throw Exception('Please sign in to update your profile.');
+    }
+
+    await client.from('profiles').update({
+      'full_name': cleanName,
+      'phone': cleanPhone,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', uid);
+
+    updateDetails(name: cleanName, phone: cleanPhone);
+  }
+
+  /// Update or remove the signed-in user's avatar URL in `public.profiles`
+  /// and invalidate the stale signed URL cache entry.
+  Future<void> updateAvatarUrl(String? avatarUrl) async {
+    final client = SupabaseService.instance.client;
+    final uid = SupabaseService.instance.currentUser?.id ?? _userId;
+    if (client == null || uid.isEmpty) {
+      throw Exception('Please sign in to update your profile photo.');
+    }
+
+    final previousUrl = _avatarUrl;
+    await client.from('profiles').update({
+      'avatar_url': avatarUrl,
+      'updated_at': DateTime.now().toUtc().toIso8601String(),
+    }).eq('id', uid);
+
+    StorageService.invalidateSignedUrl(previousUrl);
+    _avatarUrl = avatarUrl;
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    roleNotifier.notifyListeners();
+  }
+
+  /// Update the signed-in user's Supabase Auth password.
+  Future<void> changePassword(String newPassword) async {
+    if (newPassword.length < 6) {
+      throw Exception('Password must be at least 6 characters.');
+    }
+    final client = SupabaseService.instance.client;
+    if (client == null || SupabaseService.instance.currentUser == null) {
+      throw Exception('Please sign in to change your password.');
+    }
+    await client.auth.updateUser(UserAttributes(password: newPassword));
   }
 }

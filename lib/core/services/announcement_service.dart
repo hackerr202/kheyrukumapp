@@ -161,6 +161,7 @@ class AnnouncementService {
         .stream(primaryKey: ['id'])
         .order('is_pinned', ascending: false)
         .order('created_at', ascending: false)
+        .limit(50)
         .map((data) {
           final list = data.map((json) => Announcement.fromJson(json)).toList();
           return list;

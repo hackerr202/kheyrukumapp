@@ -1,7 +1,9 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/attendance.dart';
+import '../../../core/models/payment.dart';
 import '../../../core/models/student.dart';
 import '../../../core/models/weekly_report.dart';
 import '../../../core/services/absence_service.dart';
@@ -12,9 +14,8 @@ import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
-import '../../../widgets/invite_code_dialog.dart';
+import '../../../widgets/add_student_dialog.dart';
 import '../../../widgets/pro_ui_kit.dart';
-import '../../admin/halaqah_management_sheet.dart';
 import '../../messages/chat_screen.dart';
 
 /// Students Tab with 3 role-specific interfaces:
@@ -1373,6 +1374,12 @@ class _StudentsTabState extends State<StudentsTab> {
       return matchesSearch && matchesHalaqah;
     }).toList();
 
+    final loc = AppLocalizations.of(context);
+    final paymentsByStudent = <String, List<MonthlyPayment>>{};
+    for (final pay in PaymentService.instance.allPayments) {
+      paymentsByStudent.putIfAbsent(pay.studentId, () => []).add(pay);
+    }
+
     return RefreshIndicator(
       color: p.primary,
       onRefresh: _handleRefresh,
@@ -1390,7 +1397,7 @@ class _StudentsTabState extends State<StudentsTab> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
-                      '${allStudents.length} enrolled ${allStudents.length == 1 ? 'learner' : 'learners'}',
+                      '${allStudents.length} ${loc.studentsCount}',
                       style: TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w700,
@@ -1400,16 +1407,17 @@ class _StudentsTabState extends State<StudentsTab> {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      'Linked to parent accounts',
+                      loc.parentLinkage,
                       style: TextStyle(fontSize: 12, color: p.inkSecondary),
                     ),
                   ],
                 ),
               ),
               ElevatedButton.icon(
-                onPressed: () => _showAddStudentDialog(context),
+                onPressed: () => AddStudentDialog.show(context),
                 icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: const Text('Enroll', style: TextStyle(fontSize: 12.5)),
+                label: Text(loc.addStudent,
+                    style: const TextStyle(fontSize: 12.5)),
                 style: ElevatedButton.styleFrom(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 14,
@@ -1423,7 +1431,7 @@ class _StudentsTabState extends State<StudentsTab> {
 
           if (allStudents.isNotEmpty) ...[
             ProSearchField(
-              hintText: 'Search student or parent name...',
+              hintText: loc.search,
               query: _searchQuery,
               onChanged: (val) => setState(() => _searchQuery = val.trim()),
             ),
@@ -1484,36 +1492,41 @@ class _StudentsTabState extends State<StudentsTab> {
           if (allStudents.isEmpty)
             ProEmptyState(
               icon: Icons.school_outlined,
-              title: 'No Students Enrolled Yet',
-              message:
-                  'Add your students and link each learner to their parent account and study circle.',
-              actionLabel: 'Enroll First Student',
-              onAction: () => _showAddStudentDialog(context),
+              title: loc.studentRoster,
+              message: loc.parentLinkage,
+              actionLabel: loc.enrollStudent,
+              onAction: () => AddStudentDialog.show(context),
             )
           else if (filtered.isEmpty)
-            const ProEmptyState(
+            ProEmptyState(
               icon: Icons.search_off_rounded,
-              title: 'No matching students',
-              message:
-                  'Try adjusting your search query or selected study circle filter.',
+              title: loc.none,
+              message: loc.search,
             )
           else
-            ...filtered.map((s) => _buildAdminStudentCard(s, p)),
+            ...filtered.map(
+              (s) => _buildAdminStudentCard(
+                s,
+                p,
+                paymentsByStudent[s.id] ?? const [],
+              ),
+            ),
         ],
       ),
     );
   }
 
-  Widget _buildAdminStudentCard(Student student, AppPalette p) {
+  Widget _buildAdminStudentCard(
+    Student student,
+    AppPalette p,
+    List<MonthlyPayment> studentPayments,
+  ) {
     final parentContact = student.parentPhone.isNotEmpty
         ? ' • ${student.parentPhone}'
         : (student.parentEmail != null && student.parentEmail!.isNotEmpty
             ? ' • ${student.parentEmail}'
             : '');
 
-    final studentPayments = PaymentService.instance.allPayments
-        .where((pay) => pay.studentId == student.id)
-        .toList();
     final String badgeText;
     final Color badgeColor;
     if (studentPayments.isNotEmpty) {
@@ -1808,29 +1821,6 @@ class _StudentsTabState extends State<StudentsTab> {
   // ===========================================================================
   // DIALOGS
   // ===========================================================================
-  Future<void> _showAddStudentDialog(BuildContext context) async {
-    final p = AppColors.of(context);
-    final result = await showDialog<String>(
-      context: context,
-      builder: (_) => _StudentsAddDialog(palette: p),
-    );
-    if (!mounted || !context.mounted || result == null) return;
-    if (result == 'create_halaqah') {
-      HalaqahManagementSheet.show(context);
-    } else if (result == 'invite_parent') {
-      InviteCodeDialog.show(context, initialRole: 'parent');
-    } else if (result.startsWith('enrolled:')) {
-      final summary = result.substring('enrolled:'.length);
-      setState(() {});
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(summary),
-          backgroundColor: p.primary,
-        ),
-      );
-    }
-  }
-
   Future<void> _showEditRemarksDialog(
       BuildContext context, Student student, AttendanceRecord att) async {
     final saved = await showDialog<bool>(
@@ -2081,371 +2071,6 @@ class _StudentsTabState extends State<StudentsTab> {
       default:
         return 'Personal Reason';
     }
-  }
-}
-
-class _StudentsAddDialog extends StatefulWidget {
-  final AppPalette palette;
-
-  const _StudentsAddDialog({required this.palette});
-
-  @override
-  State<_StudentsAddDialog> createState() => _StudentsAddDialogState();
-}
-
-class _StudentsAddDialogState extends State<_StudentsAddDialog> {
-  final _nameCtrl = TextEditingController();
-  final _ageCtrl = TextEditingController(text: '8');
-
-  String? _selectedHalaqahId;
-  String _selectedHalaqahName = '';
-  String? _selectedParentId;
-  int _juz = 30;
-  int _surah = 1;
-  static const int _ayah = 1;
-  bool _isSubmitting = false;
-
-  @override
-  void initState() {
-    super.initState();
-    final halaqahs = HalaqahService.instance.halaqahs;
-    if (halaqahs.isNotEmpty) {
-      _selectedHalaqahId = halaqahs.first.id;
-      _selectedHalaqahName = halaqahs.first.name;
-    }
-    final parents = StudentService.instance.getRegisteredParents();
-    if (parents.isNotEmpty) {
-      _selectedParentId = parents.first['id'];
-    }
-  }
-
-  @override
-  void dispose() {
-    _nameCtrl.dispose();
-    _ageCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    final p = widget.palette;
-    final currentHalaqahs = HalaqahService.instance.halaqahs;
-    final currentParents = StudentService.instance.getRegisteredParents();
-
-    final effectiveHalaqahId = currentHalaqahs.isEmpty
-        ? null
-        : (currentHalaqahs.any((h) => h.id == _selectedHalaqahId)
-            ? _selectedHalaqahId
-            : currentHalaqahs.first.id);
-    final effectiveHalaqahName = effectiveHalaqahId == null
-        ? _selectedHalaqahName
-        : currentHalaqahs
-            .firstWhere((h) => h.id == effectiveHalaqahId)
-            .name;
-    final effectiveParentId = currentParents.isEmpty
-        ? null
-        : (currentParents.any((parent) => parent['id'] == _selectedParentId)
-            ? _selectedParentId
-            : currentParents.first['id']);
-
-    final parsedAge = int.tryParse(_ageCtrl.text.trim());
-    final isAgeValid = parsedAge != null && parsedAge > 0;
-    final canSubmit = !_isSubmitting &&
-        _nameCtrl.text.trim().isNotEmpty &&
-        isAgeValid &&
-        effectiveParentId != null &&
-        effectiveParentId.isNotEmpty &&
-        effectiveHalaqahId != null &&
-        effectiveHalaqahId.isNotEmpty;
-
-    return AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.person_add_rounded, color: p.primary),
-          const SizedBox(width: 8),
-          const Expanded(
-            child: Text(
-              'Add Student & Link Parent',
-              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-            ),
-          ),
-        ],
-      ),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            TextField(
-              controller: _nameCtrl,
-              enabled: !_isSubmitting,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Student Full Name *',
-                hintText: 'e.g. Abdur-Rahman Muhammed',
-                prefixIcon: Icon(Icons.face_rounded, size: 20),
-              ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _ageCtrl,
-              enabled: !_isSubmitting,
-              keyboardType: TextInputType.number,
-              onChanged: (_) => setState(() {}),
-              decoration: const InputDecoration(
-                labelText: 'Student Age *',
-                hintText: 'e.g. 8',
-                prefixIcon: Icon(Icons.cake, size: 20),
-              ),
-            ),
-            const SizedBox(height: 14),
-            if (currentHalaqahs.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: p.primary.withOpacity(0.08),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: p.primary.withOpacity(0.28)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.info_outline_rounded,
-                            size: 16, color: p.primary),
-                        const SizedBox(width: 6),
-                        Text(
-                          'No Study Circles Created Yet',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w700,
-                            fontSize: 12,
-                            color: p.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Please create a halaqah circle first before enrolling students.',
-                      style: TextStyle(fontSize: 11.5),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () => Navigator.pop(context, 'create_halaqah'),
-                      icon: const Icon(Icons.add_rounded, size: 15),
-                      label: const Text('Create Halaqah Circle',
-                          style: TextStyle(fontSize: 11.5)),
-                    ),
-                  ],
-                ),
-              )
-            else
-              DropdownButtonFormField<String>(
-                value: effectiveHalaqahId,
-                items: currentHalaqahs.map((h) {
-                  return DropdownMenuItem<String>(
-                    value: h.id,
-                    child: Text(
-                      '${h.name} (${h.teacherName})',
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                  );
-                }).toList(),
-                onChanged: _isSubmitting
-                    ? null
-                    : (val) {
-                        setState(() {
-                          _selectedHalaqahId = val;
-                          final match =
-                              currentHalaqahs.where((h) => h.id == val);
-                          _selectedHalaqahName =
-                              match.isNotEmpty ? match.first.name : '';
-                        });
-                      },
-                decoration: const InputDecoration(
-                  labelText: 'Assigned Class (Halaqah) *',
-                  prefixIcon: Icon(Icons.school_rounded, size: 20),
-                ),
-              ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 10),
-            Row(
-              children: [
-                Icon(Icons.family_restroom_rounded, size: 16, color: p.gold),
-                const SizedBox(width: 6),
-                Text(
-                  'Link to Registered Parent *',
-                  style: TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 12.5,
-                    color: p.gold,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            if (currentParents.isEmpty)
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: p.gold.withOpacity(0.10),
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: p.gold.withOpacity(0.35)),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Row(
-                      children: [
-                        Icon(Icons.warning_amber_rounded,
-                            size: 16, color: p.gold),
-                        const SizedBox(width: 6),
-                        Expanded(
-                          child: Text(
-                            'No Registered Parents Found',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 12,
-                              color: p.gold,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 4),
-                    const Text(
-                      'Invite a parent first using a Parent Invitation Code so they can link their child.',
-                      style: TextStyle(fontSize: 11.5),
-                    ),
-                    const SizedBox(height: 8),
-                    ElevatedButton.icon(
-                      onPressed: () =>
-                          Navigator.pop(context, 'invite_parent'),
-                      icon: const Icon(Icons.vpn_key_rounded, size: 14),
-                      label: const Text('Generate Parent Invite Code',
-                          style: TextStyle(fontSize: 11.5)),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: p.gold,
-                        foregroundColor: Colors.white,
-                      ),
-                    ),
-                  ],
-                ),
-              )
-            else
-              DropdownButtonFormField<String>(
-                value: effectiveParentId,
-                items: currentParents.map((parent) {
-                  return DropdownMenuItem<String>(
-                    value: parent['id'],
-                    child: Text(
-                      '${parent['name']} (${(parent['phone'] != null && (parent['phone'] as String).isNotEmpty) ? parent['phone'] : parent['email']})',
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontSize: 12.5),
-                    ),
-                  );
-                }).toList(),
-                onChanged: _isSubmitting
-                    ? null
-                    : (val) => setState(() => _selectedParentId = val),
-                decoration: const InputDecoration(
-                  labelText: 'Select Registered Parent *',
-                  prefixIcon: Icon(Icons.people_rounded, size: 20),
-                ),
-              ),
-            const SizedBox(height: 16),
-            const Divider(),
-            const SizedBox(height: 8),
-            Text(
-              'Initial Quran Milestone',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: p.inkSecondary,
-              ),
-            ),
-            const SizedBox(height: 8),
-            Row(
-              children: [
-                Expanded(
-                  child: TextFormField(
-                    initialValue: '$_juz',
-                    enabled: !_isSubmitting,
-                    keyboardType: TextInputType.number,
-                    decoration: const InputDecoration(labelText: 'Juz (1-30)'),
-                    onChanged: (v) => _juz = int.tryParse(v) ?? 30,
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: TextFormField(
-                    initialValue: '$_surah',
-                    enabled: !_isSubmitting,
-                    keyboardType: TextInputType.number,
-                    decoration:
-                        const InputDecoration(labelText: 'Surah (1-114)'),
-                    onChanged: (v) => _surah = int.tryParse(v) ?? 1,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
-        ),
-        ElevatedButton(
-          onPressed: canSubmit
-              ? () async {
-                  final foundParent = currentParents.firstWhere(
-                    (parent) => parent['id'] == effectiveParentId,
-                    orElse: () => currentParents.first,
-                  );
-                  final studentName = _nameCtrl.text.trim();
-                  setState(() => _isSubmitting = true);
-                  try {
-                    await StudentService.instance.addStudent(
-                      fullName: studentName,
-                      age: parsedAge ?? 8,
-                      halaqahName: effectiveHalaqahName,
-                      halaqahId: effectiveHalaqahId,
-                      parentId: foundParent['id']!,
-                      parentName: foundParent['name']!,
-                      parentPhone: foundParent['phone'] ?? '',
-                      parentEmail: foundParent['email'],
-                      currentJuz: _juz,
-                      currentSurah: _surah,
-                      currentAyah: _ayah,
-                    );
-                    if (!mounted) return;
-                    Navigator.pop(
-                      context,
-                      'enrolled:Enrolled $studentName under ${foundParent['name']}.',
-                    );
-                  } catch (e) {
-                    if (!mounted) return;
-                    setState(() => _isSubmitting = false);
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Failed to enroll student: ${SupabaseService.cleanErrorMessage(e)}',
-                        ),
-                        backgroundColor: p.danger,
-                      ),
-                    );
-                  }
-                }
-              : null,
-          child: Text(_isSubmitting ? 'Enrolling...' : 'Enroll Student'),
-        ),
-      ],
-    );
   }
 }
 

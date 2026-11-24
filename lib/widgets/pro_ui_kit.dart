@@ -35,18 +35,19 @@ class ProCard extends StatelessWidget {
 
     final content = ClipRRect(
       borderRadius: BorderRadius.circular(borderRadius),
-      child: IntrinsicHeight(
-        child: Row(
-          crossAxisAlignment: CrossAxisAlignment.stretch,
-          children: [
-            if (accentStripeColor != null)
-              Container(width: 4, color: accentStripeColor),
-            Expanded(
-              child: Padding(padding: padding, child: child),
-            ),
-          ],
-        ),
-      ),
+      child: accentStripeColor != null
+          ? IntrinsicHeight(
+              child: Row(
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  Container(width: 4, color: accentStripeColor),
+                  Expanded(
+                    child: Padding(padding: padding, child: child),
+                  ),
+                ],
+              ),
+            )
+          : Padding(padding: padding, child: child),
     );
 
     return Container(
@@ -321,8 +322,9 @@ class ProAvatar extends StatelessWidget {
 }
 
 /// Resolves private Supabase `storage://` refs (or legacy storage URLs) into
-/// short-lived signed URLs via [StorageService] with synchronous cache lookup.
-class ProSignedImage extends StatelessWidget {
+/// short-lived signed URLs via [StorageService] with cached future resolution
+/// and memory-bounded image decoding.
+class ProSignedImage extends StatefulWidget {
   final String mediaRef;
   final double? width;
   final double? height;
@@ -340,37 +342,78 @@ class ProSignedImage extends StatelessWidget {
     this.errorWidget,
   });
 
+  @override
+  State<ProSignedImage> createState() => _ProSignedImageState();
+}
+
+class _ProSignedImageState extends State<ProSignedImage> {
+  Future<String?>? _resolveFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _initFuture();
+  }
+
+  @override
+  void didUpdateWidget(covariant ProSignedImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.mediaRef != widget.mediaRef) {
+      _initFuture();
+    }
+  }
+
+  void _initFuture() {
+    if (StorageService.getCachedSignedUrl(widget.mediaRef) == null) {
+      _resolveFuture = StorageService.resolveSignedUrl(widget.mediaRef);
+    } else {
+      _resolveFuture = null;
+    }
+  }
+
+  int? _boundedCacheDim(double? logicalSize) {
+    if (logicalSize == null || !logicalSize.isFinite || logicalSize <= 0) {
+      return null;
+    }
+    return (logicalSize * 2).round().clamp(48, 1440);
+  }
+
   Widget _buildNetworkImage(String resolvedUrl) {
+    final cWidth = _boundedCacheDim(widget.width);
+    final cHeight = _boundedCacheDim(widget.height);
     return Image.network(
       resolvedUrl,
-      width: width,
-      height: height,
-      fit: fit,
+      width: widget.width,
+      height: widget.height,
+      fit: widget.fit,
+      cacheWidth: cWidth ?? (cHeight == null ? 1080 : null),
+      cacheHeight: cHeight,
+      gaplessPlayback: true,
       loadingBuilder: (_, child, progress) {
         if (progress == null) return child;
-        return placeholder ?? const SizedBox.shrink();
+        return widget.placeholder ?? const SizedBox.shrink();
       },
       errorBuilder: (_, __, ___) =>
-          errorWidget ?? const SizedBox.shrink(),
+          widget.errorWidget ?? const SizedBox.shrink(),
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final cachedUrl = StorageService.getCachedSignedUrl(mediaRef);
+    final cachedUrl = StorageService.getCachedSignedUrl(widget.mediaRef);
     if (cachedUrl != null) {
       return _buildNetworkImage(cachedUrl);
     }
 
     return FutureBuilder<String?>(
-      future: StorageService.resolveSignedUrl(mediaRef),
+      future: _resolveFuture ??= StorageService.resolveSignedUrl(widget.mediaRef),
       builder: (context, snapshot) {
         final resolved = snapshot.data;
         if (snapshot.connectionState == ConnectionState.waiting) {
-          return placeholder ?? const SizedBox.shrink();
+          return widget.placeholder ?? const SizedBox.shrink();
         }
         if (resolved == null || resolved.isEmpty) {
-          return errorWidget ?? const SizedBox.shrink();
+          return widget.errorWidget ?? const SizedBox.shrink();
         }
         return _buildNetworkImage(resolved);
       },

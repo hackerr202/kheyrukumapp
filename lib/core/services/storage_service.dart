@@ -68,6 +68,16 @@ class StorageService {
     _inFlightSignedRequests.clear();
   }
 
+  /// Evicts a single cached signed URL (e.g. when a user replaces or removes their avatar).
+  static void invalidateSignedUrl(String? rawUrlOrRef) {
+    if (rawUrlOrRef == null) return;
+    final parsed = _parseStorageRef(rawUrlOrRef);
+    if (parsed == null) return;
+    final cacheKey = '${parsed.bucket}/${parsed.path}';
+    _signedUrlCache.remove(cacheKey);
+    _inFlightSignedRequests.remove(cacheKey);
+  }
+
   /// Parses `storage://<bucket>/<path>` or Supabase Storage URLs
   /// (`/storage/v1/object/(public|sign|authenticated)/<bucket>/<path>`).
   static _StorageObjectRef? _parseStorageRef(String raw) {

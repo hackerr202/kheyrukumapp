@@ -1,4 +1,3 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import '../core/theme/app_colors.dart';
@@ -40,23 +39,22 @@ class KheyrukumNavBar extends StatelessWidget {
         ? AppColors.surfaceNav.withOpacity(0.90)
         : Colors.white.withOpacity(0.94);
 
-    return Container(
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(26),
-        boxShadow: [
-          BoxShadow(
-            color: p.isDark
-                ? Colors.black.withOpacity(0.45)
-                : const Color(0xFF0A2422).withOpacity(0.08),
-            blurRadius: 20,
-            offset: const Offset(0, 6),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(26),
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: 18, sigmaY: 18),
+    return RepaintBoundary(
+      child: Container(
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(26),
+          boxShadow: [
+            BoxShadow(
+              color: p.isDark
+                  ? Colors.black.withOpacity(0.45)
+                  : const Color(0xFF0A2422).withOpacity(0.08),
+              blurRadius: 20,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(26),
           child: Container(
             height: 66,
             padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
@@ -111,9 +109,9 @@ class KheyrukumNavBar extends StatelessWidget {
                                 color: isSelected ? p.primary : p.inkMuted,
                               ),
                               if (item.badgeCount > 0)
-                                Positioned(
+                                PositionedDirectional(
                                   top: -4,
-                                  right: -7,
+                                  end: -7,
                                   child: Container(
                                     padding: const EdgeInsets.symmetric(
                                       horizontal: 4,

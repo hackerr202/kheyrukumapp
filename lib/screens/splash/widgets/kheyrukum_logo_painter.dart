@@ -1,6 +1,5 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
-import '../../../core/theme/app_colors.dart';
 
 /// CustomPainter that animates the Kheyrukum Islamic Center Logo elements:
 /// 1. The Foundation Crescent Arch (Teal)

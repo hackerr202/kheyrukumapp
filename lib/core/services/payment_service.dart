@@ -90,7 +90,8 @@ class PaymentService {
       final res = await client
           .from('monthly_payments')
           .select(_selectColumns)
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(500);
       if (res is List) {
         _payments
           ..clear()

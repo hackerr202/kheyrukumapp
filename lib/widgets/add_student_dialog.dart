@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../core/localization/app_localizations.dart';
 import '../core/services/halaqah_service.dart';
 import '../core/services/storage_service.dart';
 import '../core/services/student_service.dart';
@@ -187,6 +188,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     final currentHalaqahs = HalaqahService.instance.halaqahs;
     final currentParents = StudentService.instance.getRegisteredParents();
 
@@ -235,25 +237,31 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                         ),
                       ),
                       const SizedBox(width: 12),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Enroll New Student',
-                            style: TextStyle(
-                              fontSize: 17,
-                              fontWeight: FontWeight.w700,
-                              color: p.ink,
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              loc.enrollStudent,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: p.ink,
+                              ),
                             ),
-                          ),
-                          Text(
-                            'Assign to study circle & link parent',
-                            style: TextStyle(
-                              fontSize: 11.5,
-                              color: p.inkSecondary,
+                            Text(
+                              loc.parentLinkage,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11.5,
+                                color: p.inkSecondary,
+                              ),
                             ),
-                          ),
-                        ],
+                          ],
+                        ),
                       ),
                     ],
                   ),
@@ -314,9 +322,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                                       color: p.primary,
                                     ),
                         ),
-                        Positioned(
+                        PositionedDirectional(
                           bottom: 0,
-                          right: 0,
+                          end: 0,
                           child: InkWell(
                             onTap: _isUploadingAvatar ? null : _pickAvatar,
                             child: Container(
@@ -338,7 +346,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      'Photo (Optional)',
+                      loc.studentPhoto,
                       style: TextStyle(
                         fontSize: 11.5,
                         color: p.inkSecondary,
@@ -351,7 +359,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               const SizedBox(height: 16),
 
               Text(
-                'STUDENT FULL NAME *',
+                loc.studentFullName,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -364,15 +372,15 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 controller: _nameCtrl,
                 onChanged: (_) => setState(() {}),
                 style: TextStyle(fontSize: 14, color: p.ink),
-                decoration: const InputDecoration(
-                  hintText: 'e.g. Abdur-Rahman Muhammed',
-                  prefixIcon: Icon(Icons.face_rounded, size: 20),
+                decoration: InputDecoration(
+                  hintText: loc.studentFullName,
+                  prefixIcon: const Icon(Icons.face_rounded, size: 20),
                 ),
               ),
               const SizedBox(height: 16),
 
               Text(
-                'STUDENT AGE (YEARS) *',
+                loc.studentAge,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -387,9 +395,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                 onChanged: (_) => setState(() {}),
                 style: TextStyle(fontSize: 14, color: p.ink),
                 decoration: InputDecoration(
-                  hintText: 'e.g. 9',
+                  hintText: '9',
                   prefixIcon: const Icon(Icons.cake, size: 20),
-                  suffixText: isAgeValid ? '✓ Valid' : null,
+                  suffixText: isAgeValid ? '✓' : null,
                   suffixStyle: TextStyle(
                     color: p.success,
                     fontWeight: FontWeight.w700,
@@ -400,7 +408,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               const SizedBox(height: 16),
 
               Text(
-                'ASSIGNED STUDY CIRCLE (HALAQAH) *',
+                loc.assignedCircle,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -443,6 +451,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               else
                 DropdownButtonFormField<String>(
                   value: _selectedHalaqahId,
+                  isExpanded: true,
                   dropdownColor: p.surface,
                   style: TextStyle(fontSize: 13.5, color: p.ink),
                   decoration: const InputDecoration(
@@ -473,13 +482,16 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    'PARENT LINKAGE *',
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: p.inkMuted,
-                      letterSpacing: 0.6,
+                  Flexible(
+                    child: Text(
+                      loc.parentLinkage,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: p.inkMuted,
+                        letterSpacing: 0.6,
+                      ),
                     ),
                   ),
                   if (currentParents.isNotEmpty)
@@ -488,8 +500,8 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                           setState(() => _createNewParent = !_createNewParent),
                       child: Text(
                         _createNewParent
-                            ? 'Select Existing Parent'
-                            : '+ Enter Parent Info',
+                            ? loc.parentsTab
+                            : '+ ${loc.create}',
                         style: TextStyle(
                           fontSize: 11.5,
                           color: p.primary,
@@ -504,6 +516,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
               if (!_createNewParent && currentParents.isNotEmpty)
                 DropdownButtonFormField<String>(
                   value: _selectedParentId,
+                  isExpanded: true,
                   dropdownColor: p.surface,
                   style: TextStyle(fontSize: 13.5, color: p.ink),
                   decoration: const InputDecoration(
@@ -527,9 +540,9 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   controller: _parentNameCtrl,
                   onChanged: (_) => setState(() {}),
                   style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: const InputDecoration(
-                    hintText: 'Parent Full Name (e.g. Abu Abdur-Rahman)',
-                    prefixIcon: Icon(Icons.person_outline_rounded, size: 20),
+                  decoration: InputDecoration(
+                    hintText: loc.fullName,
+                    prefixIcon: const Icon(Icons.person_outline_rounded, size: 20),
                   ),
                 ),
                 const SizedBox(height: 8),
@@ -537,16 +550,26 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                   controller: _parentPhoneCtrl,
                   keyboardType: TextInputType.phone,
                   style: TextStyle(fontSize: 13.5, color: p.ink),
-                  decoration: const InputDecoration(
-                    hintText: 'Parent Phone Number',
-                    prefixIcon: Icon(Icons.phone_outlined, size: 20),
+                  decoration: InputDecoration(
+                    hintText: loc.phoneOptional,
+                    prefixIcon: const Icon(Icons.phone_outlined, size: 20),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                TextField(
+                  controller: _parentEmailCtrl,
+                  keyboardType: TextInputType.emailAddress,
+                  style: TextStyle(fontSize: 13.5, color: p.ink),
+                  decoration: InputDecoration(
+                    hintText: loc.parentEmailOptional,
+                    prefixIcon: const Icon(Icons.email_outlined, size: 20),
                   ),
                 ),
               ],
               const SizedBox(height: 16),
 
               Text(
-                'STARTING MEMORIZATION MILESTONE',
+                loc.startingMilestone,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -562,7 +585,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       initialValue: '$_juz',
                       keyboardType: TextInputType.number,
                       style: TextStyle(fontSize: 13.5, color: p.ink),
-                      decoration: const InputDecoration(labelText: 'Juz (1-30)'),
+                      decoration: InputDecoration(labelText: loc.juzLabel),
                       onChanged: (v) => _juz = int.tryParse(v) ?? 30,
                     ),
                   ),
@@ -572,8 +595,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       initialValue: '$_surah',
                       keyboardType: TextInputType.number,
                       style: TextStyle(fontSize: 13.5, color: p.ink),
-                      decoration:
-                          const InputDecoration(labelText: 'Surah (1-114)'),
+                      decoration: InputDecoration(labelText: loc.surahLabel),
                       onChanged: (v) => _surah = int.tryParse(v) ?? 1,
                     ),
                   ),
@@ -588,7 +610,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                       onPressed: _isSaving
                           ? null
                           : () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(loc.cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -607,7 +629,7 @@ class _AddStudentDialogState extends State<AddStudentDialog> {
                                 color: Colors.white,
                               ),
                             )
-                          : const Text('Enroll & Save Student'),
+                          : Text(loc.enrollStudent),
                     ),
                   ),
                 ],

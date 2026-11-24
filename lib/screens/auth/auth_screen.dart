@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/localization/app_localizations.dart';
+import '../../core/localization/locale_notifier.dart';
 import '../../core/routes/app_routes.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/supabase_service.dart';
@@ -311,6 +313,7 @@ class _AuthScreenState extends State<AuthScreen> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return Scaffold(
       backgroundColor: p.canvas,
@@ -435,6 +438,59 @@ class _AuthScreenState extends State<AuthScreen> {
                     ),
                   ),
                 ),
+                PositionedDirectional(
+                  top: MediaQuery.of(context).padding.top + 8,
+                  end: 14,
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+                    decoration: BoxDecoration(
+                      color: Colors.black.withOpacity(0.24),
+                      borderRadius: BorderRadius.circular(14),
+                      border:
+                          Border.all(color: Colors.white.withOpacity(0.18)),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        for (final entry in const [
+                          ('en', 'EN'),
+                          ('ar', 'عربي'),
+                          ('am', 'አማ'),
+                        ])
+                          InkWell(
+                            borderRadius: BorderRadius.circular(10),
+                            onTap: () =>
+                                LocaleNotifier.instance.setLocale(entry.$1),
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                  horizontal: 7, vertical: 4),
+                              decoration: BoxDecoration(
+                                color: LocaleNotifier
+                                            .instance.currentLanguageCode ==
+                                        entry.$1
+                                    ? AppColors.goldWarm.withOpacity(0.25)
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                entry.$2,
+                                style: TextStyle(
+                                  fontSize: 10.5,
+                                  fontWeight: FontWeight.w700,
+                                  color: LocaleNotifier
+                                              .instance.currentLanguageCode ==
+                                          entry.$1
+                                      ? AppColors.goldWarm
+                                      : Colors.white.withOpacity(0.85),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
+                ),
               ],
             ),
 
@@ -452,7 +508,7 @@ class _AuthScreenState extends State<AuthScreen> {
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
                         ProSegmentedControl(
-                          labels: const ['Sign In', 'Join with Code'],
+                          labels: [loc.signIn, loc.joinWithCode],
                           selectedIndex: _isSignUpMode ? 1 : 0,
                           onChanged: (idx) {
                             setState(() {
@@ -543,12 +599,13 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildLoginForm(AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Column(
       key: const ValueKey('login_form'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Welcome back',
+          loc.welcomeBack,
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w700,
@@ -558,14 +615,14 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 3),
         Text(
-          'Sign in to continue to your school portal.',
+          loc.signInToAccount,
           style: TextStyle(fontSize: 12.5, color: p.inkSecondary),
         ),
         const SizedBox(height: 18),
         _buildInputField(
           p: p,
           controller: _emailCtrl,
-          label: 'Email or Username',
+          label: loc.email,
           hintText: 'parent@kheyrukum.com',
           prefixIcon: Icons.person_outline_rounded,
           keyboardType: TextInputType.emailAddress,
@@ -574,8 +631,8 @@ class _AuthScreenState extends State<AuthScreen> {
         _buildInputField(
           p: p,
           controller: _passwordCtrl,
-          label: 'Password',
-          hintText: 'Enter your password',
+          label: loc.password,
+          hintText: '••••••••',
           prefixIcon: Icons.lock_outline_rounded,
           isPassword: true,
           obscureText: _obscurePassword,
@@ -584,7 +641,7 @@ class _AuthScreenState extends State<AuthScreen> {
         ),
         const SizedBox(height: 10),
         Align(
-          alignment: Alignment.centerRight,
+          alignment: AlignmentDirectional.centerEnd,
           child: TextButton(
             onPressed: () {
               _showToast(
@@ -597,7 +654,7 @@ class _AuthScreenState extends State<AuthScreen> {
               tapTargetSize: MaterialTapTargetSize.shrinkWrap,
             ),
             child: Text(
-              'Forgot Password?',
+              loc.forgotPassword,
               style: TextStyle(
                 color: p.primary,
                 fontSize: 12.5,
@@ -609,7 +666,7 @@ class _AuthScreenState extends State<AuthScreen> {
         const SizedBox(height: 16),
         _buildPrimaryCta(
           p: p,
-          title: 'Sign In',
+          title: loc.signIn,
           isLoading: _isLoading,
           onTap: _handleSignIn,
         ),
@@ -618,13 +675,14 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   Widget _buildSignUpForm(AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Column(
       key: const ValueKey('signup_form'),
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         if (!_isInviteVerified) ...[
           Text(
-            'Activate your invitation',
+            loc.joinWithCode,
             style: TextStyle(
               fontSize: 18,
               fontWeight: FontWeight.w700,
@@ -641,7 +699,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _buildInputField(
             p: p,
             controller: _inviteCodeCtrl,
-            label: 'School Invite Code',
+            label: loc.invitationCode,
             hintText: 'e.g. KHY-TEA-1234',
             prefixIcon: Icons.vpn_key_outlined,
             textCapitalization: TextCapitalization.characters,
@@ -649,7 +707,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 18),
           _buildPrimaryCta(
             p: p,
-            title: 'Verify Invite Code',
+            title: loc.joinWithCode,
             isLoading: _isLoading,
             onTap: _handleVerifyInvite,
           ),
@@ -688,9 +746,9 @@ class _AuthScreenState extends State<AuthScreen> {
                       minimumSize: Size.zero,
                       tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                     ),
-                    child: const Text(
-                      'Change Code',
-                      style: TextStyle(fontSize: 11.5),
+                    child: Text(
+                      loc.edit,
+                      style: const TextStyle(fontSize: 11.5),
                     ),
                   ),
                 ],
@@ -701,15 +759,15 @@ class _AuthScreenState extends State<AuthScreen> {
           _buildInputField(
             p: p,
             controller: _nameCtrl,
-            label: 'Full Name',
-            hintText: 'Enter your full name',
+            label: loc.fullName,
+            hintText: loc.fullName,
             prefixIcon: Icons.badge_outlined,
           ),
           const SizedBox(height: 12),
           _buildInputField(
             p: p,
             controller: _emailCtrl,
-            label: 'Email Address',
+            label: loc.emailAddress,
             hintText: 'name@example.com',
             prefixIcon: Icons.email_outlined,
             keyboardType: TextInputType.emailAddress,
@@ -718,7 +776,7 @@ class _AuthScreenState extends State<AuthScreen> {
           _buildInputField(
             p: p,
             controller: _passwordCtrl,
-            label: 'Create Password',
+            label: loc.password,
             hintText: 'Minimum 6 characters',
             prefixIcon: Icons.lock_outline_rounded,
             isPassword: true,
@@ -729,7 +787,7 @@ class _AuthScreenState extends State<AuthScreen> {
           const SizedBox(height: 18),
           _buildPrimaryCta(
             p: p,
-            title: 'Create Account',
+            title: loc.createAccount,
             isLoading: _isLoading,
             onTap: _handleCreateAccount,
           ),

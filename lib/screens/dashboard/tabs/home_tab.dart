@@ -1,5 +1,6 @@
 import 'dart:ui';
 import 'package:flutter/material.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/announcement.dart';
 import '../../../core/models/invitation_code.dart';
@@ -103,6 +104,7 @@ class _HomeTabState extends State<HomeTab> {
   // ADMIN HERO: CENTER OVERVIEW OR ONBOARDING CHECKLIST
   // ===========================================================================
   Widget _buildAdminCenterStatusCard(BuildContext context, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return AnimatedBuilder(
       animation: HalaqahService.instance.halaqahsNotifier,
       builder: (context, _) {
@@ -142,30 +144,37 @@ class _HomeTabState extends State<HomeTab> {
                         Row(
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
-                            const Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  'ACADEMY OVERVIEW',
-                                  style: TextStyle(
-                                    fontSize: 10.5,
-                                    fontWeight: FontWeight.w700,
-                                    letterSpacing: 1.0,
-                                    color: Color(0xFFF6CE6B),
+                            Flexible(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    loc.academyOverview,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 10.5,
+                                      fontWeight: FontWeight.w700,
+                                      letterSpacing: 1.0,
+                                      color: Color(0xFFF6CE6B),
+                                    ),
                                   ),
-                                ),
-                                SizedBox(height: 3),
-                                Text(
-                                  'Kheyrukum Islamic Center',
-                                  style: TextStyle(
-                                    fontSize: 17,
-                                    fontWeight: FontWeight.w700,
-                                    color: Colors.white,
-                                    letterSpacing: -0.2,
+                                  const SizedBox(height: 3),
+                                  Text(
+                                    loc.appName,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      fontSize: 17,
+                                      fontWeight: FontWeight.w700,
+                                      color: Colors.white,
+                                      letterSpacing: -0.2,
+                                    ),
                                   ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
+                            const SizedBox(width: 8),
                             Container(
                               padding: const EdgeInsets.symmetric(
                                 horizontal: 10,
@@ -210,25 +219,20 @@ class _HomeTabState extends State<HomeTab> {
                           child: Row(
                             children: [
                               _buildHeroStatItem(
-                                label: students.length == 1
-                                    ? 'Student'
-                                    : 'Students',
+                                label: loc.studentsCount,
                                 value: '${students.length}',
                                 onTap: () => widget.onNavigateToTab?.call(1),
                               ),
                               _buildHeroStatDivider(),
                               _buildHeroStatItem(
-                                label: halaqahs.length == 1
-                                    ? 'Circle'
-                                    : 'Circles',
+                                label: loc.circlesCount,
                                 value: '${halaqahs.length}',
                                 onTap: () =>
                                     HalaqahManagementSheet.show(context),
                               ),
                               _buildHeroStatDivider(),
                               _buildHeroStatItem(
-                                label:
-                                    teachersCount == 1 ? 'Ustaz' : 'Ustazs',
+                                label: loc.ustazsCount,
                                 value: '$teachersCount',
                                 onTap: () =>
                                     InviteCodesBottomSheet.show(context),
@@ -453,18 +457,19 @@ class _HomeTabState extends State<HomeTab> {
   // QUICK ACTIONS 2x2 HORIZONTAL GRID (Admin)
   // ===========================================================================
   Widget _buildQuickActionsRow(BuildContext context, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const ProSectionHeader(title: 'Quick Actions'),
+        ProSectionHeader(title: loc.quickActions),
         const SizedBox(height: 12),
         Row(
           children: [
             _buildActionItem(
               p: p,
               icon: Icons.campaign_outlined,
-              label: 'Post Notice',
-              subtitle: 'Broadcast circular',
+              label: loc.postNotice,
+              subtitle: loc.schoolAnnouncements,
               accent: p.primary,
               onTap: () {
                 showDialog(
@@ -477,8 +482,8 @@ class _HomeTabState extends State<HomeTab> {
             _buildActionItem(
               p: p,
               icon: Icons.vpn_key_outlined,
-              label: 'Invite Codes',
-              subtitle: 'Teacher & parent keys',
+              label: loc.inviteCodes,
+              subtitle: loc.generateInviteCode,
               accent: p.gold,
               onTap: () => InviteCodesBottomSheet.show(context),
             ),
@@ -490,8 +495,8 @@ class _HomeTabState extends State<HomeTab> {
             _buildActionItem(
               p: p,
               icon: Icons.person_add_outlined,
-              label: 'Add Student',
-              subtitle: 'Enroll learner',
+              label: loc.addStudent,
+              subtitle: loc.enrollStudent,
               accent: p.primary,
               onTap: () => AddStudentDialog.show(context),
             ),
@@ -499,8 +504,8 @@ class _HomeTabState extends State<HomeTab> {
             _buildActionItem(
               p: p,
               icon: Icons.auto_stories_outlined,
-              label: 'Study Circles',
-              subtitle: 'Manage halaqahs',
+              label: loc.studyCircles,
+              subtitle: loc.manageCircles,
               accent: p.gold,
               onTap: () => HalaqahManagementSheet.show(context),
             ),
@@ -961,12 +966,13 @@ class _HomeTabState extends State<HomeTab> {
   // ANNOUNCEMENTS EDITORIAL FEED
   // ===========================================================================
   Widget _buildAnnouncementsSection(BuildContext context, AppPalette p) {
+    final loc = AppLocalizations.of(context);
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         ProSectionHeader(
-          title: 'School Announcements',
-          subtitle: 'Official circulars and schedule notices',
+          title: loc.schoolAnnouncements,
+          subtitle: loc.officialCirculars,
           trailing: TextButton(
             onPressed: () => AnnouncementsSheet.show(context, initialTab: 1),
             style: TextButton.styleFrom(
@@ -977,9 +983,10 @@ class _HomeTabState extends State<HomeTab> {
             child: Row(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const Text(
-                  'View all',
-                  style: TextStyle(fontSize: 13, fontWeight: FontWeight.w700),
+                Text(
+                  loc.viewAll,
+                  style: const TextStyle(
+                      fontSize: 13, fontWeight: FontWeight.w700),
                 ),
                 const SizedBox(width: 2),
                 Icon(Icons.chevron_right_rounded, size: 17, color: p.primary),

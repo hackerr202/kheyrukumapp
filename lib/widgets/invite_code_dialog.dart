@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import '../core/localization/app_localizations.dart';
 import '../core/models/invitation_code.dart';
 import '../core/services/supabase_service.dart';
 import '../core/theme/app_colors.dart';
@@ -85,6 +86,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return Dialog(
       backgroundColor: p.surface,
@@ -103,49 +105,58 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(9),
-                      decoration: BoxDecoration(
-                        color: p.primarySoft,
-                        borderRadius: BorderRadius.circular(12),
+                Flexible(
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(9),
+                        decoration: BoxDecoration(
+                          color: p.primarySoft,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.vpn_key_rounded,
+                            color: p.primary, size: 20),
                       ),
-                      child:
-                          Icon(Icons.vpn_key_rounded, color: p.primary, size: 20),
-                    ),
-                    const SizedBox(width: 10),
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        Text(
-                          'Generate Invite Code',
-                          style: TextStyle(
-                            fontSize: 17,
-                            fontWeight: FontWeight.w700,
-                            color: p.ink,
-                          ),
+                      const SizedBox(width: 10),
+                      Flexible(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              loc.generateInviteCode,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 17,
+                                fontWeight: FontWeight.w700,
+                                color: p.ink,
+                              ),
+                            ),
+                            Text(
+                              loc.inviteCodes,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                  fontSize: 11.5, color: p.inkSecondary),
+                            ),
+                          ],
                         ),
-                        Text(
-                          'Realtime Parent & Teacher Signups',
-                          style: TextStyle(fontSize: 11.5, color: p.inkSecondary),
-                        ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
                 IconButton(
                   icon: Icon(Icons.close_rounded,
                       color: p.inkSecondary, size: 20),
                   onPressed: () => Navigator.of(context).pop(),
-                  tooltip: 'Close',
+                  tooltip: loc.close,
                 ),
               ],
             ),
             const SizedBox(height: 16),
 
             Text(
-              'Select Target Role',
+              loc.selectRole,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w600,
@@ -159,7 +170,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                   child: _buildRoleTile(
                     p: p,
                     role: 'teacher',
-                    label: 'Teacher',
+                    label: loc.teachersTab,
                     icon: Icons.school_rounded,
                     color: p.primary,
                   ),
@@ -169,7 +180,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                   child: _buildRoleTile(
                     p: p,
                     role: 'parent',
-                    label: 'Parent',
+                    label: loc.parentsTab,
                     icon: Icons.family_restroom_rounded,
                     color: p.gold,
                   ),
@@ -182,10 +193,10 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
               controller: _targetEmailController,
               keyboardType: TextInputType.emailAddress,
               style: TextStyle(color: p.ink, fontSize: 13.5),
-              decoration: const InputDecoration(
+              decoration: InputDecoration(
                 isDense: true,
-                hintText: 'Pre-assign to Email (Optional)',
-                prefixIcon: Icon(Icons.email_outlined, size: 18),
+                hintText: loc.parentEmailOptional,
+                prefixIcon: const Icon(Icons.email_outlined, size: 18),
               ),
             ),
 
@@ -214,8 +225,8 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
                     : const Icon(Icons.flash_on_rounded, size: 16),
                 label: Text(
                   _isGenerating
-                      ? 'Generating Code...'
-                      : 'Generate ${_selectedRole == 'teacher' ? 'Teacher' : 'Parent'} Code',
+                      ? loc.loading
+                      : loc.generateInviteCode,
                 ),
                 style: ElevatedButton.styleFrom(
                   backgroundColor:

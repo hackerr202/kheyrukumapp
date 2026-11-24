@@ -2,6 +2,7 @@ import 'dart:io';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/services/announcement_service.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/storage_service.dart';
@@ -536,7 +537,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               const SizedBox(height: 16),
 
               Text(
-                'TARGET AUDIENCE',
+                AppLocalizations.of(context).targetAudience,
                 style: TextStyle(
                   fontSize: 11,
                   fontWeight: FontWeight.w700,
@@ -547,13 +548,26 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               const SizedBox(height: 8),
               Row(
                 children: [
-                  _buildAudienceChip(p, 'all', 'Everyone', Icons.groups_rounded),
+                  _buildAudienceChip(
+                    p,
+                    'all',
+                    AppLocalizations.of(context).everyone,
+                    Icons.groups_rounded,
+                  ),
                   const SizedBox(width: 8),
                   _buildAudienceChip(
-                      p, 'parents', 'Parents', Icons.family_restroom_rounded),
+                    p,
+                    'parents',
+                    AppLocalizations.of(context).parentsOnly,
+                    Icons.family_restroom_rounded,
+                  ),
                   const SizedBox(width: 8),
                   _buildAudienceChip(
-                      p, 'teachers', 'Teachers', Icons.school_rounded),
+                    p,
+                    'teachers',
+                    AppLocalizations.of(context).teachersOnly,
+                    Icons.school_rounded,
+                  ),
                 ],
               ),
               const SizedBox(height: 12),
@@ -603,7 +617,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                   Expanded(
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).pop(),
-                      child: const Text('Cancel'),
+                      child: Text(AppLocalizations.of(context).cancel),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -624,7 +638,9 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
                             )
                           : const Icon(Icons.send_rounded, size: 16),
                       label: Text(
-                        _isBroadcasting ? 'Broadcasting...' : 'Broadcast',
+                        _isBroadcasting
+                            ? AppLocalizations.of(context).loading
+                            : AppLocalizations.of(context).postAnnouncement,
                       ),
                     ),
                   ),

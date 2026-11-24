@@ -39,6 +39,12 @@ void main() async {
   }
 
   try {
+    await LocaleNotifier.instance.loadSavedLocale();
+  } catch (e) {
+    debugPrint('[main] Locale load note: $e');
+  }
+
+  try {
     await SupabaseService.initialize();
   } catch (e) {
     debugPrint('[main] Supabase initialization note: $e');
@@ -61,19 +67,6 @@ class KheyrukumApp extends StatelessWidget {
     return ValueListenableBuilder<ThemeMode>(
       valueListenable: AppTheme.themeModeNotifier,
       builder: (context, themeMode, _) {
-        final isDark = themeMode == ThemeMode.dark;
-        SystemChrome.setSystemUIOverlayStyle(
-          SystemUiOverlayStyle(
-            statusBarColor: Colors.transparent,
-            statusBarIconBrightness:
-                isDark ? Brightness.light : Brightness.dark,
-            statusBarBrightness: isDark ? Brightness.dark : Brightness.light,
-            systemNavigationBarColor: Colors.transparent,
-            systemNavigationBarIconBrightness:
-                isDark ? Brightness.light : Brightness.dark,
-          ),
-        );
-
         return ValueListenableBuilder<Locale>(
           valueListenable: LocaleNotifier.instance,
           builder: (context, appLocale, _) {
@@ -81,8 +74,8 @@ class KheyrukumApp extends StatelessWidget {
               navigatorKey: AppRoutes.navigatorKey,
               title: 'Kheyrukum - خيركم',
               debugShowCheckedModeBanner: false,
-              theme: AppTheme.lightTheme,
-              darkTheme: AppTheme.darkTheme,
+              theme: AppTheme.themeFor(Brightness.light, appLocale),
+              darkTheme: AppTheme.themeFor(Brightness.dark, appLocale),
               themeMode: themeMode,
               locale: appLocale,
               supportedLocales: const [
@@ -92,12 +85,28 @@ class KheyrukumApp extends StatelessWidget {
               ],
               localizationsDelegates: const [
                 AppLocalizations.delegate,
-                FallbackMaterialLocalizationsDelegate(),
-                FallbackCupertinoLocalizationsDelegate(),
                 GlobalMaterialLocalizations.delegate,
                 GlobalWidgetsLocalizations.delegate,
                 GlobalCupertinoLocalizations.delegate,
+                FallbackMaterialLocalizationsDelegate(),
+                FallbackCupertinoLocalizationsDelegate(),
               ],
+              builder: (context, child) {
+                final isDark = Theme.of(context).brightness == Brightness.dark;
+                return AnnotatedRegion<SystemUiOverlayStyle>(
+                  value: SystemUiOverlayStyle(
+                    statusBarColor: Colors.transparent,
+                    statusBarIconBrightness:
+                        isDark ? Brightness.light : Brightness.dark,
+                    statusBarBrightness:
+                        isDark ? Brightness.dark : Brightness.light,
+                    systemNavigationBarColor: Colors.transparent,
+                    systemNavigationBarIconBrightness:
+                        isDark ? Brightness.light : Brightness.dark,
+                  ),
+                  child: child ?? const SizedBox.shrink(),
+                );
+              },
               initialRoute: AppRoutes.splash,
               routes: AppRoutes.routes,
             );

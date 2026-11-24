@@ -25,6 +25,9 @@ class MessagingService {
   RealtimeChannel? _realtimeMessagesSubscription;
   RealtimeChannel? _realtimeConvosSubscription;
 
+  final ValueNotifier<bool> isLoadingNotifier = ValueNotifier<bool>(false);
+  final ValueNotifier<String?> errorNotifier = ValueNotifier<String?>(null);
+
   Stream<List<Conversation>> get conversationsStream =>
       _conversationsController.stream;
 
@@ -66,6 +69,8 @@ class MessagingService {
     _conversations.clear();
     _messagesMap.clear();
     _cacheLoaded = false;
+    isLoadingNotifier.value = false;
+    errorNotifier.value = null;
 
     if (!_conversationsController.isClosed) {
       _conversationsController.add([]);
@@ -172,18 +177,31 @@ class MessagingService {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
 
+    isLoadingNotifier.value = true;
+    errorNotifier.value = null;
     try {
       final res = await client
           .from('conversations')
           .select()
-          .order('last_message_time', ascending: false);
+          .order('last_message_time', ascending: false)
+          .limit(100);
 
       if (res is List) {
-        _conversations.clear();
+        final parsed = <Conversation>[];
         for (final item in res) {
-          _conversations
-              .add(Conversation.fromJson(Map<String, dynamic>.from(item as Map)));
+          if (item is Map) {
+            try {
+              parsed.add(
+                  Conversation.fromJson(Map<String, dynamic>.from(item)));
+            } catch (rowErr) {
+              debugPrint(
+                  '[MessagingService] Skipped malformed conversation row: $rowErr');
+            }
+          }
         }
+        _conversations
+          ..clear()
+          ..addAll(parsed);
         if (!_conversationsController.isClosed) {
           _conversationsController.add(List.from(_conversations));
         }
@@ -193,7 +211,10 @@ class MessagingService {
             .saveJsonList('cached_conversations', jsonList);
       }
     } catch (e) {
+      errorNotifier.value = SupabaseService.cleanErrorMessage(e);
       debugPrint('[MessagingService] fetchConversationsFromCloud error: $e');
+    } finally {
+      isLoadingNotifier.value = false;
     }
   }
 
@@ -306,6 +327,48 @@ class MessagingService {
     }
   }
 
+  /// Returns a viewer-appropriate display title for a conversation.
+  String displayTitleFor(Conversation convo, String currentUserId) {
+    if (!convo.isGroup && convo.participantIds.isNotEmpty) {
+      if (currentUserId.isNotEmpty &&
+          convo.participantIds.contains(currentUserId)) {
+        for (var i = 0; i < convo.participantIds.length; i++) {
+          if (convo.participantIds[i] != currentUserId &&
+              i < convo.participantNames.length &&
+              convo.participantNames[i].trim().isNotEmpty) {
+            return convo.participantNames[i].trim();
+          }
+        }
+      } else if (convo.participantNames.length >= 2) {
+        return '${convo.participantNames[0]} & ${convo.participantNames[1]}';
+      }
+    }
+    return convo.title.isNotEmpty ? convo.title : 'Direct Chat';
+  }
+
+  /// Fetch contacts the signed-in user is permitted to message.
+  Future<List<Map<String, dynamic>>> fetchMessageableContacts() async {
+    final client = SupabaseService.instance.client;
+    if (client == null || SupabaseService.instance.currentUser == null) {
+      throw Exception('Please sign in to load contacts.');
+    }
+    try {
+      final res = await client.rpc('get_messageable_contacts');
+      if (res is List) {
+        final contacts = <Map<String, dynamic>>[];
+        for (final item in res) {
+          if (item is Map) {
+            contacts.add(Map<String, dynamic>.from(item));
+          }
+        }
+        return contacts;
+      }
+      return [];
+    } catch (e) {
+      throw Exception(SupabaseService.cleanErrorMessage(e));
+    }
+  }
+
   /// Mark a conversation read cleanly via service + emit updated list.
   Future<void> markConversationRead(String conversationId) async {
     final idx = _conversations.indexWhere((c) => c.id == conversationId);
@@ -395,21 +458,33 @@ class MessagingService {
           .from('messages')
           .select()
           .eq('conversation_id', conversationId)
-          .order('created_at', ascending: true);
+          .order('created_at', ascending: false)
+          .limit(100);
 
       if (res is List) {
-        final cloudMsgs = res
-            .map((j) => ChatMessage.fromJson(Map<String, dynamic>.from(j as Map)))
-            .toList();
-        _messagesMap[conversationId] = cloudMsgs;
+        final cloudMsgs = <ChatMessage>[];
+        for (final item in res) {
+          if (item is Map) {
+            try {
+              cloudMsgs.add(
+                  ChatMessage.fromJson(Map<String, dynamic>.from(item)));
+            } catch (rowErr) {
+              debugPrint(
+                  '[MessagingService] Skipped malformed message row: $rowErr');
+            }
+          }
+        }
+        final ordered = cloudMsgs.reversed.toList();
+        _messagesMap[conversationId] = ordered;
         final ctrl = _chatControllers[conversationId];
         if (ctrl != null && !ctrl.isClosed) {
-          ctrl.add(List.from(cloudMsgs));
+          ctrl.add(List.from(ordered));
         }
         await _saveMessagesToCache(conversationId);
       }
     } catch (e) {
-      debugPrint('[MessagingService] fetchMessagesFromCloud note: $e');
+      errorNotifier.value = SupabaseService.cleanErrorMessage(e);
+      debugPrint('[MessagingService] fetchMessagesFromCloud error: $e');
     }
   }
 
@@ -736,6 +811,113 @@ class MessagingService {
     return null;
   }
 
+  Future<void> _saveConversationsCacheAndEmit(Conversation convo) async {
+    _conversations.removeWhere((c) => c.id == convo.id);
+    _conversations.insert(0, convo);
+    if (!_conversationsController.isClosed) {
+      _conversationsController.add(List.from(_conversations));
+    }
+    final jsonList = _conversations.map((c) => c.toJson()).toList();
+    await LocalStorageService.instance
+        .saveJsonList('cached_conversations', jsonList);
+  }
+
+  Future<Conversation> _startOrReuseDirectChat({
+    required String callerId,
+    required String callerName,
+    required String callerRole,
+    required String otherUserId,
+    required String otherName,
+    required String title,
+    String? halaqahId,
+    required String groupType,
+    String? initialMessage,
+  }) async {
+    if (!_isValidUuid(otherUserId)) {
+      throw Exception('Recipient account could not be found.');
+    }
+
+    final validCallerId = _isValidUuid(callerId)
+        ? callerId
+        : (SupabaseService.instance.currentUser?.id ?? '');
+    if (!_isValidUuid(validCallerId)) {
+      throw Exception('Please sign in to start a conversation.');
+    }
+
+    final rpcConvo = await _createDirectConversationViaRpc(
+      otherUserId: otherUserId,
+      title: title,
+      halaqahId: halaqahId,
+      groupType: groupType,
+    );
+
+    Conversation convo;
+    if (rpcConvo != null) {
+      convo = rpcConvo;
+    } else {
+      // Fallback only when create_direct_conversation RPC does not yet exist on DB.
+      final fallbackConvo = Conversation(
+        id: _generateUuidV4(),
+        title: title,
+        isGroup: false,
+        participantIds: [validCallerId, otherUserId],
+        participantNames: [callerName, otherName],
+        lastMessage: initialMessage ?? 'Conversation started with $otherName.',
+        lastMessageTime: DateTime.now(),
+        halaqahId: halaqahId,
+        groupType: groupType,
+      );
+      await _syncConversationToCloud(fallbackConvo);
+      convo = fallbackConvo;
+    }
+
+    await _saveConversationsCacheAndEmit(convo);
+
+    if (initialMessage != null && initialMessage.trim().isNotEmpty) {
+      await sendMessage(
+        conversationId: convo.id,
+        senderId: validCallerId,
+        senderName: callerName,
+        senderRole: callerRole,
+        content: initialMessage.trim(),
+      );
+    }
+
+    return convo;
+  }
+
+  /// Start or open a direct 1-on-1 chat with any eligible contact returned by
+  /// `get_messageable_contacts()`.
+  Future<Conversation> startDirectChatWithContact({
+    required String otherUserId,
+    required String otherName,
+    required String otherRole,
+    String? halaqahId,
+    String? initialMessage,
+  }) async {
+    final callerId = SupabaseService.instance.currentUser?.id ??
+        AuthSessionService.instance.userId;
+    final callerName = AuthSessionService.instance.userName;
+    final callerRole = AuthSessionService.instance.currentRole;
+
+    final isAdminSide = callerRole == 'admin' ||
+        callerRole == 'superadmin' ||
+        otherRole == 'admin' ||
+        otherRole == 'superadmin';
+
+    return _startOrReuseDirectChat(
+      callerId: callerId,
+      callerName: callerName,
+      callerRole: callerRole,
+      otherUserId: otherUserId,
+      otherName: otherName,
+      title: otherName,
+      halaqahId: halaqahId,
+      groupType: isAdminSide ? 'direct_admin' : 'direct_teacher',
+      initialMessage: initialMessage,
+    );
+  }
+
   /// Teacher starts a direct 1-on-1 chat with a parent of his class students
   Future<Conversation> startTeacherChatWithParent({
     required String teacherId,
@@ -746,73 +928,17 @@ class MessagingService {
     String? halaqahId,
     String? initialMessage,
   }) async {
-    final existingIndex = _conversations.indexWhere(
-      (c) =>
-          !c.isGroup &&
-          c.participantIds.contains(teacherId) &&
-          c.participantIds.contains(parentId),
-    );
-
-    if (existingIndex != -1) {
-      final existing = _conversations[existingIndex];
-      if (initialMessage != null && initialMessage.isNotEmpty) {
-        await sendMessage(
-          conversationId: existing.id,
-          senderId: teacherId,
-          senderName: teacherName,
-          senderRole: 'teacher',
-          content: initialMessage,
-        );
-      }
-      return existing;
-    }
-
-    final rpcConvo = await _createDirectConversationViaRpc(
+    return _startOrReuseDirectChat(
+      callerId: teacherId,
+      callerName: teacherName,
+      callerRole: 'teacher',
       otherUserId: parentId,
+      otherName: parentName,
       title: '$parentName ($studentName\'s Parent)',
       halaqahId: halaqahId,
       groupType: 'direct_teacher',
+      initialMessage: initialMessage,
     );
-
-    final convo = rpcConvo ??
-        Conversation(
-          id: _generateUuidV4(),
-          title: '$parentName ($studentName\'s Parent)',
-          isGroup: false,
-          participantIds: [teacherId, parentId],
-          participantNames: [teacherName, parentName],
-          lastMessage: initialMessage ??
-              'Ustaz $teacherName started a conversation regarding $studentName.',
-          lastMessageTime: DateTime.now(),
-          halaqahId: halaqahId,
-          groupType: 'direct_teacher',
-        );
-
-    _conversations.removeWhere((c) => c.id == convo.id);
-    _conversations.insert(0, convo);
-    if (!_conversationsController.isClosed) {
-      _conversationsController.add(List.from(_conversations));
-    }
-
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
-
-    if (rpcConvo == null) {
-      await _syncConversationToCloud(convo);
-    }
-
-    if (initialMessage != null && initialMessage.isNotEmpty) {
-      await sendMessage(
-        conversationId: convo.id,
-        senderId: teacherId,
-        senderName: teacherName,
-        senderRole: 'teacher',
-        content: initialMessage,
-      );
-    }
-
-    return convo;
   }
 
   Future<String?> _resolveAdminUserId() async {
@@ -823,6 +949,7 @@ class MessagingService {
           .from('profiles')
           .select('id')
           .inFilter('role', ['superadmin', 'admin'])
+          .eq('is_suspended', false)
           .limit(1)
           .maybeSingle();
       return res?['id']?.toString();
@@ -863,13 +990,12 @@ class MessagingService {
           return res!['teacher_id'].toString();
         }
       }
-      final fallback = await client
-          .from('profiles')
-          .select('id')
-          .eq('role', 'teacher')
-          .limit(1)
-          .maybeSingle();
-      return fallback?['id']?.toString();
+      final contacts = await fetchMessageableContacts();
+      final teacher = contacts.where((c) => c['role'] == 'teacher').toList();
+      if (teacher.isNotEmpty) {
+        return teacher.first['id']?.toString();
+      }
+      return null;
     } catch (e) {
       debugPrint('[MessagingService] Failed to resolve teacher ID: $e');
       return null;
@@ -888,35 +1014,46 @@ class MessagingService {
     final adminId = currentUserId.isNotEmpty
         ? currentUserId
         : (await _resolveAdminUserId() ?? '');
+    if (!_isValidUuid(adminId)) {
+      throw Exception('Active admin session required to create a group.');
+    }
+
+    final validParentIds = <String>[];
+    final validParentNames = <String>[];
+    for (var i = 0; i < parentIds.length; i++) {
+      if (_isValidUuid(parentIds[i]) && !validParentIds.contains(parentIds[i])) {
+        validParentIds.add(parentIds[i]);
+        validParentNames.add(
+            i < parentNames.length ? parentNames[i] : 'Parent');
+      }
+    }
+
+    final adminName = AuthSessionService.instance.userName.isNotEmpty
+        ? AuthSessionService.instance.userName
+        : 'Admin Director';
 
     final convo = Conversation(
       id: _generateUuidV4(),
       title: title,
       isGroup: true,
-      participantIds: [if (adminId.isNotEmpty) adminId, ...parentIds],
-      participantNames: ['Admin Director', ...parentNames],
+      participantIds: [adminId, ...validParentIds],
+      participantNames: [adminName, ...validParentNames],
       lastMessage: 'Group created by Admin.',
       lastMessageTime: DateTime.now(),
-      halaqahId: halaqahId,
+      halaqahId: (halaqahId != null && _isValidUuid(halaqahId))
+          ? halaqahId
+          : null,
       groupType: 'parent_group',
     );
 
     await _syncConversationToCloud(convo);
-
-    _conversations.insert(0, convo);
-    if (!_conversationsController.isClosed) {
-      _conversationsController.add(List.from(_conversations));
-    }
-
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
+    await _saveConversationsCacheAndEmit(convo);
 
     await sendMessage(
       conversationId: convo.id,
       senderId: adminId,
-      senderName: 'Admin Director',
-      senderRole: 'admin',
+      senderName: adminName,
+      senderRole: AuthSessionService.instance.currentRole,
       content: 'As-salamu alaykum parents. Welcome to "$title".',
     );
 
@@ -934,70 +1071,20 @@ class MessagingService {
     final adminId = currentUserId.isNotEmpty
         ? currentUserId
         : (await _resolveAdminUserId() ?? '');
+    final adminName = AuthSessionService.instance.userName.isNotEmpty
+        ? AuthSessionService.instance.userName
+        : 'Admin Director';
 
-    final existingIndex = _conversations.indexWhere(
-      (c) =>
-          !c.isGroup &&
-          c.participantIds.contains(adminId) &&
-          c.participantIds.contains(parentId),
-    );
-
-    if (existingIndex != -1) {
-      if (initialMessage != null && initialMessage.isNotEmpty) {
-        await sendMessage(
-          conversationId: _conversations[existingIndex].id,
-          senderId: adminId,
-          senderName: 'Admin Director',
-          senderRole: 'admin',
-          content: initialMessage,
-        );
-      }
-      return _conversations[existingIndex];
-    }
-
-    final rpcConvo = await _createDirectConversationViaRpc(
+    return _startOrReuseDirectChat(
+      callerId: adminId,
+      callerName: adminName,
+      callerRole: AuthSessionService.instance.currentRole,
       otherUserId: parentId,
+      otherName: parentName,
       title: parentName,
       groupType: 'direct_admin',
+      initialMessage: initialMessage,
     );
-
-    final convo = rpcConvo ??
-        Conversation(
-          id: _generateUuidV4(),
-          title: parentName,
-          isGroup: false,
-          participantIds: [if (adminId.isNotEmpty) adminId, parentId],
-          participantNames: ['Admin Director', parentName],
-          lastMessage: initialMessage ?? 'Conversation started with $parentName.',
-          lastMessageTime: DateTime.now(),
-          groupType: 'direct_admin',
-        );
-
-    _conversations.removeWhere((c) => c.id == convo.id);
-    _conversations.insert(0, convo);
-    if (!_conversationsController.isClosed) {
-      _conversationsController.add(List.from(_conversations));
-    }
-
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
-
-    if (rpcConvo == null) {
-      await _syncConversationToCloud(convo);
-    }
-
-    if (initialMessage != null && initialMessage.isNotEmpty) {
-      await sendMessage(
-        conversationId: convo.id,
-        senderId: adminId,
-        senderName: 'Admin Director',
-        senderRole: 'admin',
-        content: initialMessage,
-      );
-    }
-
-    return convo;
   }
 
   /// Parent starts conversation with Admin or child's halaqah Teacher
@@ -1011,10 +1098,6 @@ class MessagingService {
     String? halaqahName,
     String? initialMessage,
   }) async {
-    final title = targetRole == 'admin'
-        ? 'Center Director'
-        : '$targetName (${halaqahName ?? 'Teacher'})';
-
     String resolvedTargetId = targetId ?? '';
     if (!_isValidUuid(resolvedTargetId)) {
       resolvedTargetId = (targetRole == 'admin'
@@ -1026,78 +1109,26 @@ class MessagingService {
           '';
     }
 
-    final existingIndex = resolvedTargetId.isNotEmpty
-        ? _conversations.indexWhere(
-            (c) =>
-                !c.isGroup &&
-                c.participantIds.contains(parentId) &&
-                c.participantIds.contains(resolvedTargetId),
-          )
-        : -1;
-
-    if (existingIndex != -1) {
-      final existing = _conversations[existingIndex];
-      if (initialMessage != null && initialMessage.isNotEmpty) {
-        await sendMessage(
-          conversationId: existing.id,
-          senderId: parentId,
-          senderName: parentName,
-          senderRole: 'parent',
-          content: initialMessage,
-        );
-      }
-      return existing;
-    }
-
-    final rpcConvo = resolvedTargetId.isNotEmpty
-        ? await _createDirectConversationViaRpc(
-            otherUserId: resolvedTargetId,
-            title: title,
-            halaqahId: halaqahId,
-            groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
-          )
-        : null;
-
-    final convo = rpcConvo ??
-        Conversation(
-          id: _generateUuidV4(),
-          title: title,
-          isGroup: false,
-          participantIds: [
-            parentId,
-            if (resolvedTargetId.isNotEmpty) resolvedTargetId,
-          ],
-          participantNames: [parentName, targetName],
-          lastMessage: initialMessage ?? 'Conversation initiated.',
-          lastMessageTime: DateTime.now(),
-          halaqahId: halaqahId,
-          groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
-        );
-
-    _conversations.removeWhere((c) => c.id == convo.id);
-    _conversations.insert(0, convo);
-    if (!_conversationsController.isClosed) {
-      _conversationsController.add(List.from(_conversations));
-    }
-
-    final jsonList = _conversations.map((c) => c.toJson()).toList();
-    await LocalStorageService.instance
-        .saveJsonList('cached_conversations', jsonList);
-
-    if (rpcConvo == null) {
-      await _syncConversationToCloud(convo);
-    }
-
-    if (initialMessage != null && initialMessage.isNotEmpty) {
-      await sendMessage(
-        conversationId: convo.id,
-        senderId: parentId,
-        senderName: parentName,
-        senderRole: 'parent',
-        content: initialMessage,
+    if (!_isValidUuid(resolvedTargetId)) {
+      throw Exception(
+        targetRole == 'admin'
+            ? 'No active Center Director account is available right now.'
+            : 'No Ustaz is currently assigned to your child\'s study circle.',
       );
     }
 
-    return convo;
+    final title = targetRole == 'admin' ? targetName : targetName;
+
+    return _startOrReuseDirectChat(
+      callerId: parentId,
+      callerName: parentName,
+      callerRole: 'parent',
+      otherUserId: resolvedTargetId,
+      otherName: targetName,
+      title: title,
+      halaqahId: halaqahId,
+      groupType: targetRole == 'admin' ? 'direct_admin' : 'direct_teacher',
+      initialMessage: initialMessage,
+    );
   }
 }

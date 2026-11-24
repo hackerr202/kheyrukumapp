@@ -277,7 +277,8 @@ class StudentService {
             'halaqahs:halaqah_id(name), '
             'parent_students(parent_id, profiles:parent_id(full_name, phone, email))',
           )
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(500);
 
       if (res is List) {
         final List<Student> cloudStudents = [];
@@ -328,7 +329,8 @@ class StudentService {
       final res = await client
           .from('profiles')
           .select('id, full_name, phone, email')
-          .eq('role', 'parent');
+          .eq('role', 'parent')
+          .limit(500);
       if (res is List) {
         _cachedRegisteredParents.clear();
         for (final item in res) {

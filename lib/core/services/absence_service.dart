@@ -59,7 +59,8 @@ class AbsenceService {
       final res = await client
           .from('absence_requests')
           .select()
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(200);
       if (res is List) {
         _requests.clear();
         for (final item in res) {

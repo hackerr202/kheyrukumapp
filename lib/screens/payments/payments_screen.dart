@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/payment.dart';
 import '../../core/models/student.dart';
 import '../../core/services/auth_session_service.dart';
@@ -14,8 +15,38 @@ import '../../core/theme/app_colors.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../messages/chat_screen.dart';
 
+class _CenterPaymentChannel {
+  final String label;
+  final String accountNumber;
+
+  const _CenterPaymentChannel({
+    required this.label,
+    required this.accountNumber,
+  });
+}
+
+/// Centralized school payment destination config for Superadmin/center administration.
+const List<_CenterPaymentChannel> _kCenterPaymentChannels = [
+  _CenterPaymentChannel(
+    label: 'Commercial Bank of Ethiopia (CBE)',
+    accountNumber: '1000123456789',
+  ),
+  _CenterPaymentChannel(
+    label: 'Telebirr Mobile Account',
+    accountNumber: '+251 91 123 4567',
+  ),
+];
+
+String _formatMonthYear(DateTime dt) {
+  const months = [
+    'January', 'February', 'March', 'April', 'May', 'June',
+    'July', 'August', 'September', 'October', 'November', 'December',
+  ];
+  return '${months[dt.month - 1]} ${dt.year}';
+}
+
 /// Flagship Tuition & Fee Management Screen:
-/// - Parents: View active monthly due, copy CBE/Telebirr accounts, upload real receipt screenshots, track status.
+/// - Parents: View active monthly due, copy configured center bank/mobile accounts, upload real receipt screenshots, track status.
 /// - Admins: Issue invoices, inspect actual uploaded receipt images, approve/reject with reason, message overdue parents.
 class PaymentsScreen extends StatefulWidget {
   const PaymentsScreen({super.key});
@@ -36,6 +67,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     // Fail-closed: only Superadmins and Parents can access payment data or fee registration
     if (!AuthSessionService.instance.canAccessPayments) {
@@ -48,16 +80,15 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
             onPressed: () => Navigator.pop(context),
           ),
-          title: const Text('Halaqah Fees & Tuition'),
+          title: Text(loc.tuitionAndFees),
         ),
         body: Center(
           child: Padding(
             padding: const EdgeInsets.all(28),
             child: ProEmptyState(
               icon: Icons.lock_outline_rounded,
-              title: 'Access Restricted to Super Administrators',
-              message:
-                  'As an Administrator, you have full access to circles, students, attendance, and circulars. Financial records and tuition registrations are restricted exclusively to the Super Administrator.',
+              title: loc.tuitionAndFees,
+              message: loc.accessRestrictedFees,
               accentColor: p.gold,
             ),
           ),
@@ -74,7 +105,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           icon: Icon(Icons.arrow_back_ios_new_rounded, size: 19, color: p.ink),
           onPressed: () => Navigator.pop(context),
         ),
-        title: const Text('Halaqah Fees & Tuition'),
+        title: Text(loc.tuitionAndFees),
         bottom: PreferredSize(
           preferredSize: const Size.fromHeight(1),
           child: Divider(height: 1, color: p.border),
@@ -86,7 +117,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               icon: Icon(Icons.add_circle_outline_rounded,
                   size: 17, color: p.primary),
               label: Text(
-                'Issue Fee',
+                loc.issueFee,
                 style: TextStyle(
                   color: p.primary,
                   fontWeight: FontWeight.w700,
@@ -97,15 +128,13 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             IconButton(
               icon: Icon(Icons.notifications_active_outlined,
                   size: 20, color: p.gold),
-              tooltip: 'Send Tuition Reminder',
+              tooltip: loc.sendMonthlyReminders,
               onPressed: () {
                 PaymentService.instance
-                    .sendMonthlyTuitionReminder('Current Month');
+                    .sendMonthlyTuitionReminder(_formatMonthYear(DateTime.now()));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                    content: Text(
-                      'Monthly tuition reminders broadcasted to parents.',
-                    ),
+                  SnackBar(
+                    content: Text(loc.monthlyFeeReminder),
                   ),
                 );
               },
@@ -373,30 +402,29 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                     Icon(Icons.account_balance_rounded,
                         size: 20, color: p.primary),
                     const SizedBox(width: 8),
-                    Text(
-                      'Direct Payment Channels',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 14.5,
-                        color: p.ink,
+                    Flexible(
+                      child: Text(
+                        AppLocalizations.of(context).schoolPaymentDetails,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 14.5,
+                          color: p.ink,
+                        ),
                       ),
                     ),
                   ],
                 ),
                 const SizedBox(height: 14),
-                _buildCopyableAccountRow(
-                  context: context,
-                  p: p,
-                  label: 'Commercial Bank of Ethiopia (CBE)',
-                  accountNumber: '1000123456789',
-                ),
-                const SizedBox(height: 10),
-                _buildCopyableAccountRow(
-                  context: context,
-                  p: p,
-                  label: 'Telebirr Mobile Account',
-                  accountNumber: '+251 91 123 4567',
-                ),
+                for (var i = 0; i < _kCenterPaymentChannels.length; i++) ...[
+                  if (i > 0) const SizedBox(height: 10),
+                  _buildCopyableAccountRow(
+                    context: context,
+                    p: p,
+                    label: _kCenterPaymentChannels[i].label,
+                    accountNumber: _kCenterPaymentChannels[i].accountNumber,
+                  ),
+                ],
               ],
             ),
           ),
@@ -509,12 +537,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               scrollDirection: Axis.horizontal,
               child: Row(
                 children: [
-                  _buildFilterChip('All', 'all', p),
-                  _buildFilterChip('Submitted', 'submitted', p),
-                  _buildFilterChip('Approved', 'approved', p),
-                  _buildFilterChip('Rejected', 'rejected', p),
-                  _buildFilterChip('Pending', 'pending', p),
-                  _buildFilterChip('Overdue', 'overdue', p),
+                  _buildFilterChip(AppLocalizations.of(context).allPayments, 'all', p),
+                  _buildFilterChip(AppLocalizations.of(context).submitted, 'submitted', p),
+                  _buildFilterChip(AppLocalizations.of(context).approved, 'approved', p),
+                  _buildFilterChip(AppLocalizations.of(context).rejected, 'rejected', p),
+                  _buildFilterChip(AppLocalizations.of(context).pending, 'pending', p),
+                  _buildFilterChip(AppLocalizations.of(context).overdue, 'overdue', p),
                 ],
               ),
             ),
@@ -966,7 +994,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   Widget _buildFilterChip(String label, String value, AppPalette p) {
     final isSelected = _selectedFilter == value;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: GestureDetector(
         onTap: () => setState(() => _selectedFilter = value),
         child: AnimatedContainer(
@@ -1112,9 +1140,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                             ),
                           ),
                         ),
-                        Positioned(
+                        PositionedDirectional(
                           bottom: 8,
-                          right: 8,
+                          end: 8,
                           child: Container(
                             padding: const EdgeInsets.symmetric(
                                 horizontal: 8, vertical: 4),
@@ -1292,7 +1320,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           Flexible(
             child: Text(
               value,
-              textAlign: TextAlign.right,
+              textAlign: TextAlign.end,
               style: TextStyle(
                 fontSize: 12,
                 fontWeight: FontWeight.w700,
@@ -1332,7 +1360,7 @@ class _IssueFeeDialog extends StatefulWidget {
 class _IssueFeeDialogState extends State<_IssueFeeDialog> {
   late Student _selectedStudent;
   DateTime _feeStartDate = DateTime.now();
-  final _monthCtrl = TextEditingController(text: 'October 2026');
+  late final TextEditingController _monthCtrl;
   final _amountCtrl = TextEditingController(text: '50');
   bool _isSaving = false;
 
@@ -1340,6 +1368,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
   void initState() {
     super.initState();
     _selectedStudent = widget.students.first;
+    _monthCtrl = TextEditingController(text: _formatMonthYear(DateTime.now()));
   }
 
   @override
@@ -1407,8 +1436,11 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
+    final currentMonthExample = _formatMonthYear(DateTime.now());
     return AlertDialog(
-      title: const Text('Issue Monthly Tuition Fee'),
+      title: Text(loc.issueFee),
       content: SingleChildScrollView(
         child: Column(
           mainAxisSize: MainAxisSize.min,
@@ -1432,13 +1464,13 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
                   setState(() => _selectedStudent = val);
                 }
               },
-              decoration: const InputDecoration(labelText: 'Select Student'),
+              decoration: InputDecoration(labelText: loc.studentsCount),
             ),
             const SizedBox(height: 12),
             TextField(
               controller: _monthCtrl,
-              decoration: const InputDecoration(
-                labelText: 'Tuition Month (e.g. October 2026)',
+              decoration: InputDecoration(
+                labelText: '${loc.feeMonth} ($currentMonthExample)',
               ),
             ),
             const SizedBox(height: 12),
@@ -1446,7 +1478,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
               controller: _amountCtrl,
               keyboardType:
                   const TextInputType.numberWithOptions(decimal: true),
-              decoration: const InputDecoration(labelText: 'Fee Amount (\$)'),
+              decoration: InputDecoration(labelText: '${loc.feeAmount} (\$)'),
             ),
             const SizedBox(height: 12),
             InkWell(
@@ -1466,7 +1498,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
                     const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(10),
-                  border: Border.all(color: Colors.black26),
+                  border: Border.all(color: p.border),
                 ),
                 child: Row(
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -1474,20 +1506,24 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'Fee Start Date *',
-                          style: TextStyle(fontSize: 11, color: Colors.black54),
+                        Text(
+                          '${loc.feeStartDate} *',
+                          style:
+                              TextStyle(fontSize: 11, color: p.inkSecondary),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           _feeStartDate.toLocal().toString().substring(0, 10),
-                          style: const TextStyle(
-                              fontSize: 13.5, fontWeight: FontWeight.w600),
+                          style: TextStyle(
+                            fontSize: 13.5,
+                            fontWeight: FontWeight.w600,
+                            color: p.ink,
+                          ),
                         ),
                       ],
                     ),
-                    const Icon(Icons.calendar_today_rounded,
-                        size: 18, color: Colors.black54),
+                    Icon(Icons.calendar_today_rounded,
+                        size: 18, color: p.inkSecondary),
                   ],
                 ),
               ),
@@ -1498,7 +1534,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSaving ? null : _submit,
@@ -1511,7 +1547,7 @@ class _IssueFeeDialogState extends State<_IssueFeeDialog> {
                     color: Colors.white,
                   ),
                 )
-              : const Text('Issue Tuition'),
+              : Text(loc.issueFee),
         ),
       ],
     );
@@ -1611,6 +1647,7 @@ class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
             const SizedBox(height: 14),
             DropdownButtonFormField<String>(
               value: _selectedMethod,
+              isExpanded: true,
               items: const [
                 DropdownMenuItem(
                   value: 'Commercial Bank of Ethiopia (CBE)',

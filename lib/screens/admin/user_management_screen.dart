@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/halaqah_service.dart';
 import '../../core/services/storage_service.dart';
@@ -727,7 +728,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             Text(
-              'User Management',
+              AppLocalizations.of(context).userManagement,
               style: TextStyle(
                 color: p.ink,
                 fontWeight: FontWeight.w700,
@@ -735,7 +736,8 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               ),
             ),
             Text(
-              '${_teachers.length} Teachers • ${_parents.length} Parents • ${_admins.length} Admins',
+              '${_teachers.length} ${AppLocalizations.of(context).teachersTab} • ${_parents.length} ${AppLocalizations.of(context).parentsTab} • ${_admins.length} ${AppLocalizations.of(context).adminsTab}',
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(color: p.inkSecondary, fontSize: 11.5),
             ),
           ],
@@ -743,7 +745,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         actions: [
           IconButton(
             icon: Icon(Icons.person_add_rounded, color: p.primary),
-            tooltip: 'Generate Invite Code',
+            tooltip: AppLocalizations.of(context).generateInviteCode,
             onPressed: () async {
               await InviteCodeDialog.show(context);
               if (mounted) await _loadAllUserData();
@@ -769,10 +771,18 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               unselectedLabelColor: p.inkSecondary,
               isScrollable: true,
               tabs: [
-                Tab(text: 'Teachers (${_teachers.length})'),
-                Tab(text: 'Parents (${_parents.length})'),
-                Tab(text: 'Admins (${_admins.length})'),
-                Tab(text: 'Invites (${_inviteCodes.length})'),
+                Tab(
+                    text:
+                        '${AppLocalizations.of(context).teachersTab} (${_teachers.length})'),
+                Tab(
+                    text:
+                        '${AppLocalizations.of(context).parentsTab} (${_parents.length})'),
+                Tab(
+                    text:
+                        '${AppLocalizations.of(context).adminsTab} (${_admins.length})'),
+                Tab(
+                    text:
+                        '${AppLocalizations.of(context).invitesTab} (${_inviteCodes.length})'),
               ],
             ),
           ),
@@ -784,7 +794,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
             padding: const EdgeInsets.fromLTRB(16, 14, 16, 10),
             child: ProSearchField(
               controller: _searchController,
-              hintText: 'Search by name, email, or phone...',
+              hintText: AppLocalizations.of(context).search,
               query: _searchQuery,
               onChanged: (v) =>
                   setState(() => _searchQuery = v.trim().toLowerCase()),

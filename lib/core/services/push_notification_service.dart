@@ -88,6 +88,14 @@ class PushNotificationService {
   /// Notification ID reservations
   static const int idDailyPrayer = 1001;
   static const int idMonthlyFee = 1002;
+  static int _nextNotificationId = 2000;
+
+  static int _allocateNotificationId() {
+    final id = _nextNotificationId;
+    _nextNotificationId =
+        _nextNotificationId >= 2000000000 ? 2000 : _nextNotificationId + 1;
+    return id;
+  }
 
   static final RegExp _uuidRegex = RegExp(
     r'^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$',
@@ -193,7 +201,7 @@ class PushNotificationService {
       }
 
       await plugin.show(
-        DateTime.now().millisecondsSinceEpoch.remainder(100000),
+        2000 + (DateTime.now().millisecondsSinceEpoch % 90000),
         title,
         body,
         NotificationDetails(
@@ -322,6 +330,38 @@ class PushNotificationService {
     } catch (e) {
       debugPrint('[PushNotificationService] Permission request note: $e');
     }
+  }
+
+  /// Returns true when notifications are enabled for the app on this device.
+  Future<bool> areNotificationsEnabled() async {
+    if (kIsWeb) return false;
+    try {
+      final androidImplementation =
+          _notificationsPlugin.resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>();
+      if (androidImplementation != null) {
+        final enabled = await androidImplementation.areNotificationsEnabled();
+        if (enabled != null) return enabled;
+      }
+      if (_firebaseReady) {
+        final settings =
+            await FirebaseMessaging.instance.getNotificationSettings();
+        return settings.authorizationStatus ==
+                AuthorizationStatus.authorized ||
+            settings.authorizationStatus == AuthorizationStatus.provisional;
+      }
+    } catch (e) {
+      debugPrint('[PushNotificationService] Permission check note: $e');
+    }
+    return false;
+  }
+
+  /// Prompts for OS notification permission even if requested earlier, and re-syncs FCM token.
+  Future<bool> promptAndSyncNotifications() async {
+    _permissionsRequested = false;
+    await requestNotificationPermissions();
+    await syncRoleSubscription(null);
+    return await areNotificationsEnabled();
   }
 
   /// Initialize Firebase Cloud Messaging without falling back to synthetic dummy tokens.
@@ -690,8 +730,7 @@ class PushNotificationService {
     Map<String, dynamic>? data,
   }) async {
     try {
-      final notifId =
-          id ?? DateTime.now().millisecondsSinceEpoch.remainder(100000);
+      final notifId = id ?? _allocateNotificationId();
 
       final NotificationDetails platformDetails = NotificationDetails(
         android: AndroidNotificationDetails(

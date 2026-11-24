@@ -7,19 +7,17 @@ import '../services/local_storage_service.dart';
 /// - 'ar': Arabic / العربية (RTL)
 /// - 'am': Amharic / አማርኛ (LTR)
 class LocaleNotifier extends ValueNotifier<Locale> {
-  LocaleNotifier._() : super(const Locale('en')) {
-    _loadSavedLocale();
-  }
+  LocaleNotifier._() : super(const Locale('en'));
 
   static final LocaleNotifier instance = LocaleNotifier._();
 
   static const String prefKey = 'app_language_code';
 
-  Future<void> _loadSavedLocale() async {
+  Future<void> loadSavedLocale() async {
     try {
       final code =
           await LocalStorageService.instance.getString(prefKey) ?? 'en';
-      if (['en', 'ar', 'am'].contains(code)) {
+      if (['en', 'ar', 'am'].contains(code) && value.languageCode != code) {
         value = Locale(code);
       }
     } catch (_) {}

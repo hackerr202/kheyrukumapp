@@ -10,6 +10,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:record/record.dart';
 import 'package:url_launcher/url_launcher.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/chat_message.dart';
 import '../../core/services/auth_session_service.dart';
 import '../../core/services/messaging_service.dart';
@@ -53,7 +54,7 @@ class _ChatScreenState extends State<ChatScreen>
   String? _currentRecordingPath;
   bool _isStartingRecording = false;
   bool _isRecordingVoice = false;
-  int _recordingSeconds = 0;
+  final ValueNotifier<int> _recordingSecondsNotifier = ValueNotifier<int>(0);
   Timer? _recordingTimer;
   String? _failedRecordingPath;
   int _failedRecordingDuration = 0;
@@ -62,8 +63,10 @@ class _ChatScreenState extends State<ChatScreen>
   late final AudioPlayer _audioPlayer;
   String? _currentlyPlayingId;
   PlayerState _playerState = PlayerState.stopped;
-  Duration _playbackPosition = Duration.zero;
+  final ValueNotifier<Duration> _playbackPositionNotifier =
+      ValueNotifier<Duration>(Duration.zero);
   Duration _playbackDuration = Duration.zero;
+  final ValueNotifier<bool> _hasTextNotifier = ValueNotifier<bool>(false);
 
   StreamSubscription<PlayerState>? _playerStateSub;
   StreamSubscription<Duration>? _playerPositionSub;
@@ -77,9 +80,17 @@ class _ChatScreenState extends State<ChatScreen>
   String get _currentUserName => AuthSessionService.instance.userName;
   String get _currentUserRole => AuthSessionService.instance.currentRole;
 
+  void _onMsgTextChanged() {
+    final hasText = _msgCtrl.text.trim().isNotEmpty;
+    if (_hasTextNotifier.value != hasText) {
+      _hasTextNotifier.value = hasText;
+    }
+  }
+
   @override
   void initState() {
     super.initState();
+    _msgCtrl.addListener(_onMsgTextChanged);
     _messagesStream =
         MessagingService.instance.streamMessages(widget.conversationId);
     _audioRecorder = AudioRecorder();
@@ -91,14 +102,14 @@ class _ChatScreenState extends State<ChatScreen>
         _playerState = state;
         if (state == PlayerState.completed || state == PlayerState.stopped) {
           _currentlyPlayingId = null;
-          _playbackPosition = Duration.zero;
+          _playbackPositionNotifier.value = Duration.zero;
         }
       });
     });
 
     _playerPositionSub = _audioPlayer.onPositionChanged.listen((position) {
       if (!mounted) return;
-      setState(() => _playbackPosition = position);
+      _playbackPositionNotifier.value = position;
     });
 
     _playerDurationSub = _audioPlayer.onDurationChanged.listen((duration) {
@@ -110,8 +121,8 @@ class _ChatScreenState extends State<ChatScreen>
       if (!mounted) return;
       setState(() {
         _currentlyPlayingId = null;
-        _playbackPosition = Duration.zero;
       });
+      _playbackPositionNotifier.value = Duration.zero;
     });
   }
 
@@ -149,6 +160,11 @@ class _ChatScreenState extends State<ChatScreen>
 
     _deleteTempFileSync(_currentRecordingPath);
     _deleteTempFileSync(_failedRecordingPath);
+
+    _msgCtrl.removeListener(_onMsgTextChanged);
+    _recordingSecondsNotifier.dispose();
+    _playbackPositionNotifier.dispose();
+    _hasTextNotifier.dispose();
 
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -269,9 +285,9 @@ class _ChatScreenState extends State<ChatScreen>
         return;
       }
 
+      _recordingSecondsNotifier.value = 0;
       setState(() {
         _isRecordingVoice = true;
-        _recordingSeconds = 0;
       });
 
       _recordingTimer?.cancel();
@@ -280,7 +296,7 @@ class _ChatScreenState extends State<ChatScreen>
           timer.cancel();
           return;
         }
-        setState(() => _recordingSeconds++);
+        _recordingSecondsNotifier.value = _recordingSecondsNotifier.value + 1;
       });
     } catch (e) {
       debugPrint('[ChatScreen] Error starting voice record: $e');
@@ -314,10 +330,10 @@ class _ChatScreenState extends State<ChatScreen>
       debugPrint('[ChatScreen] Error cancelling record: $e');
     }
 
+    _recordingSecondsNotifier.value = 0;
     if (mounted) {
       setState(() {
         _isRecordingVoice = false;
-        _recordingSeconds = 0;
         _currentRecordingPath = null;
       });
     } else {
@@ -432,11 +448,12 @@ class _ChatScreenState extends State<ChatScreen>
 
   Future<void> _finishAndSendVoiceRecording() async {
     _recordingTimer?.cancel();
-    final duration = _recordingSeconds > 0 ? _recordingSeconds : 1;
+    final duration =
+        _recordingSecondsNotifier.value > 0 ? _recordingSecondsNotifier.value : 1;
+    _recordingSecondsNotifier.value = 0;
 
     setState(() {
       _isRecordingVoice = false;
-      _recordingSeconds = 0;
       _isUploadingAttachment = true;
     });
 
@@ -509,9 +526,9 @@ class _ChatScreenState extends State<ChatScreen>
       } else {
         await _audioPlayer.stop();
         if (!mounted) return;
+        _playbackPositionNotifier.value = Duration.zero;
         setState(() {
           _currentlyPlayingId = msg.id;
-          _playbackPosition = Duration.zero;
           if (msg.audioDurationSeconds != null) {
             _playbackDuration = Duration(seconds: msg.audioDurationSeconds!);
           }
@@ -520,17 +537,16 @@ class _ChatScreenState extends State<ChatScreen>
       }
     } catch (e) {
       debugPrint('[ChatScreen] Error playing voice note: $e');
+      _playbackPositionNotifier.value = Duration.zero;
       if (mounted) {
         setState(() {
           _currentlyPlayingId = null;
-          _playbackPosition = Duration.zero;
         });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error playing audio: $e')),
         );
       } else {
         _currentlyPlayingId = null;
-        _playbackPosition = Duration.zero;
       }
     }
   }
@@ -753,13 +769,14 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _showAttachmentSheet(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (ctx) {
         return ProBottomSheetShell(
-          title: 'Share Attachment',
+          title: loc.shareAttachment,
           subtitle: 'Photos, videos, files, or Quranic reflection',
           icon: Icons.attach_file_rounded,
           iconColor: p.primary,
@@ -802,7 +819,7 @@ class _ChatScreenState extends State<ChatScreen>
                 _buildAttachmentOption(
                   p: p,
                   icon: Icons.insert_drive_file_rounded,
-                  label: 'Document',
+                  label: loc.documentAttachment,
                   color: p.success,
                   onTap: () {
                     Navigator.pop(ctx);
@@ -951,6 +968,7 @@ class _ChatScreenState extends State<ChatScreen>
 
   void _showMessageOptions(ChatMessage msg, bool isMe) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
     showModalBottomSheet(
       context: context,
       backgroundColor: p.surface,
@@ -975,16 +993,16 @@ class _ChatScreenState extends State<ChatScreen>
               ListTile(
                 leading: Icon(Icons.copy_rounded, color: p.primary),
                 title: Text(
-                  'Copy Message Text',
+                  loc.copyMessageText,
                   style: TextStyle(color: p.ink, fontWeight: FontWeight.w600),
                 ),
                 onTap: () {
                   Navigator.pop(ctx);
                   Clipboard.setData(ClipboardData(text: msg.content));
                   ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Message copied to clipboard.'),
-                      duration: Duration(seconds: 2),
+                    SnackBar(
+                      content: Text(loc.copiedToClipboard),
+                      duration: const Duration(seconds: 2),
                     ),
                   );
                 },
@@ -993,7 +1011,7 @@ class _ChatScreenState extends State<ChatScreen>
                 ListTile(
                   leading: Icon(Icons.edit_rounded, color: p.info),
                   title: Text(
-                    'Edit Message',
+                    loc.editMessage,
                     style: TextStyle(color: p.ink, fontWeight: FontWeight.w600),
                   ),
                   onTap: () {
@@ -1005,7 +1023,7 @@ class _ChatScreenState extends State<ChatScreen>
                 ListTile(
                   leading: Icon(Icons.delete_outline_rounded, color: p.danger),
                   title: Text(
-                    'Delete Message',
+                    loc.deleteMessage,
                     style: TextStyle(
                       color: p.danger,
                       fontWeight: FontWeight.w600,
@@ -1016,14 +1034,12 @@ class _ChatScreenState extends State<ChatScreen>
                     final confirm = await showDialog<bool>(
                       context: context,
                       builder: (c) => AlertDialog(
-                        title: const Text('Delete Message?'),
-                        content: const Text(
-                          'This will remove the message for everyone in this chat.',
-                        ),
+                        title: Text('${loc.deleteMessage}?'),
+                        content: Text(loc.deleteMessageConfirm),
                         actions: [
                           TextButton(
                             onPressed: () => Navigator.pop(c, false),
-                            child: const Text('Cancel'),
+                            child: Text(loc.cancel),
                           ),
                           ElevatedButton(
                             style: ElevatedButton.styleFrom(
@@ -1031,7 +1047,7 @@ class _ChatScreenState extends State<ChatScreen>
                               foregroundColor: Colors.white,
                             ),
                             onPressed: () => Navigator.pop(c, true),
-                            child: const Text('Delete'),
+                            child: Text(loc.delete),
                           ),
                         ],
                       ),
@@ -1265,7 +1281,7 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   Widget _buildStandardInputBar(AppPalette p) {
-    final hasText = _msgCtrl.text.trim().isNotEmpty;
+    final loc = AppLocalizations.of(context);
 
     return Row(
       children: [
@@ -1289,10 +1305,9 @@ class _ChatScreenState extends State<ChatScreen>
               minLines: 1,
               textInputAction: TextInputAction.send,
               onSubmitted: (_) => _sendMessage(),
-              onChanged: (_) => setState(() {}),
               decoration: InputDecoration(
                 filled: false,
-                hintText: 'Write a message...',
+                hintText: loc.writeMessageHint,
                 hintStyle: TextStyle(color: p.inkMuted, fontSize: 13.5),
                 border: InputBorder.none,
                 enabledBorder: InputBorder.none,
@@ -1304,41 +1319,46 @@ class _ChatScreenState extends State<ChatScreen>
           ),
         ),
         const SizedBox(width: 8),
-        if (hasText)
-          Container(
-            width: 42,
-            height: 42,
-            decoration: BoxDecoration(
-              color: p.primary,
-              shape: BoxShape.circle,
-            ),
-            child: IconButton(
-              icon: Icon(Icons.send_rounded, size: 18, color: p.onPrimary),
-              onPressed: _isUploadingAttachment ? null : () => _sendMessage(),
-            ),
-          )
-        else
-          GestureDetector(
-            onLongPress: _startVoiceRecording,
-            onTap: () {
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(
-                  content: Text('Hold microphone button to record a voice note.'),
-                  duration: Duration(milliseconds: 1600),
+        ValueListenableBuilder<bool>(
+          valueListenable: _hasTextNotifier,
+          builder: (context, hasText, _) {
+            if (hasText) {
+              return Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: p.primary,
+                  shape: BoxShape.circle,
+                ),
+                child: IconButton(
+                  icon: Icon(Icons.send_rounded, size: 18, color: p.onPrimary),
+                  onPressed: _isUploadingAttachment ? null : () => _sendMessage(),
                 ),
               );
-            },
-            child: Container(
-              width: 42,
-              height: 42,
-              decoration: BoxDecoration(
-                color: p.primarySoft,
-                shape: BoxShape.circle,
-                border: Border.all(color: p.primary.withOpacity(0.3)),
+            }
+            return GestureDetector(
+              onLongPress: _startVoiceRecording,
+              onTap: () {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text(loc.holdMicHint),
+                    duration: const Duration(milliseconds: 1600),
+                  ),
+                );
+              },
+              child: Container(
+                width: 42,
+                height: 42,
+                decoration: BoxDecoration(
+                  color: p.primarySoft,
+                  shape: BoxShape.circle,
+                  border: Border.all(color: p.primary.withOpacity(0.3)),
+                ),
+                child: Icon(Icons.mic_rounded, size: 21, color: p.primary),
               ),
-              child: Icon(Icons.mic_rounded, size: 21, color: p.primary),
-            ),
-          ),
+            );
+          },
+        ),
       ],
     );
   }
@@ -1355,14 +1375,19 @@ class _ChatScreenState extends State<ChatScreen>
           ),
         ),
         const SizedBox(width: 8),
-        Text(
-          _formatDuration(_recordingSeconds),
-          style: TextStyle(
-            fontWeight: FontWeight.w800,
-            fontSize: 14,
-            color: p.danger,
-            fontFeatures: const [FontFeature.tabularFigures()],
-          ),
+        ValueListenableBuilder<int>(
+          valueListenable: _recordingSecondsNotifier,
+          builder: (context, seconds, _) {
+            return Text(
+              _formatDuration(seconds),
+              style: TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 14,
+                color: p.danger,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            );
+          },
         ),
         const SizedBox(width: 12),
         Expanded(
@@ -1402,7 +1427,8 @@ class _ChatScreenState extends State<ChatScreen>
     final timeColor = isMe ? Colors.white.withOpacity(0.75) : p.inkMuted;
 
     return Align(
-      alignment: isMe ? Alignment.centerRight : Alignment.centerLeft,
+      alignment:
+          isMe ? AlignmentDirectional.centerEnd : AlignmentDirectional.centerStart,
       child: GestureDetector(
         onLongPress: () => _showMessageOptions(msg, isMe),
         child: Container(
@@ -1413,11 +1439,11 @@ class _ChatScreenState extends State<ChatScreen>
           decoration: BoxDecoration(
             color: bubbleBg,
             border: isMe ? null : Border.all(color: p.border, width: 1),
-            borderRadius: BorderRadius.only(
-              topLeft: const Radius.circular(18),
-              topRight: const Radius.circular(18),
-              bottomLeft: Radius.circular(isMe ? 18 : 4),
-              bottomRight: Radius.circular(isMe ? 4 : 18),
+            borderRadius: BorderRadiusDirectional.only(
+              topStart: const Radius.circular(18),
+              topEnd: const Radius.circular(18),
+              bottomStart: Radius.circular(isMe ? 18 : 4),
+              bottomEnd: Radius.circular(isMe ? 4 : 18),
             ),
             boxShadow: [
               BoxShadow(
@@ -1520,6 +1546,72 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
+  Widget _buildVoiceWaveformColumn({
+    required AppPalette p,
+    required bool isMe,
+    required bool isCurrentMsg,
+    required double progressRatio,
+    required Color textColor,
+    required Color timeColor,
+    required String durationLabel,
+  }) {
+    const heights = [
+      10,
+      16,
+      7,
+      14,
+      22,
+      12,
+      18,
+      20,
+      8,
+      14,
+      18,
+      10,
+      22,
+      14,
+      8,
+      16,
+      12,
+      8,
+      14,
+      7
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: List.generate(20, (index) {
+            final h = heights[index % heights.length].toDouble();
+            final barThreshold = index / 20.0;
+            final isBarActive = isCurrentMsg && progressRatio >= barThreshold;
+
+            return Container(
+              margin: const EdgeInsets.symmetric(horizontal: 1.2),
+              width: 2.5,
+              height: h,
+              decoration: BoxDecoration(
+                color: isBarActive
+                    ? (isMe ? AppColors.goldWarm : p.primary)
+                    : textColor.withOpacity(0.32),
+                borderRadius: BorderRadius.circular(2),
+              ),
+            );
+          }),
+        ),
+        const SizedBox(height: 5),
+        Text(
+          durationLabel,
+          style: TextStyle(
+            fontSize: 10.5,
+            color: timeColor,
+            fontFeatures: const [FontFeature.tabularFigures()],
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildVoiceBubbleContent(
     ChatMessage msg,
     bool isMe,
@@ -1530,11 +1622,6 @@ class _ChatScreenState extends State<ChatScreen>
     final isCurrentMsg = _currentlyPlayingId == msg.id;
     final isPlaying = isCurrentMsg && _playerState == PlayerState.playing;
     final durationSec = msg.audioDurationSeconds ?? 5;
-
-    final progressRatio = isCurrentMsg && _playbackDuration.inMilliseconds > 0
-        ? min(1.0,
-            _playbackPosition.inMilliseconds / _playbackDuration.inMilliseconds)
-        : 0.0;
 
     return Row(
       mainAxisSize: MainAxisSize.min,
@@ -1559,64 +1646,38 @@ class _ChatScreenState extends State<ChatScreen>
         ),
         const SizedBox(width: 10),
         Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: List.generate(20, (index) {
-                  const heights = [
-                    10,
-                    16,
-                    7,
-                    14,
-                    22,
-                    12,
-                    18,
-                    20,
-                    8,
-                    14,
-                    18,
-                    10,
-                    22,
-                    14,
-                    8,
-                    16,
-                    12,
-                    8,
-                    14,
-                    7
-                  ];
-                  final h = heights[index % heights.length].toDouble();
-                  final barThreshold = index / 20.0;
-                  final isBarActive =
-                      isCurrentMsg && progressRatio >= barThreshold;
-
-                  return Container(
-                    margin: const EdgeInsets.symmetric(horizontal: 1.2),
-                    width: 2.5,
-                    height: h,
-                    decoration: BoxDecoration(
-                      color: isBarActive
-                          ? (isMe ? AppColors.goldWarm : p.primary)
-                          : textColor.withOpacity(0.32),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  );
-                }),
-              ),
-              const SizedBox(height: 5),
-              Text(
-                isCurrentMsg
-                    ? '${_formatDuration(_playbackPosition.inSeconds)} / ${_formatDuration(_playbackDuration.inSeconds > 0 ? _playbackDuration.inSeconds : durationSec)}'
-                    : _formatDuration(durationSec),
-                style: TextStyle(
-                  fontSize: 10.5,
-                  color: timeColor,
-                  fontFeatures: const [FontFeature.tabularFigures()],
+          child: isCurrentMsg
+              ? ValueListenableBuilder<Duration>(
+                  valueListenable: _playbackPositionNotifier,
+                  builder: (context, playbackPosition, _) {
+                    final progressRatio = _playbackDuration.inMilliseconds > 0
+                        ? min(
+                            1.0,
+                            playbackPosition.inMilliseconds /
+                                _playbackDuration.inMilliseconds,
+                          )
+                        : 0.0;
+                    return _buildVoiceWaveformColumn(
+                      p: p,
+                      isMe: isMe,
+                      isCurrentMsg: true,
+                      progressRatio: progressRatio,
+                      textColor: textColor,
+                      timeColor: timeColor,
+                      durationLabel:
+                          '${_formatDuration(playbackPosition.inSeconds)} / ${_formatDuration(_playbackDuration.inSeconds > 0 ? _playbackDuration.inSeconds : durationSec)}',
+                    );
+                  },
+                )
+              : _buildVoiceWaveformColumn(
+                  p: p,
+                  isMe: isMe,
+                  isCurrentMsg: false,
+                  progressRatio: 0.0,
+                  textColor: textColor,
+                  timeColor: timeColor,
+                  durationLabel: _formatDuration(durationSec),
                 ),
-              ),
-            ],
-          ),
         ),
       ],
     );
@@ -1670,9 +1731,9 @@ class _ChatScreenState extends State<ChatScreen>
                         ),
                 ),
               ),
-              Positioned(
+              PositionedDirectional(
                 bottom: 8,
-                right: 8,
+                end: 8,
                 child: Container(
                   padding:
                       const EdgeInsets.symmetric(horizontal: 7, vertical: 3),
@@ -1887,8 +1948,9 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
 
   @override
   Widget build(BuildContext context) {
+    final loc = AppLocalizations.of(context);
     return AlertDialog(
-      title: const Text('Edit Message'),
+      title: Text(loc.editMessage),
       content: TextField(
         controller: _editCtrl,
         enabled: !_isSaving,
@@ -1900,7 +1962,7 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
       actions: [
         TextButton(
           onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: const Text('Cancel'),
+          child: Text(loc.cancel),
         ),
         ElevatedButton(
           onPressed: _isSaving
@@ -1935,7 +1997,7 @@ class _EditMessageDialogState extends State<_EditMessageDialog> {
                     );
                   }
                 },
-          child: Text(_isSaving ? 'Saving...' : 'Save'),
+          child: Text(_isSaving ? 'Saving...' : loc.save),
         ),
       ],
     );

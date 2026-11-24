@@ -213,14 +213,16 @@ class _SplashScreenState extends State<SplashScreen>
                                 fit: StackFit.expand,
                                 alignment: Alignment.center,
                                 children: [
-                                  CustomPaint(
-                                    size: const Size(200, 200),
-                                    painter: KheyrukumLogoPainter(
-                                      crescentProgress: _crescentAnim.value,
-                                      pillarsProgress: _pillarsAnim.value,
-                                      bulbsProgress: _bulbsAnim.value,
-                                      crownProgress: _crownAnim.value,
-                                      pulseScale: _pulseAnim.value,
+                                  RepaintBoundary(
+                                    child: CustomPaint(
+                                      size: const Size(200, 200),
+                                      painter: KheyrukumLogoPainter(
+                                        crescentProgress: _crescentAnim.value,
+                                        pillarsProgress: _pillarsAnim.value,
+                                        bulbsProgress: _bulbsAnim.value,
+                                        crownProgress: _crownAnim.value,
+                                        pulseScale: _pulseAnim.value,
+                                      ),
                                     ),
                                   ),
                                   FadeTransition(

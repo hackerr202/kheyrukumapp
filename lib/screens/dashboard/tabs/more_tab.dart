@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../../core/localization/app_localizations.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/theme/app_colors.dart';
@@ -190,6 +191,7 @@ class MoreTab extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return ValueListenableBuilder<String>(
       valueListenable: AuthSessionService.instance.roleNotifier,
@@ -203,10 +205,10 @@ class MoreTab extends StatelessWidget {
         final userEmail = AuthSessionService.instance.userEmail;
         final avatarUrl = AuthSessionService.instance.avatarUrl;
         final roleLabel = isSuperAdmin
-            ? 'Super Admin'
+            ? loc.roleSuperadmin
             : (isAdmin
-                ? 'Director'
-                : (isTeacher ? 'Ustaz' : 'Parent'));
+                ? loc.roleAdmin
+                : (isTeacher ? loc.roleTeacher : loc.roleParent));
 
         return ListView(
           physics: const BouncingScrollPhysics(),
@@ -283,7 +285,7 @@ class MoreTab extends StatelessWidget {
             const SizedBox(height: 22),
 
             if (isAdmin) ...[
-              _buildGroupLabel(p, 'ADMINISTRATION'),
+              _buildGroupLabel(p, loc.centerManagement.toUpperCase()),
               const SizedBox(height: 8),
               ProCard(
                 padding: EdgeInsets.zero,
@@ -293,7 +295,7 @@ class MoreTab extends StatelessWidget {
                       p: p,
                       icon: Icons.manage_accounts_rounded,
                       iconColor: p.primary,
-                      title: 'User Management',
+                      title: loc.userManagement,
                       subtitle:
                           'Manage teachers, parents, circle assignments & access',
                       onTap: () {
@@ -310,7 +312,7 @@ class MoreTab extends StatelessWidget {
                       p: p,
                       icon: Icons.menu_book_rounded,
                       iconColor: p.primary,
-                      title: 'Study Circles (Halaqahs)',
+                      title: loc.studyCircles,
                       subtitle: 'Create circles, assign Ustazs & view enrollment',
                       onTap: () => HalaqahManagementSheet.show(context),
                     ),
@@ -319,7 +321,7 @@ class MoreTab extends StatelessWidget {
                       p: p,
                       icon: Icons.vpn_key_rounded,
                       iconColor: p.gold,
-                      title: 'Registration & Invite Codes',
+                      title: loc.inviteCodes,
                       subtitle:
                           'Generate sign-up codes for teachers & parents',
                       onTap: () => InviteCodesBottomSheet.show(context),
@@ -331,7 +333,7 @@ class MoreTab extends StatelessWidget {
             ],
 
             if (isTeacher) ...[
-              _buildGroupLabel(p, 'MY CLASS'),
+              _buildGroupLabel(p, loc.assignedCircle.toUpperCase()),
               const SizedBox(height: 8),
               ProCard(
                 padding: EdgeInsets.zero,
@@ -339,7 +341,7 @@ class MoreTab extends StatelessWidget {
                   p: p,
                   icon: Icons.school_rounded,
                   iconColor: p.primary,
-                  title: 'My Assigned Halaqah',
+                  title: loc.studyCircles,
                   subtitle:
                       '${AuthSessionService.instance.assignedHalaqahName} • Roster & Curriculum',
                   onTap: () => _showTeacherHalaqahDialog(context),
@@ -348,7 +350,7 @@ class MoreTab extends StatelessWidget {
               const SizedBox(height: 22),
             ],
 
-            _buildGroupLabel(p, 'ACADEMY & COMMUNITY'),
+            _buildGroupLabel(p, loc.academyOverview),
             const SizedBox(height: 8),
             ProCard(
               padding: EdgeInsets.zero,
@@ -358,10 +360,10 @@ class MoreTab extends StatelessWidget {
                     p: p,
                     icon: Icons.campaign_rounded,
                     iconColor: p.gold,
-                    title: 'Center Announcements',
+                    title: loc.schoolAnnouncements,
                     subtitle: isAdmin
                         ? 'Broadcast notices to parents & teachers'
-                        : 'Official circulars, reminders & schedule updates',
+                        : loc.officialCirculars,
                     onTap: () => AnnouncementsSheet.show(context, initialTab: 1),
                     trailing: isAdmin
                         ? InkWell(
@@ -382,7 +384,7 @@ class MoreTab extends StatelessWidget {
                                     Border.all(color: p.gold.withOpacity(0.35)),
                               ),
                               child: Text(
-                                '+ Post',
+                                loc.post,
                                 style: TextStyle(
                                   color: p.gold,
                                   fontSize: 11.5,
@@ -399,9 +401,7 @@ class MoreTab extends StatelessWidget {
                       p: p,
                       icon: Icons.payments_rounded,
                       iconColor: p.primary,
-                      title: isParent
-                          ? 'Tuition & Fee Receipts'
-                          : 'Halaqah Fees & Tuition',
+                      title: loc.tuitionAndFees,
                       subtitle: isParent
                           ? 'Upload bank receipts & check monthly fee status'
                           : 'Issue monthly tuition, verify receipts & overdue alerts',
@@ -421,7 +421,7 @@ class MoreTab extends StatelessWidget {
 
             const SizedBox(height: 22),
 
-            _buildGroupLabel(p, 'ACCOUNT & PREFERENCES'),
+            _buildGroupLabel(p, loc.accountAndSecurity),
             const SizedBox(height: 8),
             ProCard(
               padding: EdgeInsets.zero,
@@ -429,8 +429,8 @@ class MoreTab extends StatelessWidget {
                 p: p,
                 icon: Icons.settings_rounded,
                 iconColor: p.primary,
-                title: 'Portal Settings',
-                subtitle: 'Theme appearance, account details & sign out',
+                title: loc.portalSettings,
+                subtitle: loc.portalSettingsSubtitle,
                 onTap: () => SettingsSheet.show(context),
               ),
             ),
@@ -442,7 +442,7 @@ class MoreTab extends StatelessWidget {
 
   Widget _buildGroupLabel(AppPalette p, String text) {
     return Padding(
-      padding: const EdgeInsets.only(left: 4),
+      padding: const EdgeInsetsDirectional.only(start: 4),
       child: Text(
         text,
         style: TextStyle(

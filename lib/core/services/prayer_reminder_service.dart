@@ -1,6 +1,5 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
-import 'notification_center_service.dart';
 import 'push_notification_service.dart';
 
 /// Service managing daily prayer reminders for users:

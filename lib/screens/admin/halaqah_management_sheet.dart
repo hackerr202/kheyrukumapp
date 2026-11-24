@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../../core/localization/app_localizations.dart';
 import '../../core/models/halaqah.dart';
 import '../../core/services/halaqah_service.dart';
 import '../../core/services/student_service.dart';
@@ -66,17 +67,18 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
   @override
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
+    final loc = AppLocalizations.of(context);
 
     return ProBottomSheetShell(
-      title: 'Memorization Circles',
-      subtitle: 'Configure halaqahs, assign Ustazs & monitor enrollment',
+      title: loc.studyCircles,
+      subtitle: loc.manageCircles,
       icon: Icons.menu_book_rounded,
       iconColor: p.primary,
       heightFactor: 0.85,
       trailingAction: ElevatedButton.icon(
         onPressed: _showAddHalaqahDialog,
         icon: const Icon(Icons.add_rounded, size: 15),
-        label: const Text('New Circle', style: TextStyle(fontSize: 11.5)),
+        label: Text(loc.create, style: const TextStyle(fontSize: 11.5)),
         style: ElevatedButton.styleFrom(
           padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
         ),
@@ -332,6 +334,7 @@ class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
             const SizedBox(height: 12),
             DropdownButtonFormField<String>(
               value: _selectedTeacherId,
+              isExpanded: true,
               hint: const Text('Assign Teacher (Optional)'),
               items: [
                 const DropdownMenuItem<String>(

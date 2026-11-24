@@ -342,13 +342,24 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                         ),
                       );
                     },
-                    child: Text(
-                      'Open Tuition & Payments →',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: p.primary,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          'Open Tuition & Payments',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: p.primary,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                        const SizedBox(width: 4),
+                        Icon(
+                          Icons.arrow_forward_rounded,
+                          size: 14,
+                          color: p.primary,
+                        ),
+                      ],
                     ),
                   ),
                 ],
@@ -363,7 +374,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   Widget _buildFilterChip(String id, String label, AppPalette p) {
     final isSelected = _selectedFilter == id;
     return Padding(
-      padding: const EdgeInsets.only(right: 8),
+      padding: const EdgeInsetsDirectional.only(end: 8),
       child: GestureDetector(
         onTap: () => setState(() => _selectedFilter = id),
         child: AnimatedContainer(
@@ -651,9 +662,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 ),
               ),
             ),
-            Positioned(
+            PositionedDirectional(
               top: 12,
-              right: 12,
+              end: 12,
               child: SafeArea(
                 child: IconButton(
                   icon: const Icon(

@@ -47,7 +47,8 @@ class HalaqahService {
       final res = await client
           .from('halaqahs')
           .select('*, profiles:teacher_id(full_name)')
-          .order('name', ascending: true);
+          .order('name', ascending: true)
+          .limit(100);
 
       if (res is List) {
         _halaqahs.clear();

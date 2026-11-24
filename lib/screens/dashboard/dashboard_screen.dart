@@ -283,13 +283,11 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
                         String? pageTitle;
                         if (_currentTabIndex == 1) {
-                          pageTitle = currentRole == 'parent'
-                              ? 'My Children'
-                              : 'Students';
+                          pageTitle = loc.studentRoster;
                         } else if (_currentTabIndex == 2) {
                           pageTitle = loc.navMessages;
                         } else if (_currentTabIndex == 3) {
-                          pageTitle = 'Homework';
+                          pageTitle = loc.assignedHomework;
                         } else if (_currentTabIndex == 4) {
                           pageTitle = loc.navMore;
                         }
@@ -387,7 +385,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 children: [
                                   _HeaderIconButton(
                                     icon: Icons.notifications_none_rounded,
-                                    tooltip: 'Notices & Activity',
+                                    tooltip: loc.schoolAnnouncements,
                                     onTap: () {
                                       AnnouncementService.instance
                                           .markAllAsRead();
@@ -400,9 +398,9 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                     },
                                   ),
                                   if (_totalUnreadCount > 0)
-                                    Positioned(
+                                    PositionedDirectional(
                                       top: -4,
-                                      right: -4,
+                                      end: -4,
                                       child: Container(
                                         padding: const EdgeInsets.symmetric(
                                           horizontal: 5,
@@ -440,7 +438,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               const SizedBox(width: 8),
                               _HeaderIconButton(
                                 icon: Icons.settings_outlined,
-                                tooltip: 'Settings',
+                                tooltip: loc.portalSettings,
                                 onTap: () => SettingsSheet.show(context),
                               ),
                             ],

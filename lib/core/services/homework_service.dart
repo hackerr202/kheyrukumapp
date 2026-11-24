@@ -84,7 +84,8 @@ class HomeworkService {
       final assignRes = await client
           .from('homework_assignments')
           .select('*, halaqahs:halaqah_id(name), profiles:teacher_id(full_name)')
-          .order('created_at', ascending: false);
+          .order('created_at', ascending: false)
+          .limit(200);
 
       if (assignRes is List) {
         _assignments.clear();
@@ -100,7 +101,8 @@ class HomeworkService {
       final subRes = await client
           .from('homework_submissions')
           .select('*, students(full_name)')
-          .order('submitted_at', ascending: false);
+          .order('submitted_at', ascending: false)
+          .limit(500);
 
       if (subRes is List) {
         _submissions.clear();
