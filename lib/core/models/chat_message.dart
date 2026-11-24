@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 class Conversation {
   final String id;
   final String title;
@@ -27,19 +29,18 @@ class Conversation {
 
   factory Conversation.fromJson(Map<String, dynamic> json) {
     return Conversation(
-      id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? 'Conversation',
-      isGroup: json['is_group'] == true,
-      participantIds: (json['participant_ids'] as List?)?.map((e) => e.toString()).toList() ?? [],
-      participantNames: (json['participant_names'] as List?)?.map((e) => e.toString()).toList() ?? [],
-      lastMessage: json['last_message']?.toString() ?? '',
-      lastMessageTime: json['last_message_time'] != null
-          ? DateTime.tryParse(json['last_message_time'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      halaqahId: json['halaqah_id']?.toString(),
-      groupType: json['group_type']?.toString() ?? 'direct_admin',
-      unreadCount: (json['unread_count'] as num?)?.toInt() ?? 0,
-      isPinned: json['is_pinned'] == true,
+      id: JsonParsers.asString(json['id']),
+      title: JsonParsers.asNullableString(json['title']) ?? 'Conversation',
+      isGroup: JsonParsers.asBool(json['is_group']),
+      participantIds: JsonParsers.asStringList(json['participant_ids']),
+      participantNames: JsonParsers.asStringList(json['participant_names']),
+      lastMessage: JsonParsers.asString(json['last_message']),
+      lastMessageTime: JsonParsers.asDateTime(json['last_message_time']),
+      halaqahId: JsonParsers.asNullableString(json['halaqah_id']),
+      groupType:
+          JsonParsers.asNullableString(json['group_type']) ?? 'direct_admin',
+      unreadCount: JsonParsers.asInt(json['unread_count'], 0),
+      isPinned: JsonParsers.asBool(json['is_pinned']),
     );
   }
 
@@ -125,23 +126,21 @@ class ChatMessage {
 
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     return ChatMessage(
-      id: json['id']?.toString() ?? '',
-      conversationId: json['conversation_id']?.toString() ?? '',
-      senderId: json['sender_id']?.toString() ?? '',
-      senderName: json['sender_name']?.toString() ?? 'User',
-      senderRole: json['sender_role']?.toString() ?? 'parent',
-      content: json['content']?.toString() ?? '',
-      timestamp: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : (json['timestamp'] != null
-              ? DateTime.tryParse(json['timestamp'].toString()) ?? DateTime.now()
-              : DateTime.now()),
-      isRead: json['is_read'] == true,
-      messageType: json['message_type']?.toString() ?? 'text',
-      attachmentUrl: json['attachment_url']?.toString(),
-      attachmentName: json['attachment_name']?.toString(),
-      audioDurationSeconds: (json['audio_duration'] as num?)?.toInt(),
-      isEdited: json['is_edited'] == true,
+      id: JsonParsers.asString(json['id']),
+      conversationId: JsonParsers.asString(json['conversation_id']),
+      senderId: JsonParsers.asString(json['sender_id']),
+      senderName: JsonParsers.asNullableString(json['sender_name']) ?? 'User',
+      senderRole: JsonParsers.asNullableString(json['sender_role']) ?? 'parent',
+      content: JsonParsers.asString(json['content']),
+      timestamp:
+          JsonParsers.asDateTime(json['created_at'] ?? json['timestamp']),
+      isRead: JsonParsers.asBool(json['is_read']),
+      messageType:
+          JsonParsers.asNullableString(json['message_type']) ?? 'text',
+      attachmentUrl: JsonParsers.asNullableString(json['attachment_url']),
+      attachmentName: JsonParsers.asNullableString(json['attachment_name']),
+      audioDurationSeconds: JsonParsers.asNullableInt(json['audio_duration']),
+      isEdited: JsonParsers.asBool(json['is_edited']),
     );
   }
 

@@ -8,15 +8,9 @@ import 'push_notification_service.dart';
 import 'student_service.dart';
 import 'supabase_service.dart';
 
-/// Reactive Homework & Tajweed Tasks Service for Kheyrukum Madrasah:
-/// - Teachers create assignments for their assigned Halaqah (persisted in Supabase).
-/// - Pending submissions are tracked per student.
-/// - Parents mark home practice as completed with repetitions and notes.
-/// - Teachers inspect practice completions and submit ratings & feedback.
+/// Reactive Homework & Tajweed Tasks Service for Kheyrukum Madrasah.
 class HomeworkService {
-  HomeworkService._() {
-    refreshAll();
-  }
+  HomeworkService._();
 
   static final HomeworkService instance = HomeworkService._();
 
@@ -31,8 +25,10 @@ class HomeworkService {
   final StreamController<List<HomeworkSubmission>> _submissionsController =
       StreamController<List<HomeworkSubmission>>.broadcast();
 
-  Stream<List<HomeworkAssignment>> get assignmentsStream => _assignmentsController.stream;
-  Stream<List<HomeworkSubmission>> get submissionsStream => _submissionsController.stream;
+  Stream<List<HomeworkAssignment>> get assignmentsStream =>
+      _assignmentsController.stream;
+  Stream<List<HomeworkSubmission>> get submissionsStream =>
+      _submissionsController.stream;
 
   List<HomeworkAssignment> get allAssignments => List.unmodifiable(_assignments);
   List<HomeworkSubmission> get allSubmissions => List.unmodifiable(_submissions);
@@ -46,23 +42,44 @@ class HomeworkService {
 
   Future<void> refreshAll() async {
     await fetchFromCloud();
-    _subscribeRealtime();
+    await _subscribeRealtime();
   }
 
   Future<void> clearOnLogout() async {
-    _assignmentsChannel?.unsubscribe();
+    final client = SupabaseService.instance.client;
+    final assignCh = _assignmentsChannel;
+    final subCh = _submissionsChannel;
     _assignmentsChannel = null;
-    _submissionsChannel?.unsubscribe();
     _submissionsChannel = null;
+
+    if (assignCh != null) {
+      try {
+        await client?.removeChannel(assignCh);
+      } catch (e) {
+        debugPrint('[HomeworkService] remove assignments channel note: $e');
+      }
+    }
+    if (subCh != null) {
+      try {
+        await client?.removeChannel(subCh);
+      } catch (e) {
+        debugPrint('[HomeworkService] remove submissions channel note: $e');
+      }
+    }
+
     _assignments.clear();
     _submissions.clear();
-    _assignmentsController.add([]);
-    _submissionsController.add([]);
+    if (!_assignmentsController.isClosed) {
+      _assignmentsController.add([]);
+    }
+    if (!_submissionsController.isClosed) {
+      _submissionsController.add([]);
+    }
   }
 
   Future<void> fetchFromCloud() async {
     final client = SupabaseService.instance.client;
-    if (client == null) return;
+    if (client == null || SupabaseService.instance.currentUser == null) return;
     try {
       final assignRes = await client
           .from('homework_assignments')
@@ -72,9 +89,12 @@ class HomeworkService {
       if (assignRes is List) {
         _assignments.clear();
         for (final item in assignRes) {
-          _assignments.add(HomeworkAssignment.fromJson(Map<String, dynamic>.from(item as Map)));
+          _assignments.add(
+              HomeworkAssignment.fromJson(Map<String, dynamic>.from(item as Map)));
         }
-        _assignmentsController.add(List.from(_assignments));
+        if (!_assignmentsController.isClosed) {
+          _assignmentsController.add(List.from(_assignments));
+        }
       }
 
       final subRes = await client
@@ -85,21 +105,28 @@ class HomeworkService {
       if (subRes is List) {
         _submissions.clear();
         for (final item in subRes) {
-          _submissions.add(HomeworkSubmission.fromJson(Map<String, dynamic>.from(item as Map)));
+          _submissions.add(
+              HomeworkSubmission.fromJson(Map<String, dynamic>.from(item as Map)));
         }
-        _submissionsController.add(List.from(_submissions));
+        if (!_submissionsController.isClosed) {
+          _submissionsController.add(List.from(_submissions));
+        }
       }
     } catch (e) {
       debugPrint('[HomeworkService] fetchFromCloud notice: $e');
     }
   }
 
-  void _subscribeRealtime() {
+  Future<void> _subscribeRealtime() async {
     final client = SupabaseService.instance.client;
     if (client == null || SupabaseService.instance.currentUser == null) return;
 
     try {
-      _assignmentsChannel?.unsubscribe();
+      final oldAssign = _assignmentsChannel;
+      _assignmentsChannel = null;
+      if (oldAssign != null) {
+        await client.removeChannel(oldAssign);
+      }
       _assignmentsChannel = client
           .channel('public:homework_assignments')
           .onPostgresChanges(
@@ -130,7 +157,11 @@ class HomeworkService {
           )
           .subscribe();
 
-      _submissionsChannel?.unsubscribe();
+      final oldSub = _submissionsChannel;
+      _submissionsChannel = null;
+      if (oldSub != null) {
+        await client.removeChannel(oldSub);
+      }
       _submissionsChannel = client
           .channel('public:homework_submissions')
           .onPostgresChanges(
@@ -144,21 +175,34 @@ class HomeworkService {
               final status = newRow['status']?.toString() ?? '';
               final studentName = newRow['student_name']?.toString() ?? 'Student';
               final studentId = newRow['student_id']?.toString() ?? '';
+              final assignmentId = newRow['assignment_id']?.toString() ?? '';
 
-              if (status == 'completed_at_home' && AuthSessionService.instance.isTeacher) {
-                PushNotificationService.instance.showNotification(
-                  title: 'Homework Practiced at Home',
-                  body: '$studentName completed home recitation practice.',
-                  payload: 'homework',
-                  type: 'homework',
-                );
-              } else if (status == 'reviewed' && AuthSessionService.instance.isParent) {
+              if (status == 'completed_at_home' &&
+                  AuthSessionService.instance.isTeacher) {
+                final assignMatches =
+                    _assignments.where((a) => a.id == assignmentId);
+                final isMyAssignment = assignMatches.isNotEmpty &&
+                    (assignMatches.first.teacherId ==
+                            AuthSessionService.instance.userId ||
+                        assignMatches.first.halaqahId ==
+                            AuthSessionService.instance.assignedHalaqahId);
+                if (isMyAssignment) {
+                  PushNotificationService.instance.showNotification(
+                    title: 'Homework Practiced at Home',
+                    body: '$studentName completed home recitation practice.',
+                    payload: 'homework',
+                    type: 'homework',
+                  );
+                }
+              } else if (status == 'reviewed' &&
+                  AuthSessionService.instance.isParent) {
                 final children = StudentService.instance.getStudentsForParent(
                   AuthSessionService.instance.userId,
                   parentEmail: AuthSessionService.instance.userEmail,
                 );
                 if (children.any((c) => c.id == studentId)) {
-                  final rating = newRow['teacher_rating']?.toString() ?? 'Reviewed';
+                  final rating =
+                      newRow['teacher_rating']?.toString() ?? 'Reviewed';
                   PushNotificationService.instance.showNotification(
                     title: 'Homework Reviewed by Ustaz',
                     body: '$studentName: $rating',
@@ -189,19 +233,19 @@ class HomeworkService {
   }
 
   /// Get all assignments for a student's halaqah
-  List<HomeworkAssignment> getAssignmentsForStudent(String studentId, String halaqahName) {
+  List<HomeworkAssignment> getAssignmentsForStudent(
+      String studentId, String halaqahName) {
     return getAssignmentsForHalaqah(halaqahName);
   }
 
   /// Get the submission state of a specific student for a given assignment
   HomeworkSubmission? getSubmission(String assignmentId, String studentId) {
-    try {
-      return _submissions.firstWhere(
-        (sub) => sub.assignmentId == assignmentId && sub.studentId == studentId,
-      );
-    } catch (_) {
-      return null;
+    for (final sub in _submissions) {
+      if (sub.assignmentId == assignmentId && sub.studentId == studentId) {
+        return sub;
+      }
     }
+    return null;
   }
 
   /// Get all submissions for an assignment
@@ -209,7 +253,7 @@ class HomeworkService {
     return _submissions.where((sub) => sub.assignmentId == assignmentId).toList();
   }
 
-  /// Teacher Action: Create new homework task for their halaqah
+  /// Teacher Action: Create new homework task for their halaqah (cloud first, no silent wrong-circle fallback)
   Future<HomeworkAssignment> createAssignment({
     required String halaqahId,
     required String halaqahName,
@@ -231,10 +275,12 @@ class HomeworkService {
       );
       if (matching.isNotEmpty && _isValidUuid(matching.first.id)) {
         resolvedHalaqahId = matching.first.id;
-      } else if (HalaqahService.instance.halaqahs.isNotEmpty &&
-          _isValidUuid(HalaqahService.instance.halaqahs.first.id)) {
-        resolvedHalaqahId = HalaqahService.instance.halaqahs.first.id;
       }
+    }
+
+    if (!_isValidUuid(resolvedHalaqahId)) {
+      throw Exception(
+          'Could not resolve a valid Study Circle ID for "$halaqahName".');
     }
 
     String resolvedTeacherId = teacherId;
@@ -243,31 +289,33 @@ class HomeworkService {
       if (_isValidUuid(currentId)) resolvedTeacherId = currentId;
     }
 
-    String finalId = 'hw-${DateTime.now().millisecondsSinceEpoch}';
-    final client = SupabaseService.instance.client;
-    if (client != null && _isValidUuid(resolvedHalaqahId) && _isValidUuid(resolvedTeacherId)) {
-      try {
-        final inserted = await client.from('homework_assignments').insert({
-          'halaqah_id': resolvedHalaqahId,
-          'halaqah_name': halaqahName,
-          'teacher_id': resolvedTeacherId,
-          'teacher_name': teacherName,
-          'title': title.trim(),
-          'surah_name': surahName.trim(),
-          'surah_number': surahNumber,
-          'ayah_start': fromAyah,
-          'ayah_end': toAyah,
-          'tajweed_focus': tajweedFocus.trim(),
-          'instructions': instructions.trim(),
-          'due_date': dueDate.toUtc().toIso8601String(),
-        }).select('id').single();
+    if (!_isValidUuid(resolvedTeacherId)) {
+      throw Exception('Teacher account ID is required to assign homework.');
+    }
 
-        if (inserted['id'] != null) {
-          finalId = inserted['id'].toString();
-        }
-      } catch (e) {
-        debugPrint('[HomeworkService] Cloud insert notice: $e');
-      }
+    final client = SupabaseService.instance.client;
+    if (client == null) {
+      throw Exception('Unable to connect to server. Please check your connection.');
+    }
+
+    final inserted = await client.from('homework_assignments').insert({
+      'halaqah_id': resolvedHalaqahId,
+      'halaqah_name': halaqahName,
+      'teacher_id': resolvedTeacherId,
+      'teacher_name': teacherName,
+      'title': title.trim(),
+      'surah_name': surahName.trim(),
+      'surah_number': surahNumber,
+      'ayah_start': fromAyah,
+      'ayah_end': toAyah,
+      'tajweed_focus': tajweedFocus.trim(),
+      'instructions': instructions.trim(),
+      'due_date': dueDate.toUtc().toIso8601String(),
+    }).select('id, created_at').single();
+
+    final finalId = inserted['id']?.toString() ?? '';
+    if (finalId.isEmpty) {
+      throw Exception('Failed to save homework assignment in cloud.');
     }
 
     final assignment = HomeworkAssignment(
@@ -288,9 +336,10 @@ class HomeworkService {
     );
 
     _assignments.insert(0, assignment);
-    _assignmentsController.add(List.from(_assignments));
+    if (!_assignmentsController.isClosed) {
+      _assignmentsController.add(List.from(_assignments));
+    }
 
-    // Automatically create pending submission records for students in this halaqah
     final classStudents = StudentService.instance.getStudentsForHalaqah(
       halaqahName,
       halaqahId: resolvedHalaqahId,
@@ -306,7 +355,9 @@ class HomeworkService {
       );
       _submissions.add(sub);
     }
-    _submissionsController.add(List.from(_submissions));
+    if (!_submissionsController.isClosed) {
+      _submissionsController.add(List.from(_submissions));
+    }
 
     final parentIds = classStudents
         .map((s) => s.parentId)
@@ -331,57 +382,66 @@ class HomeworkService {
     return assignment;
   }
 
-  /// Parent Action: Mark homework practiced at home
+  /// Parent Action: Mark homework practiced at home (cloud first, preserves real UUID `id`, notifies assigned teacher)
   Future<void> markCompletedByParent({
     required String assignmentId,
     required String studentId,
     required int repetitionCount,
     String? notes,
   }) async {
+    final client = SupabaseService.instance.client;
+    if (client == null ||
+        !_isValidUuid(assignmentId) ||
+        !_isValidUuid(studentId)) {
+      throw Exception('Cannot submit homework: invalid connection or identifier.');
+    }
+
     final index = _submissions.indexWhere(
       (s) => s.assignmentId == assignmentId && s.studentId == studentId,
     );
 
     final practicedAt = DateTime.now();
-    final studentMatches = StudentService.instance.allStudents.where((s) => s.id == studentId);
+    final isoTimestamp = practicedAt.toUtc().toIso8601String();
+    final studentMatches =
+        StudentService.instance.allStudents.where((s) => s.id == studentId);
     final student = studentMatches.isNotEmpty ? studentMatches.first : null;
     final parentId = AuthSessionService.instance.userId;
 
-    String subId = index != -1 ? _submissions[index].id : 'sub-$assignmentId-$studentId';
+    String subId = index != -1 ? _submissions[index].id : '';
 
-    final client = SupabaseService.instance.client;
-    if (client != null && _isValidUuid(assignmentId) && _isValidUuid(studentId)) {
-      try {
-        if (index != -1 && _isValidUuid(subId)) {
-          await client.from('homework_submissions').update({
-            'status': 'completed_at_home',
-            'repetition_count': repetitionCount,
-            'parent_note': notes,
-            'practiced_at': practicedAt.toUtc().toIso8601String(),
-          }).eq('id', subId);
-        } else {
-          final inserted = await client.from('homework_submissions').insert({
-            'assignment_id': assignmentId,
-            'student_id': studentId,
-            'student_name': student?.fullName ?? 'Student',
-            if (_isValidUuid(parentId)) 'parent_id': parentId,
-            'status': 'completed_at_home',
-            'repetition_count': repetitionCount,
-            'parent_note': notes,
-            'practiced_at': practicedAt.toUtc().toIso8601String(),
-          }).select('id').single();
-          if (inserted['id'] != null) {
-            subId = inserted['id'].toString();
-          }
-        }
-      } catch (e) {
-        debugPrint('[HomeworkService] Cloud submission sync notice: $e');
-      }
+    if (index != -1 && _isValidUuid(subId)) {
+      await client.from('homework_submissions').update({
+        'status': 'completed_at_home',
+        'repetition_count': repetitionCount,
+        'parent_note': notes,
+        'practiced_at': isoTimestamp,
+        'submitted_at': isoTimestamp,
+      }).eq('id', subId);
+    } else {
+      final inserted = await client.from('homework_submissions').insert({
+        'assignment_id': assignmentId,
+        'student_id': studentId,
+        'student_name': student?.fullName ?? 'Student',
+        if (_isValidUuid(parentId)) 'parent_id': parentId,
+        'audio_url': 'completed_at_home',
+        'duration_seconds': 0,
+        'status': 'completed_at_home',
+        'repetition_count': repetitionCount,
+        'parent_note': notes,
+        'practiced_at': isoTimestamp,
+        'submitted_at': isoTimestamp,
+      }).select('id').single();
+      subId = inserted['id']?.toString() ?? '';
+    }
+
+    if (subId.isEmpty) {
+      throw Exception('Failed to save practice submission in cloud.');
     }
 
     if (index != -1) {
       final existing = _submissions[index];
       _submissions[index] = existing.copyWith(
+        id: subId,
         status: 'completed_at_home',
         repetitionCount: repetitionCount,
         parentNote: notes,
@@ -401,10 +461,38 @@ class HomeworkService {
       ));
     }
 
-    _submissionsController.add(List.from(_submissions));
+    if (!_submissionsController.isClosed) {
+      _submissionsController.add(List.from(_submissions));
+    }
+
+    // Notify only the assigned circle's teacher
+    final assignMatches = _assignments.where((a) => a.id == assignmentId);
+    final teacherIds = <String>{};
+    if (assignMatches.isNotEmpty) {
+      final assign = assignMatches.first;
+      if (_isValidUuid(assign.teacherId)) {
+        teacherIds.add(assign.teacherId);
+      }
+      final circleTeacher = HalaqahService.instance.halaqahs
+          .where((h) => h.id == assign.halaqahId)
+          .map((h) => h.teacherId)
+          .whereType<String>()
+          .where((id) => _isValidUuid(id));
+      teacherIds.addAll(circleTeacher);
+    }
+    if (teacherIds.isNotEmpty) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: teacherIds.toList(),
+        title: 'Homework Practiced at Home',
+        body:
+            '${student?.fullName ?? "A student"} completed $repetitionCount repetition(s) at home.',
+        type: 'homework',
+        data: {'assignment_id': assignmentId, 'student_id': studentId},
+      );
+    }
   }
 
-  /// Teacher Action: Review and endorse student's home practice
+  /// Teacher Action: Review and endorse student's home practice (cloud first)
   Future<void> reviewSubmissionByTeacher({
     required String submissionId,
     required String teacherRating,
@@ -413,7 +501,20 @@ class HomeworkService {
     final index = _submissions.indexWhere((s) => s.id == submissionId);
     if (index == -1) return;
 
+    final client = SupabaseService.instance.client;
+    if (client == null || !_isValidUuid(submissionId)) {
+      throw Exception('Cannot review submission: invalid server connection or submission ID.');
+    }
+
     final reviewedAt = DateTime.now();
+    await client.from('homework_submissions').update({
+      'status': 'reviewed',
+      'teacher_rating': teacherRating,
+      'teacher_feedback': teacherFeedback,
+      'teacher_feedback_text': teacherFeedback,
+      'reviewed_at': reviewedAt.toUtc().toIso8601String(),
+    }).eq('id', submissionId);
+
     final existing = _submissions[index];
     _submissions[index] = existing.copyWith(
       status: 'reviewed',
@@ -422,20 +523,21 @@ class HomeworkService {
       reviewedAt: reviewedAt,
     );
 
-    _submissionsController.add(List.from(_submissions));
+    if (!_submissionsController.isClosed) {
+      _submissionsController.add(List.from(_submissions));
+    }
 
-    final client = SupabaseService.instance.client;
-    if (client != null && _isValidUuid(submissionId)) {
-      try {
-        await client.from('homework_submissions').update({
-          'status': 'reviewed',
-          'teacher_rating': teacherRating,
-          'teacher_feedback': teacherFeedback,
-          'reviewed_at': reviewedAt.toUtc().toIso8601String(),
-        }).eq('id', submissionId);
-      } catch (e) {
-        debugPrint('[HomeworkService] Cloud review sync notice: $e');
-      }
+    if (_isValidUuid(existing.parentId)) {
+      PushNotificationService.instance.dispatchPushToUsers(
+        userIds: [existing.parentId],
+        title: 'Homework Reviewed by Ustaz',
+        body: '${existing.studentName}: $teacherRating',
+        type: 'homework_review',
+        data: {
+          'assignment_id': existing.assignmentId,
+          'student_id': existing.studentId,
+        },
+      );
     }
   }
 }

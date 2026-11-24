@@ -2,6 +2,7 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 import '../../../core/models/absence_request.dart';
 import '../../../core/models/announcement.dart';
+import '../../../core/models/invitation_code.dart';
 import '../../../core/models/student.dart';
 import '../../../core/services/absence_service.dart';
 import '../../../core/services/announcement_service.dart';
@@ -12,6 +13,7 @@ import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
 import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
+import '../../../core/utils/json_parsers.dart';
 import '../../../widgets/add_student_dialog.dart';
 import '../../../widgets/pro_ui_kit.dart';
 import '../../admin/halaqah_management_sheet.dart';
@@ -32,6 +34,18 @@ class HomeTab extends StatefulWidget {
 }
 
 class _HomeTabState extends State<HomeTab> {
+  late final Stream<List<Student>> _studentsStream;
+  late final Stream<List<InvitationCode>> _inviteCodesStream;
+  late final Stream<List<Announcement>> _announcementsStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _studentsStream = StudentService.instance.studentsStream;
+    _inviteCodesStream = SupabaseService.instance.streamInviteCodes();
+    _announcementsStream = AnnouncementService.instance.streamAnnouncements();
+  }
+
   Future<void> _handleRefresh() async {
     await Future.wait([
       HalaqahService.instance.fetchHalaqahs(),
@@ -39,8 +53,8 @@ class _HomeTabState extends State<HomeTab> {
       HomeworkService.instance.refreshAll(),
       AbsenceService.instance.refreshAll(),
       PaymentService.instance.refresh(),
+      AnnouncementService.instance.refreshAndSubscribe(),
     ]);
-    AnnouncementService.instance.refreshAndSubscribe();
   }
 
   @override
@@ -93,7 +107,7 @@ class _HomeTabState extends State<HomeTab> {
       animation: HalaqahService.instance.halaqahsNotifier,
       builder: (context, _) {
         return StreamBuilder<List<Student>>(
-          stream: StudentService.instance.studentsStream,
+          stream: _studentsStream,
           initialData: StudentService.instance.allStudents,
           builder: (context, studentSnapshot) {
             final halaqahs = HalaqahService.instance.halaqahs;
@@ -103,8 +117,8 @@ class _HomeTabState extends State<HomeTab> {
             final hasHalaqah = halaqahs.isNotEmpty;
             final hasStudent = students.isNotEmpty;
 
-            return StreamBuilder(
-              stream: SupabaseService.instance.streamInviteCodes(),
+            return StreamBuilder<List<InvitationCode>>(
+              stream: _inviteCodesStream,
               builder: (context, snapshot) {
                 final codes = snapshot.data ?? [];
                 final hasTeacherCode = codes.any((c) => c.role == 'teacher');
@@ -975,7 +989,7 @@ class _HomeTabState extends State<HomeTab> {
         ),
         const SizedBox(height: 12),
         StreamBuilder<List<Announcement>>(
-          stream: AnnouncementService.instance.streamAnnouncements(),
+          stream: _announcementsStream,
           builder: (context, snapshot) {
             final announcements = snapshot.data ?? [];
 
@@ -1195,7 +1209,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                     ),
                   ),
                 ],
-                if (item.authorName.isNotEmpty) ...[
+                if (item.authorName.trim().isNotEmpty) ...[
                   const SizedBox(height: 12),
                   Row(
                     children: [
@@ -1208,7 +1222,7 @@ class _VerticalAnnouncementsList extends StatelessWidget {
                         ),
                         child: Center(
                           child: Text(
-                            item.authorName.trim()[0].toUpperCase(),
+                            JsonParsers.safeInitial(item.authorName),
                             style: TextStyle(
                               fontSize: 9.5,
                               fontWeight: FontWeight.w700,

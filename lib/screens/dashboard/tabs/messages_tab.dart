@@ -288,15 +288,26 @@ class _MessagesTabState extends State<MessagesTab> {
 
     return InkWell(
       onTap: () {
-        convo.unreadCount = 0;
+        MessagingService.instance.markConversationRead(convo.id);
+        final currentRole = AuthSessionService.instance.currentRole;
+        final String resolvedTargetRole;
+        if (convo.groupType == 'direct_teacher') {
+          resolvedTargetRole = currentRole == 'parent' ? 'teacher' : 'parent';
+        } else if (convo.groupType == 'direct_admin') {
+          resolvedTargetRole =
+              (currentRole == 'parent' || currentRole == 'teacher')
+                  ? 'admin'
+                  : 'parent';
+        } else {
+          resolvedTargetRole = convo.groupType;
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => ChatScreen(
               conversationId: convo.id,
               conversationTitle: convo.title,
-              targetRole:
-                  convo.groupType == 'direct_teacher' ? 'parent' : 'admin',
+              targetRole: resolvedTargetRole,
             ),
           ),
         );
@@ -590,12 +601,15 @@ class _MessagesTabState extends State<MessagesTab> {
             : 'Assigned Ustaz';
     final teacherId = hMatch.isNotEmpty ? hMatch.first.teacherId : null;
 
+    final childHalaqahId =
+        children.isNotEmpty ? children.first.halaqahId : null;
     final convo = await MessagingService.instance.startParentChat(
       parentId: AuthSessionService.instance.userId,
       parentName: AuthSessionService.instance.userName,
       targetRole: role,
       targetName: role == 'teacher' ? teacherName : 'Center Director',
       targetId: role == 'teacher' ? teacherId : null,
+      halaqahId: childHalaqahId,
       halaqahName: childHalaqah,
     );
 

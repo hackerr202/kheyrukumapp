@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 class AttendanceRecord {
   final String id;
   final String studentId;
@@ -24,19 +26,17 @@ class AttendanceRecord {
   factory AttendanceRecord.fromJson(Map<String, dynamic> json) {
     final rawDate = json['session_date'] ?? json['date'];
     return AttendanceRecord(
-      id: json['id']?.toString() ?? '',
-      studentId: json['student_id']?.toString() ?? '',
-      studentName: json['student_name']?.toString() ?? 'Student',
-      halaqahId: json['halaqah_id']?.toString(),
-      date: rawDate != null
-          ? DateTime.tryParse(rawDate.toString()) ?? DateTime.now()
-          : DateTime.now(),
-      status: json['status']?.toString() ?? 'present',
-      teacherRemarks: (json['remarks'] ?? json['teacher_remarks'])?.toString(),
-      markedBy: json['marked_by']?.toString(),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      studentId: JsonParsers.asString(json['student_id']),
+      studentName: JsonParsers.asNullableString(json['student_name']) ?? 'Student',
+      halaqahId: JsonParsers.asNullableString(json['halaqah_id']),
+      date: JsonParsers.asDateTime(rawDate),
+      status: JsonParsers.asNullableString(json['status']) ?? 'present',
+      teacherRemarks: JsonParsers.asNullableString(
+        json['remarks'] ?? json['teacher_remarks'],
+      ),
+      markedBy: JsonParsers.asNullableString(json['marked_by']),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

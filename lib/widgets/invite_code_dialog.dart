@@ -27,6 +27,7 @@ class InviteCodeDialog extends StatefulWidget {
 
 class _InviteCodeDialogState extends State<InviteCodeDialog> {
   late String _selectedRole;
+  late final Stream<List<InvitationCode>> _codesStream;
   final TextEditingController _targetEmailController = TextEditingController();
   bool _isGenerating = false;
   String? _newlyGeneratedCode;
@@ -36,6 +37,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
   void initState() {
     super.initState();
     _selectedRole = widget.initialRole;
+    _codesStream = SupabaseService.instance.streamInviteCodes();
   }
 
   @override
@@ -298,7 +300,7 @@ class _InviteCodeDialogState extends State<InviteCodeDialog> {
 
             Expanded(
               child: StreamBuilder<List<InvitationCode>>(
-                stream: SupabaseService.instance.streamInviteCodes(),
+                stream: _codesStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting &&
                       !snapshot.hasData) {

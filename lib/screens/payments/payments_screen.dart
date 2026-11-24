@@ -689,15 +689,27 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
               children: [
                 Expanded(
                   child: OutlinedButton.icon(
-                    onPressed: () {
-                      PaymentService.instance.sendOverdueAlertToAdmin(payment);
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                            'Overdue alert dispatched for ${payment.parentName}.',
+                    onPressed: () async {
+                      try {
+                        await PaymentService.instance
+                            .sendOverdueAlertToAdmin(payment);
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(
+                              'Overdue alert dispatched for ${payment.parentName}.',
+                            ),
                           ),
-                        ),
-                      );
+                        );
+                      } catch (e) {
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(SupabaseService.cleanErrorMessage(e)),
+                            backgroundColor: p.danger,
+                          ),
+                        );
+                      }
                     },
                     icon: Icon(Icons.notifications_active_rounded,
                         size: 15, color: p.gold),
@@ -1018,336 +1030,22 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
       return;
     }
 
-    Student selectedStudent = students.first;
-    DateTime feeStartDate = DateTime.now();
-    final monthCtrl = TextEditingController(text: 'October 2026');
-    final amountCtrl = TextEditingController(text: '50');
-
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Issue Monthly Tuition Fee'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                DropdownButtonFormField<Student>(
-                  value: selectedStudent,
-                  isExpanded: true,
-                  items: students
-                      .map((s) => DropdownMenuItem(
-                            value: s,
-                            child: Text(
-                              '${s.fullName} (${s.parentName})',
-                              overflow: TextOverflow.ellipsis,
-                              style: const TextStyle(fontSize: 13),
-                            ),
-                          ))
-                      .toList(),
-                  onChanged: (val) =>
-                      setDialogState(() => selectedStudent = val!),
-                  decoration: const InputDecoration(labelText: 'Select Student'),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: monthCtrl,
-                  decoration: const InputDecoration(
-                    labelText: 'Tuition Month (e.g. October 2026)',
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: amountCtrl,
-                  keyboardType: TextInputType.number,
-                  decoration: const InputDecoration(labelText: 'Fee Amount (\$)'),
-                ),
-                const SizedBox(height: 12),
-                InkWell(
-                  onTap: () async {
-                    final picked = await showDatePicker(
-                      context: ctx,
-                      initialDate: feeStartDate,
-                      firstDate: DateTime(2020),
-                      lastDate: DateTime(2035),
-                    );
-                    if (picked != null) {
-                      setDialogState(() => feeStartDate = picked);
-                    }
-                  },
-                  child: Container(
-                    padding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 12),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(10),
-                      border: Border.all(color: Colors.black26),
-                    ),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Fee Start Date *',
-                              style: TextStyle(
-                                  fontSize: 11, color: Colors.black54),
-                            ),
-                            const SizedBox(height: 2),
-                            Text(
-                              feeStartDate.toLocal().toString().substring(0, 10),
-                              style: const TextStyle(
-                                  fontSize: 13.5, fontWeight: FontWeight.w600),
-                            ),
-                          ],
-                        ),
-                        const Icon(Icons.calendar_today_rounded,
-                            size: 18, color: Colors.black54),
-                      ],
-                    ),
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                final amt = double.tryParse(amountCtrl.text) ?? 50.0;
-                try {
-                  await PaymentService.instance.createPaymentInvoice(
-                    studentId: selectedStudent.id,
-                    studentName: selectedStudent.fullName,
-                    parentId: selectedStudent.parentId ?? '',
-                    parentName: selectedStudent.parentName,
-                    parentEmail: selectedStudent.parentPhone,
-                    month: monthCtrl.text.trim(),
-                    amount: amt,
-                    dueDate: DateTime.now().add(const Duration(days: 10)),
-                    feeStartDate: feeStartDate,
-                  );
-                  if (ctx.mounted) Navigator.pop(ctx);
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Tuition issued for ${selectedStudent.fullName}.',
-                        ),
-                      ),
-                    );
-                  }
-                } catch (e) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(SupabaseService.cleanErrorMessage(e)),
-                        backgroundColor: AppColors.of(context).danger,
-                      ),
-                    );
-                  }
-                }
-              },
-              child: const Text('Issue Tuition'),
-            ),
-          ],
-        ),
+      builder: (_) => _IssueFeeDialog(
+        students: students,
+        hostMessenger: ScaffoldMessenger.of(context),
       ),
     );
   }
 
   void _showUploadReceiptDialog(BuildContext context, MonthlyPayment payment) {
-    final p = AppColors.of(context);
-    String selectedMethod = 'Commercial Bank of Ethiopia (CBE)';
-    final noteCtrl =
-        TextEditingController(text: 'Payment completed via mobile banking.');
-    XFile? selectedReceipt;
-    bool isUploading = false;
-
-    showDialog(
+    showDialog<void>(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: const Text('Upload Payment Receipt'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  'Student: ${payment.studentName} (${payment.month})',
-                  style: const TextStyle(
-                    fontSize: 13,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  'Amount Due: \$${payment.amount.toStringAsFixed(0)}',
-                  style: TextStyle(
-                    fontSize: 12.5,
-                    fontWeight: FontWeight.w700,
-                    color: p.primary,
-                  ),
-                ),
-                const SizedBox(height: 14),
-                DropdownButtonFormField<String>(
-                  value: selectedMethod,
-                  items: const [
-                    DropdownMenuItem(
-                      value: 'Commercial Bank of Ethiopia (CBE)',
-                      child: Text('CBE Mobile Banking'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Telebirr',
-                      child: Text('Telebirr Mobile'),
-                    ),
-                    DropdownMenuItem(
-                      value: 'Cash Deposit',
-                      child: Text('Cash Slip'),
-                    ),
-                  ],
-                  onChanged: isUploading
-                      ? null
-                      : (val) => setDialogState(() => selectedMethod = val!),
-                  decoration:
-                      const InputDecoration(labelText: 'Payment Channel'),
-                ),
-                const SizedBox(height: 12),
-                InkWell(
-                  onTap: isUploading
-                      ? null
-                      : () async {
-                          final picked = await ImagePicker().pickImage(
-                            source: ImageSource.gallery,
-                            imageQuality: 85,
-                          );
-                          if (picked != null) {
-                            setDialogState(() => selectedReceipt = picked);
-                          }
-                        },
-                  borderRadius: BorderRadius.circular(14),
-                  child: Container(
-                    width: double.infinity,
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: p.primarySoft,
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(color: p.primary.withOpacity(0.35)),
-                    ),
-                    child: Column(
-                      children: [
-                        Icon(
-                          selectedReceipt != null
-                              ? Icons.check_circle_outline_rounded
-                              : Icons.add_photo_alternate_rounded,
-                          size: 32,
-                          color: p.primary,
-                        ),
-                        const SizedBox(height: 6),
-                        Text(
-                          selectedReceipt != null
-                              ? 'Selected: ${selectedReceipt!.name}'
-                              : 'Tap to Pick Receipt Screenshot',
-                          style: TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                            color: p.primary,
-                          ),
-                          textAlign: TextAlign.center,
-                        ),
-                        const SizedBox(height: 2),
-                        Text(
-                          selectedReceipt != null
-                              ? 'Tap to change image'
-                              : 'Choose payment slip or screenshot from gallery',
-                          style: TextStyle(fontSize: 11, color: p.inkMuted),
-                          textAlign: TextAlign.center,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: noteCtrl,
-                  enabled: !isUploading,
-                  decoration: const InputDecoration(
-                    labelText: 'Transaction Reference / Notes',
-                  ),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: isUploading ? null : () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: (isUploading || selectedReceipt == null)
-                  ? null
-                  : () async {
-                      setDialogState(() => isUploading = true);
-                      try {
-                        final bytes = await selectedReceipt!.readAsBytes();
-                        final uploadedUrl =
-                            await PaymentService.instance.uploadReceipt(
-                          paymentId: payment.id,
-                          fileName: selectedReceipt!.name,
-                          bytes: bytes,
-                        );
-                        if (uploadedUrl == null || uploadedUrl.isEmpty) {
-                          throw Exception(
-                            'Failed to upload receipt image to cloud storage.',
-                          );
-                        }
-                        await PaymentService.instance.submitPaymentReceipt(
-                          paymentId: payment.id,
-                          receiptUrl: uploadedUrl,
-                          customNote:
-                              '$selectedMethod — ${noteCtrl.text.trim()}',
-                        );
-                        if (ctx.mounted) Navigator.pop(ctx);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text(
-                                'Receipt submitted successfully. Admin will verify.',
-                              ),
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        setDialogState(() => isUploading = false);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content:
-                                  Text(SupabaseService.cleanErrorMessage(e)),
-                              backgroundColor: p.danger,
-                            ),
-                          );
-                        }
-                      }
-                    },
-              child: isUploading
-                  ? const SizedBox(
-                      width: 16,
-                      height: 16,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Text('Submit Receipt'),
-            ),
-          ],
-        ),
+      builder: (_) => _UploadReceiptDialog(
+        payment: payment,
+        hostMessenger: ScaffoldMessenger.of(context),
       ),
     );
   }
@@ -1498,8 +1196,9 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           if (_isSuperAdmin && payment.isSubmitted) ...[
             TextButton(
               onPressed: () {
+                final hostCtx = Navigator.of(context).context;
                 Navigator.pop(ctx);
-                _showRejectDialog(context, payment);
+                _showRejectDialog(hostCtx, payment);
               },
               child: Text(
                 'Reject with Reason',
@@ -1508,17 +1207,29 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             ),
             ElevatedButton(
               onPressed: () async {
-                await PaymentService.instance
-                    .approvePayment(paymentId: payment.id);
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content:
-                          Text('Payment approved for ${payment.studentName}.'),
-                      backgroundColor: p.success,
-                    ),
-                  );
+                final messenger = ScaffoldMessenger.of(context);
+                try {
+                  await PaymentService.instance
+                      .approvePayment(paymentId: payment.id);
+                  if (ctx.mounted) Navigator.pop(ctx);
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content:
+                            Text('Payment approved for ${payment.studentName}.'),
+                        backgroundColor: p.success,
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  if (mounted) {
+                    messenger.showSnackBar(
+                      SnackBar(
+                        content: Text(SupabaseService.cleanErrorMessage(e)),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
                 }
               },
               style: ElevatedButton.styleFrom(
@@ -1595,68 +1306,529 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
   }
 
   void _showRejectDialog(BuildContext context, MonthlyPayment payment) {
-    final p = AppColors.of(context);
-    final reasonCtrl = TextEditingController(
-      text:
-          'The uploaded screenshot is blurry and the transaction reference number cannot be read. Please re-upload.',
-    );
-
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Reject Payment Receipt'),
-        content: Column(
+      builder: (_) => _RejectReceiptDialog(
+        payment: payment,
+        hostMessenger: ScaffoldMessenger.of(context),
+      ),
+    );
+  }
+}
+
+class _IssueFeeDialog extends StatefulWidget {
+  final List<Student> students;
+  final ScaffoldMessengerState hostMessenger;
+
+  const _IssueFeeDialog({
+    required this.students,
+    required this.hostMessenger,
+  });
+
+  @override
+  State<_IssueFeeDialog> createState() => _IssueFeeDialogState();
+}
+
+class _IssueFeeDialogState extends State<_IssueFeeDialog> {
+  late Student _selectedStudent;
+  DateTime _feeStartDate = DateTime.now();
+  final _monthCtrl = TextEditingController(text: 'October 2026');
+  final _amountCtrl = TextEditingController(text: '50');
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _selectedStudent = widget.students.first;
+  }
+
+  @override
+  void dispose() {
+    _monthCtrl.dispose();
+    _amountCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final p = AppColors.of(context);
+    final month = _monthCtrl.text.trim();
+    final amt = double.tryParse(_amountCtrl.text.trim());
+    if (month.isEmpty) {
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('Please enter the tuition month label.'),
+          backgroundColor: p.danger,
+        ),
+      );
+      return;
+    }
+    if (amt == null || amt <= 0) {
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: const Text('Please enter a valid tuition fee amount (> 0).'),
+          backgroundColor: p.danger,
+        ),
+      );
+      return;
+    }
+
+    setState(() => _isSaving = true);
+    try {
+      await PaymentService.instance.createPaymentInvoice(
+        studentId: _selectedStudent.id,
+        studentName: _selectedStudent.fullName,
+        parentId: _selectedStudent.parentId ?? '',
+        parentName: _selectedStudent.parentName,
+        parentEmail: _selectedStudent.parentEmail ?? '',
+        month: month,
+        amount: amt,
+        dueDate: DateTime.now().add(const Duration(days: 10)),
+        feeStartDate: _feeStartDate,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Tuition issued for ${_selectedStudent.fullName}.'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(SupabaseService.cleanErrorMessage(e)),
+          backgroundColor: p.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Issue Monthly Tuition Fee'),
+      content: SingleChildScrollView(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
-              'Specify why ${payment.parentName}\'s receipt is rejected. This reason will be shown to the parent.',
-              style: const TextStyle(fontSize: 12.5),
+            DropdownButtonFormField<Student>(
+              value: _selectedStudent,
+              isExpanded: true,
+              items: widget.students
+                  .map((s) => DropdownMenuItem(
+                        value: s,
+                        child: Text(
+                          '${s.fullName} (${s.parentName})',
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(fontSize: 13),
+                        ),
+                      ))
+                  .toList(),
+              onChanged: (val) {
+                if (val != null) {
+                  setState(() => _selectedStudent = val);
+                }
+              },
+              decoration: const InputDecoration(labelText: 'Select Student'),
             ),
             const SizedBox(height: 12),
             TextField(
-              controller: reasonCtrl,
-              maxLines: 3,
+              controller: _monthCtrl,
               decoration: const InputDecoration(
-                labelText: 'Rejection Reason *',
-                hintText:
-                    'e.g. Blurry screenshot, incorrect amount, missing reference...',
+                labelText: 'Tuition Month (e.g. October 2026)',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _amountCtrl,
+              keyboardType:
+                  const TextInputType.numberWithOptions(decimal: true),
+              decoration: const InputDecoration(labelText: 'Fee Amount (\$)'),
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: () async {
+                final picked = await showDatePicker(
+                  context: context,
+                  initialDate: _feeStartDate,
+                  firstDate: DateTime(2020),
+                  lastDate: DateTime(2035),
+                );
+                if (mounted && picked != null) {
+                  setState(() => _feeStartDate = picked);
+                }
+              },
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+                decoration: BoxDecoration(
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: Colors.black26),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Fee Start Date *',
+                          style: TextStyle(fontSize: 11, color: Colors.black54),
+                        ),
+                        const SizedBox(height: 2),
+                        Text(
+                          _feeStartDate.toLocal().toString().substring(0, 10),
+                          style: const TextStyle(
+                              fontSize: 13.5, fontWeight: FontWeight.w600),
+                        ),
+                      ],
+                    ),
+                    const Icon(Icons.calendar_today_rounded,
+                        size: 18, color: Colors.black54),
+                  ],
+                ),
               ),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              if (reasonCtrl.text.trim().isNotEmpty) {
-                await PaymentService.instance.rejectPayment(
-                  paymentId: payment.id,
-                  reason: reasonCtrl.text.trim(),
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Payment rejected and reason sent to ${payment.parentName}.',
-                      ),
-                    ),
-                  );
-                }
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: p.danger,
-              foregroundColor: Colors.white,
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _submit,
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Issue Tuition'),
+        ),
+      ],
+    );
+  }
+}
+
+class _UploadReceiptDialog extends StatefulWidget {
+  final MonthlyPayment payment;
+  final ScaffoldMessengerState hostMessenger;
+
+  const _UploadReceiptDialog({
+    required this.payment,
+    required this.hostMessenger,
+  });
+
+  @override
+  State<_UploadReceiptDialog> createState() => _UploadReceiptDialogState();
+}
+
+class _UploadReceiptDialogState extends State<_UploadReceiptDialog> {
+  String _selectedMethod = 'Commercial Bank of Ethiopia (CBE)';
+  final _noteCtrl =
+      TextEditingController(text: 'Payment completed via mobile banking.');
+  XFile? _selectedReceipt;
+  bool _isUploading = false;
+
+  @override
+  void dispose() {
+    _noteCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final receipt = _selectedReceipt;
+    if (receipt == null) return;
+    final p = AppColors.of(context);
+    setState(() => _isUploading = true);
+    try {
+      final bytes = await receipt.readAsBytes();
+      final uploadedUrl = await PaymentService.instance.uploadReceipt(
+        paymentId: widget.payment.id,
+        fileName: receipt.name,
+        bytes: bytes,
+      );
+      if (uploadedUrl == null || uploadedUrl.isEmpty) {
+        throw Exception('Failed to upload receipt image to cloud storage.');
+      }
+      await PaymentService.instance.submitPaymentReceipt(
+        paymentId: widget.payment.id,
+        receiptUrl: uploadedUrl,
+        customNote: '$_selectedMethod — ${_noteCtrl.text.trim()}',
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.hostMessenger.showSnackBar(
+        const SnackBar(
+          content: Text('Receipt submitted successfully. Admin will verify.'),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isUploading = false);
+      }
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(SupabaseService.cleanErrorMessage(e)),
+          backgroundColor: p.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    final receipt = _selectedReceipt;
+
+    return AlertDialog(
+      title: const Text('Upload Payment Receipt'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Student: ${widget.payment.studentName} (${widget.payment.month})',
+              style: const TextStyle(fontSize: 13, fontWeight: FontWeight.w600),
             ),
-            child: const Text('Confirm Rejection'),
+            Text(
+              'Amount Due: \$${widget.payment.amount.toStringAsFixed(0)}',
+              style: TextStyle(
+                fontSize: 12.5,
+                fontWeight: FontWeight.w700,
+                color: p.primary,
+              ),
+            ),
+            const SizedBox(height: 14),
+            DropdownButtonFormField<String>(
+              value: _selectedMethod,
+              items: const [
+                DropdownMenuItem(
+                  value: 'Commercial Bank of Ethiopia (CBE)',
+                  child: Text('CBE Mobile Banking'),
+                ),
+                DropdownMenuItem(
+                  value: 'Telebirr',
+                  child: Text('Telebirr Mobile'),
+                ),
+                DropdownMenuItem(
+                  value: 'Cash Deposit',
+                  child: Text('Cash Slip'),
+                ),
+              ],
+              onChanged: _isUploading
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        setState(() => _selectedMethod = val);
+                      }
+                    },
+              decoration: const InputDecoration(labelText: 'Payment Channel'),
+            ),
+            const SizedBox(height: 12),
+            InkWell(
+              onTap: _isUploading
+                  ? null
+                  : () async {
+                      final picked = await ImagePicker().pickImage(
+                        source: ImageSource.gallery,
+                        imageQuality: 85,
+                      );
+                      if (mounted && picked != null) {
+                        setState(() => _selectedReceipt = picked);
+                      }
+                    },
+              borderRadius: BorderRadius.circular(14),
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: p.primarySoft,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: p.primary.withOpacity(0.35)),
+                ),
+                child: Column(
+                  children: [
+                    Icon(
+                      receipt != null
+                          ? Icons.check_circle_outline_rounded
+                          : Icons.add_photo_alternate_rounded,
+                      size: 32,
+                      color: p.primary,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      receipt != null
+                          ? 'Selected: ${receipt.name}'
+                          : 'Tap to Pick Receipt Screenshot',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.w700,
+                        color: p.primary,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      receipt != null
+                          ? 'Tap to change image'
+                          : 'Choose payment slip or screenshot from gallery',
+                      style: TextStyle(fontSize: 11, color: p.inkMuted),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _noteCtrl,
+              enabled: !_isUploading,
+              decoration: const InputDecoration(
+                labelText: 'Transaction Reference / Notes',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isUploading ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: (_isUploading || receipt == null) ? null : _submit,
+          child: _isUploading
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Submit Receipt'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RejectReceiptDialog extends StatefulWidget {
+  final MonthlyPayment payment;
+  final ScaffoldMessengerState hostMessenger;
+
+  const _RejectReceiptDialog({
+    required this.payment,
+    required this.hostMessenger,
+  });
+
+  @override
+  State<_RejectReceiptDialog> createState() => _RejectReceiptDialogState();
+}
+
+class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
+  final _reasonCtrl = TextEditingController(
+    text:
+        'The uploaded screenshot is blurry and the transaction reference number cannot be read. Please re-upload.',
+  );
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _reasonCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final reason = _reasonCtrl.text.trim();
+    if (reason.isEmpty) return;
+    final p = AppColors.of(context);
+    setState(() => _isSaving = true);
+    try {
+      await PaymentService.instance.rejectPayment(
+        paymentId: widget.payment.id,
+        reason: reason,
+      );
+      if (!mounted) return;
+      Navigator.pop(context);
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Payment rejected and reason sent to ${widget.payment.parentName}.',
+          ),
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isSaving = false);
+      }
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(SupabaseService.cleanErrorMessage(e)),
+          backgroundColor: p.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+    return AlertDialog(
+      title: const Text('Reject Payment Receipt'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            'Specify why ${widget.payment.parentName}\'s receipt is rejected. This reason will be shown to the parent.',
+            style: const TextStyle(fontSize: 12.5),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _reasonCtrl,
+            maxLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Rejection Reason *',
+              hintText:
+                  'e.g. Blurry screenshot, incorrect amount, missing reference...',
+            ),
           ),
         ],
       ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving ? null : _submit,
+          style: ElevatedButton.styleFrom(
+            backgroundColor: p.danger,
+            foregroundColor: Colors.white,
+          ),
+          child: _isSaving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Confirm Rejection'),
+        ),
+      ],
     );
   }
 }

@@ -48,175 +48,17 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
           _teachers = List<Map<String, dynamic>>.from(res ?? []);
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      debugPrint('[HalaqahManagementSheet] fetch teachers error: $e');
+    }
   }
 
   void _showAddHalaqahDialog() {
-    final p = AppColors.of(context);
-    final nameCtrl = TextEditingController();
-    final scheduleCtrl = TextEditingController(text: 'Daily Recitation Session');
-    final descCtrl = TextEditingController();
-    String? selectedTeacherId;
-    String? selectedTeacherName;
-    bool isCreating = false;
-
-    showDialog(
+    showDialog<void>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.add_circle_outline_rounded, color: p.primary),
-                const SizedBox(width: 8),
-                const Expanded(child: Text('Create Study Circle')),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Halaqah Name *',
-                      hintText: 'e.g. Halaqah Bilal (حلقة بلال)',
-                      prefixIcon: Icon(Icons.school_rounded, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  DropdownButtonFormField<String>(
-                    value: selectedTeacherId,
-                    hint: const Text('Assign Teacher (Optional)'),
-                    items: [
-                      const DropdownMenuItem<String>(
-                        value: null,
-                        child: Text('Unassigned (Assign later)',
-                            style: TextStyle(fontSize: 12.5)),
-                      ),
-                      ..._teachers.map((t) {
-                        return DropdownMenuItem<String>(
-                          value: t['id']?.toString(),
-                          child: Text(
-                            '${t['full_name']} (${t['phone'] ?? ''})',
-                            style: const TextStyle(fontSize: 12.5),
-                            overflow: TextOverflow.ellipsis,
-                          ),
-                        );
-                      }),
-                    ],
-                    onChanged: (val) {
-                      setDialogState(() {
-                        selectedTeacherId = val;
-                        if (val != null) {
-                          final match = _teachers.where((t) => t['id'] == val);
-                          selectedTeacherName = match.isNotEmpty
-                              ? match.first['full_name']
-                              : null;
-                        } else {
-                          selectedTeacherName = null;
-                        }
-                      });
-                    },
-                    decoration: const InputDecoration(
-                      labelText: 'Assigned Ustaz',
-                      prefixIcon: Icon(Icons.person_rounded, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: scheduleCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Schedule',
-                      hintText: 'e.g. Mon-Fri 4:00 PM - 6:00 PM',
-                      prefixIcon: Icon(Icons.access_time_rounded, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: descCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Circle Notes / Curriculum Focus',
-                      hintText:
-                          'e.g. Juz Amma memorization and Makharij revision',
-                      prefixIcon: Icon(Icons.menu_book_rounded, size: 20),
-                    ),
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: isCreating ? null : () => Navigator.of(ctx).pop(),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: (isCreating || nameCtrl.text.trim().isEmpty)
-                    ? null
-                    : () async {
-                        final name = nameCtrl.text.trim();
-                        setDialogState(() => isCreating = true);
-                        try {
-                          final halaqah =
-                              await HalaqahService.instance.createHalaqah(
-                            name: name,
-                            teacherId: selectedTeacherId,
-                            teacherName: selectedTeacherName,
-                            schedule: scheduleCtrl.text.trim(),
-                            description: descCtrl.text.trim(),
-                          );
-
-                          if (ctx.mounted) {
-                            Navigator.of(ctx).pop();
-                          }
-                          if (mounted) {
-                            final isOfflineOnly = halaqah.id.startsWith('hal-');
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  isOfflineOnly
-                                      ? 'Study Circle "$name" created in offline cache.'
-                                      : 'Study Circle "$name" created successfully.',
-                                ),
-                                backgroundColor:
-                                    isOfflineOnly ? p.warning : p.success,
-                              ),
-                            );
-                          }
-                        } catch (e) {
-                          if (ctx.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  'Failed to create circle: ${SupabaseService.cleanErrorMessage(e)}',
-                                ),
-                                backgroundColor: p.danger,
-                              ),
-                            );
-                          }
-                        } finally {
-                          if (ctx.mounted) {
-                            setDialogState(() => isCreating = false);
-                          }
-                        }
-                      },
-                child: isCreating
-                    ? const SizedBox(
-                        width: 16,
-                        height: 16,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
-                    : const Text('Create Circle'),
-              ),
-            ],
-          );
-        },
+      builder: (_) => _AddHalaqahDialog(
+        teachers: _teachers,
+        hostMessenger: ScaffoldMessenger.of(context),
       ),
     );
   }
@@ -290,6 +132,7 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                               size: 19, color: p.danger),
                           tooltip: 'Delete Circle',
                           onPressed: () {
+                            final messenger = ScaffoldMessenger.of(context);
                             showDialog(
                               context: context,
                               builder: (c) => AlertDialog(
@@ -302,10 +145,28 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
                                     child: const Text('Cancel'),
                                   ),
                                   ElevatedButton(
-                                    onPressed: () {
+                                    onPressed: () async {
                                       Navigator.pop(c);
-                                      HalaqahService.instance
-                                          .deleteHalaqah(h.id);
+                                      try {
+                                        await HalaqahService.instance
+                                            .deleteHalaqah(h.id);
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                                'Removed circle "${h.name}".'),
+                                            backgroundColor: p.success,
+                                          ),
+                                        );
+                                      } catch (e) {
+                                        messenger.showSnackBar(
+                                          SnackBar(
+                                            content: Text(
+                                              'Could not delete circle: ${SupabaseService.cleanErrorMessage(e)}',
+                                            ),
+                                            backgroundColor: p.danger,
+                                          ),
+                                        );
+                                      }
                                     },
                                     style: ElevatedButton.styleFrom(
                                       backgroundColor: p.danger,
@@ -374,6 +235,181 @@ class _HalaqahManagementSheetState extends State<HalaqahManagementSheet> {
           );
         },
       ),
+    );
+  }
+}
+
+class _AddHalaqahDialog extends StatefulWidget {
+  final List<Map<String, dynamic>> teachers;
+  final ScaffoldMessengerState hostMessenger;
+
+  const _AddHalaqahDialog({
+    required this.teachers,
+    required this.hostMessenger,
+  });
+
+  @override
+  State<_AddHalaqahDialog> createState() => _AddHalaqahDialogState();
+}
+
+class _AddHalaqahDialogState extends State<_AddHalaqahDialog> {
+  final _nameCtrl = TextEditingController();
+  final _scheduleCtrl = TextEditingController(text: 'Daily Recitation Session');
+  final _descCtrl = TextEditingController();
+  String? _selectedTeacherId;
+  String? _selectedTeacherName;
+  bool _isCreating = false;
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _scheduleCtrl.dispose();
+    _descCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _submit() async {
+    final p = AppColors.of(context);
+    final name = _nameCtrl.text.trim();
+    setState(() => _isCreating = true);
+    try {
+      await HalaqahService.instance.createHalaqah(
+        name: name,
+        teacherId: _selectedTeacherId,
+        teacherName: _selectedTeacherName,
+        schedule: _scheduleCtrl.text.trim(),
+        description: _descCtrl.text.trim(),
+      );
+      if (!mounted) return;
+      Navigator.of(context).pop();
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text('Study Circle "$name" created successfully.'),
+          backgroundColor: p.success,
+        ),
+      );
+    } catch (e) {
+      if (mounted) {
+        setState(() => _isCreating = false);
+      }
+      widget.hostMessenger.showSnackBar(
+        SnackBar(
+          content: Text(
+            'Failed to create circle: ${SupabaseService.cleanErrorMessage(e)}',
+          ),
+          backgroundColor: p.danger,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = AppColors.of(context);
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.add_circle_outline_rounded, color: p.primary),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Create Study Circle')),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Halaqah Name *',
+                hintText: 'e.g. Halaqah Bilal (حلقة بلال)',
+                prefixIcon: Icon(Icons.school_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 12),
+            DropdownButtonFormField<String>(
+              value: _selectedTeacherId,
+              hint: const Text('Assign Teacher (Optional)'),
+              items: [
+                const DropdownMenuItem<String>(
+                  value: null,
+                  child: Text('Unassigned (Assign later)',
+                      style: TextStyle(fontSize: 12.5)),
+                ),
+                ...widget.teachers.map((t) {
+                  return DropdownMenuItem<String>(
+                    value: t['id']?.toString(),
+                    child: Text(
+                      '${t['full_name']} (${t['phone'] ?? ''})',
+                      style: const TextStyle(fontSize: 12.5),
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  );
+                }),
+              ],
+              onChanged: (val) {
+                setState(() {
+                  _selectedTeacherId = val;
+                  if (val != null) {
+                    final match = widget.teachers.where((t) => t['id'] == val);
+                    _selectedTeacherName = match.isNotEmpty
+                        ? match.first['full_name']?.toString()
+                        : null;
+                  } else {
+                    _selectedTeacherName = null;
+                  }
+                });
+              },
+              decoration: const InputDecoration(
+                labelText: 'Assigned Ustaz',
+                prefixIcon: Icon(Icons.person_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _scheduleCtrl,
+              decoration: const InputDecoration(
+                labelText: 'Schedule',
+                hintText: 'e.g. Mon-Fri 4:00 PM - 6:00 PM',
+                prefixIcon: Icon(Icons.access_time_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descCtrl,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Circle Notes / Curriculum Focus',
+                hintText: 'e.g. Juz Amma memorization and Makharij revision',
+                prefixIcon: Icon(Icons.menu_book_rounded, size: 20),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isCreating ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed:
+              (_isCreating || _nameCtrl.text.trim().isEmpty) ? null : _submit,
+          child: _isCreating
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(
+                    strokeWidth: 2,
+                    color: Colors.white,
+                  ),
+                )
+              : const Text('Create Circle'),
+        ),
+      ],
     );
   }
 }

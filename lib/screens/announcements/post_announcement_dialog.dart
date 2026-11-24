@@ -82,6 +82,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
               ? await File(pickedFile.path!).readAsBytes()
               : null);
 
+      if (!mounted) return;
       if (fileBytes == null) {
         setState(
             () => _errorMessage = 'Could not read selected file from device.');
@@ -142,6 +143,7 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       if (picked == null) return;
 
       final fileBytes = await picked.readAsBytes();
+      if (!mounted) return;
       final fileName = picked.name;
 
       setState(() {
@@ -225,13 +227,15 @@ class _PostAnnouncementDialogState extends State<PostAnnouncementDialog> {
       if (!mounted) return;
 
       if (res['success'] == true) {
+        final messenger = ScaffoldMessenger.of(context);
+        final successColor = AppColors.of(context).success;
         Navigator.of(context).pop(true);
-        ScaffoldMessenger.of(context).showSnackBar(
+        messenger.showSnackBar(
           SnackBar(
             content: const Text(
               'Announcement broadcasted to all users successfully.',
             ),
-            backgroundColor: AppColors.of(context).success,
+            backgroundColor: successColor,
           ),
         );
       } else {

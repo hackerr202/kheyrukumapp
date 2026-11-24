@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 /// Model representing an Admin-Generated Signup Invitation Code
 class InvitationCode {
   final String id;
@@ -28,21 +30,21 @@ class InvitationCode {
 
   factory InvitationCode.fromJson(Map<String, dynamic> json) {
     return InvitationCode(
-      id: json['id'] as String? ?? '',
-      code: json['code'] as String? ?? '',
-      role: (json['role'] as String? ?? 'parent').toLowerCase(),
-      targetEmail: json['target_email'] as String?,
-      linkedStudentId: json['linked_student_id'] as String?,
-      targetHalaqahId: json['target_halaqah_id'] as String?,
-      isUsed: json['is_used'] as bool? ?? false,
-      usedBy: json['used_by'] as String?,
-      usedAt: json['used_at'] != null ? DateTime.tryParse(json['used_at'].toString()) : null,
-      expiresAt: json['expires_at'] != null
-          ? DateTime.tryParse(json['expires_at'].toString()) ?? DateTime.now().add(const Duration(days: 30))
-          : DateTime.now().add(const Duration(days: 30)),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      code: JsonParsers.asString(json['code']),
+      role: (JsonParsers.asNullableString(json['role']) ?? 'parent')
+          .toLowerCase(),
+      targetEmail: JsonParsers.asNullableString(json['target_email']),
+      linkedStudentId: JsonParsers.asNullableString(json['linked_student_id']),
+      targetHalaqahId: JsonParsers.asNullableString(json['target_halaqah_id']),
+      isUsed: JsonParsers.asBool(json['is_used']),
+      usedBy: JsonParsers.asNullableString(json['used_by']),
+      usedAt: JsonParsers.asNullableDateTime(json['used_at']),
+      expiresAt: JsonParsers.asDateTime(
+        json['expires_at'],
+        DateTime.now().add(const Duration(days: 30)),
+      ),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

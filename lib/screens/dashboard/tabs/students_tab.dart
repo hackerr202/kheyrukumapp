@@ -10,6 +10,7 @@ import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/messaging_service.dart';
 import '../../../core/services/payment_service.dart';
 import '../../../core/services/student_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/invite_code_dialog.dart';
 import '../../../widgets/pro_ui_kit.dart';
@@ -249,24 +250,38 @@ class _StudentsTabState extends State<StudentsTab> {
                       onPressed: classStudents.isEmpty
                           ? null
                           : () async {
-                              await StudentService.instance
-                                  .markHalaqahAllPresent(
-                                halaqahName: assignedHalaqah,
-                                halaqahId: assignedHalaqahId,
-                                markedBy: AuthSessionService.instance.userName,
-                                date: _teacherSelectedDate,
-                              );
-                              if (!mounted) return;
-                              setState(() {});
-                              if (context.mounted) {
-                                ScaffoldMessenger.of(context).showSnackBar(
-                                  SnackBar(
-                                    content: const Text(
-                                      'All class students marked Present. Parents notified.',
-                                    ),
-                                    backgroundColor: p.success,
-                                  ),
+                              try {
+                                await StudentService.instance
+                                    .markHalaqahAllPresent(
+                                  halaqahName: assignedHalaqah,
+                                  halaqahId: assignedHalaqahId,
+                                  markedBy: AuthSessionService.instance.userName,
+                                  date: _teacherSelectedDate,
                                 );
+                                if (!mounted) return;
+                                setState(() {});
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: const Text(
+                                        'All class students marked Present. Parents notified.',
+                                      ),
+                                      backgroundColor: p.success,
+                                    ),
+                                  );
+                                }
+                              } catch (e) {
+                                if (!mounted) return;
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(
+                                        'Failed to mark attendance: ${SupabaseService.cleanErrorMessage(e)}',
+                                      ),
+                                      backgroundColor: p.danger,
+                                    ),
+                                  );
+                                }
                               }
                             },
                       icon: const Icon(Icons.done_all_rounded, size: 15),
@@ -393,24 +408,39 @@ class _StudentsTabState extends State<StudentsTab> {
                                 Expanded(
                                   child: ElevatedButton.icon(
                                     onPressed: () async {
-                                      await AbsenceService.instance
-                                          .approveRequest(
-                                        req.id,
-                                        reviewedBy: AuthSessionService
-                                            .instance.userName,
-                                      );
-                                      if (!mounted) return;
-                                      setState(() {});
-                                      if (context.mounted) {
-                                        ScaffoldMessenger.of(context)
-                                            .showSnackBar(
-                                          SnackBar(
-                                            content: Text(
-                                              'Absence excuse approved for ${req.studentName}.',
-                                            ),
-                                            backgroundColor: p.excused,
-                                          ),
+                                      try {
+                                        await AbsenceService.instance
+                                            .approveRequest(
+                                          req.id,
+                                          reviewedBy: AuthSessionService
+                                              .instance.userName,
                                         );
+                                        if (!mounted) return;
+                                        setState(() {});
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Absence excuse approved for ${req.studentName}.',
+                                              ),
+                                              backgroundColor: p.excused,
+                                            ),
+                                          );
+                                        }
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Failed to approve request: ${SupabaseService.cleanErrorMessage(e)}',
+                                              ),
+                                              backgroundColor: p.danger,
+                                            ),
+                                          );
+                                        }
                                       }
                                     },
                                     icon: const Icon(Icons.check_rounded,
@@ -429,14 +459,29 @@ class _StudentsTabState extends State<StudentsTab> {
                                 Expanded(
                                   child: OutlinedButton.icon(
                                     onPressed: () async {
-                                      await AbsenceService.instance
-                                          .declineRequest(
-                                        req.id,
-                                        reviewedBy: AuthSessionService
-                                            .instance.userName,
-                                      );
-                                      if (!mounted) return;
-                                      setState(() {});
+                                      try {
+                                        await AbsenceService.instance
+                                            .declineRequest(
+                                          req.id,
+                                          reviewedBy: AuthSessionService
+                                              .instance.userName,
+                                        );
+                                        if (!mounted) return;
+                                        setState(() {});
+                                      } catch (e) {
+                                        if (!mounted) return;
+                                        if (context.mounted) {
+                                          ScaffoldMessenger.of(context)
+                                              .showSnackBar(
+                                            SnackBar(
+                                              content: Text(
+                                                'Failed to decline request: ${SupabaseService.cleanErrorMessage(e)}',
+                                              ),
+                                              backgroundColor: p.danger,
+                                            ),
+                                          );
+                                        }
+                                      }
                                     },
                                     icon: Icon(Icons.close_rounded,
                                         size: 15, color: p.danger),
@@ -723,26 +768,39 @@ class _StudentsTabState extends State<StudentsTab> {
       }
       return;
     }
-    final convo = await MessagingService.instance.startTeacherChatWithParent(
-      teacherId: AuthSessionService.instance.userId,
-      teacherName: AuthSessionService.instance.userName,
-      parentId: student.parentId!,
-      parentName: student.parentName,
-      studentName: student.fullName,
-      halaqahId: student.halaqahId,
-    );
-
-    if (context.mounted) {
-      Navigator.push(
-        context,
-        MaterialPageRoute(
-          builder: (_) => ChatScreen(
-            conversationId: convo.id,
-            conversationTitle: convo.title,
-            targetRole: 'parent',
-          ),
-        ),
+    try {
+      final convo = await MessagingService.instance.startTeacherChatWithParent(
+        teacherId: AuthSessionService.instance.userId,
+        teacherName: AuthSessionService.instance.userName,
+        parentId: student.parentId!,
+        parentName: student.parentName,
+        studentName: student.fullName,
+        halaqahId: student.halaqahId,
       );
+
+      if (context.mounted) {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => ChatScreen(
+              conversationId: convo.id,
+              conversationTitle: convo.title,
+              targetRole: 'parent',
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+            backgroundColor: AppColors.of(context).danger,
+          ),
+        );
+      }
     }
   }
 
@@ -758,22 +816,34 @@ class _StudentsTabState extends State<StudentsTab> {
     return Expanded(
       child: InkWell(
         onTap: () async {
-          await StudentService.instance.recordDailyAttendance(
-            studentId: student.id,
-            status: status,
-            markedBy: AuthSessionService.instance.userName,
-            sessionDate: _teacherSelectedDate,
-          );
-          if (!mounted) return;
-          setState(() {});
-          if (mounted) {
+          try {
+            await StudentService.instance.recordDailyAttendance(
+              studentId: student.id,
+              status: status,
+              markedBy: AuthSessionService.instance.userName,
+              sessionDate: _teacherSelectedDate,
+            );
+            if (!mounted) return;
+            setState(() {});
+            if (mounted) {
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content: Text(
+                    '${student.fullName} marked ${status.toUpperCase()}. Parent notified.',
+                  ),
+                  duration: const Duration(seconds: 2),
+                  backgroundColor: color,
+                ),
+              );
+            }
+          } catch (e) {
+            if (!mounted) return;
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
                 content: Text(
-                  '${student.fullName} marked ${status.toUpperCase()}. Parent notified.',
+                  'Failed to save attendance: ${SupabaseService.cleanErrorMessage(e)}',
                 ),
-                duration: const Duration(seconds: 2),
-                backgroundColor: color,
+                backgroundColor: p.danger,
               ),
             );
           }
@@ -979,28 +1049,42 @@ class _StudentsTabState extends State<StudentsTab> {
                             ? hMatch.first.teacherName
                             : 'Assigned Ustaz';
 
-                        final convo =
-                            await MessagingService.instance.startParentChat(
-                          parentId: AuthSessionService.instance.userId,
-                          parentName: AuthSessionService.instance.userName,
-                          targetRole: 'teacher',
-                          targetName: teacherName,
-                          targetId:
-                              hMatch.isNotEmpty ? hMatch.first.teacherId : null,
-                          halaqahName: currentChild.halaqahName,
-                        );
-
-                        if (context.mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                conversationId: convo.id,
-                                conversationTitle: convo.title,
-                                targetRole: 'teacher',
-                              ),
-                            ),
+                        try {
+                          final convo =
+                              await MessagingService.instance.startParentChat(
+                            parentId: AuthSessionService.instance.userId,
+                            parentName: AuthSessionService.instance.userName,
+                            targetRole: 'teacher',
+                            targetName: teacherName,
+                            targetId:
+                                hMatch.isNotEmpty ? hMatch.first.teacherId : null,
+                            halaqahName: currentChild.halaqahName,
+                            halaqahId: currentChild.halaqahId,
                           );
+
+                          if (context.mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (_) => ChatScreen(
+                                  conversationId: convo.id,
+                                  conversationTitle: convo.title,
+                                  targetRole: 'teacher',
+                                ),
+                              ),
+                            );
+                          }
+                        } catch (e) {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+                                ),
+                                backgroundColor: p.danger,
+                              ),
+                            );
+                          }
                         }
                       },
                       icon: const Icon(Icons.chat_bubble_outline_rounded,
@@ -1519,19 +1603,35 @@ class _StudentsTabState extends State<StudentsTab> {
                         ),
                       );
                       if (confirm == true) {
-                        final ok = await StudentService.instance
-                            .deleteStudent(student.id);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                ok
-                                    ? 'Removed ${student.fullName} from roster.'
-                                    : 'Failed to remove student. Please check permissions.',
+                        try {
+                          final ok = await StudentService.instance
+                              .deleteStudent(student.id);
+                          if (!mounted) return;
+                          setState(() {});
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  ok
+                                      ? 'Removed ${student.fullName} from roster.'
+                                      : 'Failed to remove student. Please check permissions.',
+                                ),
+                                backgroundColor: ok ? p.success : p.danger,
                               ),
-                              backgroundColor: ok ? p.success : p.danger,
-                            ),
-                          );
+                            );
+                          }
+                        } catch (e) {
+                          if (!mounted) return;
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text(
+                                  'Failed to remove student: ${SupabaseService.cleanErrorMessage(e)}',
+                                ),
+                                backgroundColor: p.danger,
+                              ),
+                            );
+                          }
                         }
                       }
                     }
@@ -1625,22 +1725,35 @@ class _StudentsTabState extends State<StudentsTab> {
                         }
                         return;
                       }
-                      final convo = await MessagingService.instance
-                          .startDirectChatWithParent(
-                        parentId: student.parentId!,
-                        parentName: student.parentName,
-                      );
-                      if (context.mounted) {
-                        Navigator.push(
-                          context,
-                          MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              conversationId: convo.id,
-                              conversationTitle: convo.title,
-                              targetRole: 'parent',
-                            ),
-                          ),
+                      try {
+                        final convo = await MessagingService.instance
+                            .startDirectChatWithParent(
+                          parentId: student.parentId!,
+                          parentName: student.parentName,
                         );
+                        if (context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                conversationId: convo.id,
+                                conversationTitle: convo.title,
+                                targetRole: 'parent',
+                              ),
+                            ),
+                          );
+                        }
+                      } catch (e) {
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Could not open chat: ${SupabaseService.cleanErrorMessage(e)}',
+                              ),
+                              backgroundColor: p.danger,
+                            ),
+                          );
+                        }
                       }
                     },
                   ),
@@ -1695,360 +1808,42 @@ class _StudentsTabState extends State<StudentsTab> {
   // ===========================================================================
   // DIALOGS
   // ===========================================================================
-  void _showAddStudentDialog(BuildContext context) {
+  Future<void> _showAddStudentDialog(BuildContext context) async {
     final p = AppColors.of(context);
-    final nameCtrl = TextEditingController();
-    final ageCtrl = TextEditingController(text: '8');
-
-    final halaqahs = HalaqahService.instance.halaqahs;
-    String? selectedHalaqahId = halaqahs.isNotEmpty ? halaqahs.first.id : null;
-    String selectedHalaqahName =
-        halaqahs.isNotEmpty ? halaqahs.first.name : '';
-
-    final registeredParents = StudentService.instance.getRegisteredParents();
-    String? selectedParentId =
-        registeredParents.isNotEmpty ? registeredParents.first['id'] : null;
-
-    int juz = 30;
-    int surah = 1;
-    const int ayah = 1;
-
-    showDialog(
+    final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final currentHalaqahs = HalaqahService.instance.halaqahs;
-          final currentParents = StudentService.instance.getRegisteredParents();
-
-          final parsedAge = int.tryParse(ageCtrl.text.trim());
-          final bool isAgeValid = parsedAge != null && parsedAge > 0;
-
-          final bool canSubmit = nameCtrl.text.trim().isNotEmpty &&
-              isAgeValid &&
-              selectedParentId != null &&
-              selectedParentId!.isNotEmpty &&
-              selectedHalaqahId != null &&
-              selectedHalaqahId!.isNotEmpty;
-
-          return AlertDialog(
-            title: Row(
-              children: [
-                Icon(Icons.person_add_rounded, color: p.primary),
-                const SizedBox(width: 8),
-                const Expanded(
-                  child: Text(
-                    'Add Student & Link Parent',
-                    style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
-                  ),
-                ),
-              ],
-            ),
-            content: SingleChildScrollView(
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  TextField(
-                    controller: nameCtrl,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Student Full Name *',
-                      hintText: 'e.g. Abdur-Rahman Muhammed',
-                      prefixIcon: Icon(Icons.face_rounded, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: ageCtrl,
-                    keyboardType: TextInputType.number,
-                    onChanged: (_) => setDialogState(() {}),
-                    decoration: const InputDecoration(
-                      labelText: 'Student Age *',
-                      hintText: 'e.g. 8',
-                      prefixIcon: Icon(Icons.cake, size: 20),
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  if (currentHalaqahs.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: p.primary.withOpacity(0.08),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: p.primary.withOpacity(0.28)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.info_outline_rounded,
-                                  size: 16, color: p.primary),
-                              const SizedBox(width: 6),
-                              Text(
-                                'No Study Circles Created Yet',
-                                style: TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 12,
-                                  color: p.primary,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Please create a halaqah circle first before enrolling students.',
-                            style: TextStyle(fontSize: 11.5),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              HalaqahManagementSheet.show(context);
-                            },
-                            icon: const Icon(Icons.add_rounded, size: 15),
-                            label: const Text('Create Halaqah Circle',
-                                style: TextStyle(fontSize: 11.5)),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      value: selectedHalaqahId ?? currentHalaqahs.first.id,
-                      items: currentHalaqahs.map((h) {
-                        return DropdownMenuItem<String>(
-                          value: h.id,
-                          child: Text(
-                            '${h.name} (${h.teacherName})',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12.5),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) {
-                        setDialogState(() {
-                          selectedHalaqahId = val;
-                          final match =
-                              currentHalaqahs.where((h) => h.id == val);
-                          selectedHalaqahName =
-                              match.isNotEmpty ? match.first.name : '';
-                        });
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Assigned Class (Halaqah) *',
-                        prefixIcon: Icon(Icons.school_rounded, size: 20),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 10),
-                  Row(
-                    children: [
-                      Icon(Icons.family_restroom_rounded,
-                          size: 16, color: p.gold),
-                      const SizedBox(width: 6),
-                      Text(
-                        'Link to Registered Parent *',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 12.5,
-                          color: p.gold,
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  if (currentParents.isEmpty)
-                    Container(
-                      padding: const EdgeInsets.all(12),
-                      decoration: BoxDecoration(
-                        color: p.gold.withOpacity(0.10),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: p.gold.withOpacity(0.35)),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(Icons.warning_amber_rounded,
-                                  size: 16, color: p.gold),
-                              const SizedBox(width: 6),
-                              Expanded(
-                                child: Text(
-                                  'No Registered Parents Found',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w700,
-                                    fontSize: 12,
-                                    color: p.gold,
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 4),
-                          const Text(
-                            'Invite a parent first using a Parent Invitation Code so they can link their child.',
-                            style: TextStyle(fontSize: 11.5),
-                          ),
-                          const SizedBox(height: 8),
-                          ElevatedButton.icon(
-                            onPressed: () {
-                              Navigator.pop(ctx);
-                              InviteCodeDialog.show(context,
-                                  initialRole: 'parent');
-                            },
-                            icon: const Icon(Icons.vpn_key_rounded, size: 14),
-                            label: const Text('Generate Parent Invite Code',
-                                style: TextStyle(fontSize: 11.5)),
-                            style: ElevatedButton.styleFrom(
-                              backgroundColor: p.gold,
-                              foregroundColor: Colors.white,
-                            ),
-                          ),
-                        ],
-                      ),
-                    )
-                  else
-                    DropdownButtonFormField<String>(
-                      value: selectedParentId ?? currentParents.first['id'],
-                      items: currentParents.map((parent) {
-                        return DropdownMenuItem<String>(
-                          value: parent['id'],
-                          child: Text(
-                            '${parent['name']} (${(parent['phone'] != null && (parent['phone'] as String).isNotEmpty) ? parent['phone'] : parent['email']})',
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(fontSize: 12.5),
-                          ),
-                        );
-                      }).toList(),
-                      onChanged: (val) =>
-                          setDialogState(() => selectedParentId = val),
-                      decoration: const InputDecoration(
-                        labelText: 'Select Registered Parent *',
-                        prefixIcon: Icon(Icons.people_rounded, size: 20),
-                      ),
-                    ),
-                  const SizedBox(height: 16),
-                  const Divider(),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Initial Quran Milestone',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w700,
-                      color: p.inkSecondary,
-                    ),
-                  ),
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: '$juz',
-                          keyboardType: TextInputType.number,
-                          decoration:
-                              const InputDecoration(labelText: 'Juz (1-30)'),
-                          onChanged: (v) => juz = int.tryParse(v) ?? 30,
-                        ),
-                      ),
-                      const SizedBox(width: 10),
-                      Expanded(
-                        child: TextFormField(
-                          initialValue: '$surah',
-                          keyboardType: TextInputType.number,
-                          decoration: const InputDecoration(
-                              labelText: 'Surah (1-114)'),
-                          onChanged: (v) => surah = int.tryParse(v) ?? 1,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(ctx),
-                child: const Text('Cancel'),
-              ),
-              ElevatedButton(
-                onPressed: canSubmit
-                    ? () async {
-                        final foundParent = currentParents.firstWhere(
-                          (parent) => parent['id'] == selectedParentId,
-                          orElse: () => currentParents.first,
-                        );
-
-                        Navigator.pop(ctx);
-                        await StudentService.instance.addStudent(
-                          fullName: nameCtrl.text.trim(),
-                          age: parsedAge ?? 8,
-                          halaqahName: selectedHalaqahName,
-                          halaqahId: selectedHalaqahId,
-                          parentId: foundParent['id']!,
-                          parentName: foundParent['name']!,
-                          parentPhone: foundParent['phone'] ?? '',
-                          parentEmail: foundParent['email'],
-                          currentJuz: juz,
-                          currentSurah: surah,
-                          currentAyah: ayah,
-                        );
-
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                'Enrolled ${nameCtrl.text.trim()} under ${foundParent['name']}.',
-                              ),
-                              backgroundColor: p.primary,
-                            ),
-                          );
-                        }
-                      }
-                    : null,
-                child: const Text('Enroll Student'),
-              ),
-            ],
-          );
-        },
-      ),
+      builder: (_) => _StudentsAddDialog(palette: p),
     );
+    if (!mounted || !context.mounted || result == null) return;
+    if (result == 'create_halaqah') {
+      HalaqahManagementSheet.show(context);
+    } else if (result == 'invite_parent') {
+      InviteCodeDialog.show(context, initialRole: 'parent');
+    } else if (result.startsWith('enrolled:')) {
+      final summary = result.substring('enrolled:'.length);
+      setState(() {});
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(summary),
+          backgroundColor: p.primary,
+        ),
+      );
+    }
   }
 
-  void _showEditRemarksDialog(
-      BuildContext context, Student student, AttendanceRecord att) {
-    final remarksCtrl = TextEditingController(text: att.teacherRemarks);
-    showDialog(
+  Future<void> _showEditRemarksDialog(
+      BuildContext context, Student student, AttendanceRecord att) async {
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text('Edit Remarks: ${student.fullName}'),
-        content: TextField(
-          controller: remarksCtrl,
-          decoration: const InputDecoration(labelText: 'Teacher Remarks / Notes'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              await StudentService.instance.recordDailyAttendance(
-                studentId: student.id,
-                status: att.status,
-                remarks: remarksCtrl.text.trim(),
-                sessionDate: att.date,
-              );
-              if (ctx.mounted) Navigator.pop(ctx);
-              setState(() {});
-            },
-            child: const Text('Save Note'),
-          ),
-        ],
+      builder: (_) => _EditRemarksDialog(
+        student: student,
+        attendance: att,
+        palette: AppColors.of(context),
       ),
     );
+    if (saved == true && mounted) {
+      setState(() {});
+    }
   }
 
   void _showStudentHistoryDialog(BuildContext context, Student student) {
@@ -2082,162 +1877,44 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  void _showMarkAttendanceDialog(BuildContext context, Student student) {
-    String selectedStatus = 'present';
-    final remarksCtrl = TextEditingController(text: 'Attended circle on time.');
-
-    showDialog(
+  Future<void> _showMarkAttendanceDialog(
+      BuildContext context, Student student) async {
+    final p = AppColors.of(context);
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Daily Attendance: ${student.fullName}'),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              DropdownButtonFormField<String>(
-                value: selectedStatus,
-                items: const [
-                  DropdownMenuItem(value: 'present', child: Text('Present')),
-                  DropdownMenuItem(value: 'late', child: Text('Late')),
-                  DropdownMenuItem(value: 'absent', child: Text('Absent')),
-                  DropdownMenuItem(value: 'excused', child: Text('Excused')),
-                ],
-                onChanged: (val) =>
-                    setDialogState(() => selectedStatus = val!),
-                decoration: const InputDecoration(labelText: 'Status'),
-              ),
-              const SizedBox(height: 12),
-              TextField(
-                controller: remarksCtrl,
-                decoration: const InputDecoration(labelText: 'Teacher Remarks'),
-              ),
-            ],
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                await StudentService.instance.recordDailyAttendance(
-                  studentId: student.id,
-                  status: selectedStatus,
-                  remarks: remarksCtrl.text.trim(),
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Attendance recorded. Parent ${student.parentName} notified.',
-                      ),
-                    ),
-                  );
-                }
-                setState(() {});
-              },
-              child: const Text('Save & Notify'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _MarkAttendanceDialog(student: student, palette: p),
     );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Attendance recorded. Parent ${student.parentName} notified.',
+          ),
+        ),
+      );
+    }
   }
 
-  void _showWeeklyReportDialog(BuildContext context, Student student) {
-    final sabaqCtrl = TextEditingController(text: 'Surah Al-Mulk (1-15)');
-    final sabqiCtrl = TextEditingController(text: 'Surah Al-Qalam (1-20)');
-    final manzilCtrl = TextEditingController(text: 'Juz 29 Retention');
-    final remarksCtrl =
-        TextEditingController(text: 'Consistent Tajweed articulation.');
-    String rating = 'Excellent';
-
-    showDialog(
+  Future<void> _showWeeklyReportDialog(
+      BuildContext context, Student student) async {
+    final p = AppColors.of(context);
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) => AlertDialog(
-          title: Text('Weekly Report: ${student.fullName}'),
-          content: SingleChildScrollView(
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                TextField(
-                  controller: sabaqCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Sabaq (New Lesson)'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: sabqiCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Sabqi (Recent Revision)'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: manzilCtrl,
-                  decoration:
-                      const InputDecoration(labelText: 'Manzil (Retention)'),
-                ),
-                const SizedBox(height: 10),
-                DropdownButtonFormField<String>(
-                  value: rating,
-                  items: const [
-                    DropdownMenuItem(
-                        value: 'Excellent', child: Text('Excellent')),
-                    DropdownMenuItem(
-                        value: 'Very Good', child: Text('Very Good')),
-                    DropdownMenuItem(value: 'Good', child: Text('Good')),
-                    DropdownMenuItem(
-                        value: 'Needs Revision', child: Text('Needs Revision')),
-                  ],
-                  onChanged: (val) => setDialogState(() => rating = val!),
-                  decoration:
-                      const InputDecoration(labelText: 'Tajweed Evaluation'),
-                ),
-                const SizedBox(height: 10),
-                TextField(
-                  controller: remarksCtrl,
-                  decoration: const InputDecoration(
-                      labelText: 'Ustaz Evaluation Notes'),
-                ),
-              ],
-            ),
-          ),
-          actions: [
-            TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('Cancel'),
-            ),
-            ElevatedButton(
-              onPressed: () async {
-                await StudentService.instance.submitWeeklyReport(
-                  studentId: student.id,
-                  sabaq: sabaqCtrl.text.trim(),
-                  sabqi: sabqiCtrl.text.trim(),
-                  manzil: manzilCtrl.text.trim(),
-                  tajweedRating: rating,
-                  remarks: remarksCtrl.text.trim(),
-                  teacherName: AuthSessionService.instance.userName,
-                );
-                if (ctx.mounted) Navigator.pop(ctx);
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(
-                      content: Text(
-                        'Weekly report posted. Parent ${student.parentName} notified.',
-                      ),
-                    ),
-                  );
-                }
-                setState(() {});
-              },
-              child: const Text('Submit & Notify'),
-            ),
-          ],
-        ),
-      ),
+      builder: (_) => _WeeklyReportDialog(student: student, palette: p),
     );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Weekly report posted. Parent ${student.parentName} notified.',
+          ),
+        ),
+      );
+    }
   }
 
   Widget _buildAttendanceCard(AttendanceRecord att, AppPalette p) {
@@ -2370,149 +2047,25 @@ class _StudentsTabState extends State<StudentsTab> {
     );
   }
 
-  void _showRequestAbsenceDialog(BuildContext context, Student student) {
+  Future<void> _showRequestAbsenceDialog(
+      BuildContext context, Student student) async {
     final p = AppColors.of(context);
-    DateTime selectedDate = DateTime.now();
-    String selectedReason = 'illness';
-    final notesCtrl =
-        TextEditingController(text: 'Feeling unwell and needs rest at home.');
-
-    showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dCtx, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.edit_calendar_rounded, color: p.excused, size: 22),
-                  const SizedBox(width: 8),
-                  Expanded(
-                    child: Text('Request Excuse: ${student.fullName}'),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Circle: ${student.halaqahName}',
-                      style: TextStyle(
-                        fontSize: 12,
-                        fontWeight: FontWeight.w700,
-                        color: p.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        Text(
-                          'Date: ${selectedDate.toIso8601String().substring(0, 10)}',
-                          style: const TextStyle(
-                            fontSize: 12.5,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                        TextButton.icon(
-                          onPressed: () async {
-                            final picked = await showDatePicker(
-                              context: context,
-                              initialDate: selectedDate,
-                              firstDate: DateTime.now()
-                                  .subtract(const Duration(days: 2)),
-                              lastDate:
-                                  DateTime.now().add(const Duration(days: 30)),
-                            );
-                            if (picked != null) {
-                              setDialogState(() => selectedDate = picked);
-                            }
-                          },
-                          icon: const Icon(Icons.calendar_month_rounded,
-                              size: 15),
-                          label: const Text('Change'),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 10),
-                    DropdownButtonFormField<String>(
-                      value: selectedReason,
-                      items: const [
-                        DropdownMenuItem(
-                            value: 'illness', child: Text('Medical / Illness')),
-                        DropdownMenuItem(
-                            value: 'family_emergency',
-                            child: Text('Family Emergency')),
-                        DropdownMenuItem(
-                            value: 'school_exam',
-                            child: Text('School Academic Exam')),
-                        DropdownMenuItem(
-                            value: 'travel',
-                            child: Text('Travel / Out of Town')),
-                        DropdownMenuItem(
-                            value: 'other',
-                            child: Text('Other Personal Reason')),
-                      ],
-                      onChanged: (val) {
-                        if (val != null) {
-                          setDialogState(() => selectedReason = val);
-                        }
-                      },
-                      decoration: const InputDecoration(
-                        labelText: 'Reason for Absence',
-                      ),
-                    ),
-                    const SizedBox(height: 12),
-                    TextField(
-                      controller: notesCtrl,
-                      maxLines: 2,
-                      decoration: const InputDecoration(
-                        labelText: 'Parent Explanation',
-                        hintText: 'Enter reason details for the teacher...',
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    await AbsenceService.instance.submitAbsenceRequest(
-                      studentId: student.id,
-                      date: selectedDate,
-                      reason: selectedReason,
-                      notes: notesCtrl.text.trim(),
-                    );
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                    if (!mounted) return;
-                    setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Absence excuse submitted for ${student.fullName}. Ustaz notified.',
-                        ),
-                        backgroundColor: p.excused,
-                      ),
-                    );
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.excused,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Submit Excuse'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _RequestAbsenceDialog(student: student, palette: p),
     );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Absence excuse submitted for ${student.fullName}. Ustaz notified.',
+          ),
+          backgroundColor: p.excused,
+        ),
+      );
+    }
   }
 
   String _cleanReasonLabel(String reason) {
@@ -2528,5 +2081,842 @@ class _StudentsTabState extends State<StudentsTab> {
       default:
         return 'Personal Reason';
     }
+  }
+}
+
+class _StudentsAddDialog extends StatefulWidget {
+  final AppPalette palette;
+
+  const _StudentsAddDialog({required this.palette});
+
+  @override
+  State<_StudentsAddDialog> createState() => _StudentsAddDialogState();
+}
+
+class _StudentsAddDialogState extends State<_StudentsAddDialog> {
+  final _nameCtrl = TextEditingController();
+  final _ageCtrl = TextEditingController(text: '8');
+
+  String? _selectedHalaqahId;
+  String _selectedHalaqahName = '';
+  String? _selectedParentId;
+  int _juz = 30;
+  int _surah = 1;
+  static const int _ayah = 1;
+  bool _isSubmitting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final halaqahs = HalaqahService.instance.halaqahs;
+    if (halaqahs.isNotEmpty) {
+      _selectedHalaqahId = halaqahs.first.id;
+      _selectedHalaqahName = halaqahs.first.name;
+    }
+    final parents = StudentService.instance.getRegisteredParents();
+    if (parents.isNotEmpty) {
+      _selectedParentId = parents.first['id'];
+    }
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _ageCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    final currentHalaqahs = HalaqahService.instance.halaqahs;
+    final currentParents = StudentService.instance.getRegisteredParents();
+
+    final effectiveHalaqahId = currentHalaqahs.isEmpty
+        ? null
+        : (currentHalaqahs.any((h) => h.id == _selectedHalaqahId)
+            ? _selectedHalaqahId
+            : currentHalaqahs.first.id);
+    final effectiveHalaqahName = effectiveHalaqahId == null
+        ? _selectedHalaqahName
+        : currentHalaqahs
+            .firstWhere((h) => h.id == effectiveHalaqahId)
+            .name;
+    final effectiveParentId = currentParents.isEmpty
+        ? null
+        : (currentParents.any((parent) => parent['id'] == _selectedParentId)
+            ? _selectedParentId
+            : currentParents.first['id']);
+
+    final parsedAge = int.tryParse(_ageCtrl.text.trim());
+    final isAgeValid = parsedAge != null && parsedAge > 0;
+    final canSubmit = !_isSubmitting &&
+        _nameCtrl.text.trim().isNotEmpty &&
+        isAgeValid &&
+        effectiveParentId != null &&
+        effectiveParentId.isNotEmpty &&
+        effectiveHalaqahId != null &&
+        effectiveHalaqahId.isNotEmpty;
+
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.person_add_rounded, color: p.primary),
+          const SizedBox(width: 8),
+          const Expanded(
+            child: Text(
+              'Add Student & Link Parent',
+              style: TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            ),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              enabled: !_isSubmitting,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Student Full Name *',
+                hintText: 'e.g. Abdur-Rahman Muhammed',
+                prefixIcon: Icon(Icons.face_rounded, size: 20),
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _ageCtrl,
+              enabled: !_isSubmitting,
+              keyboardType: TextInputType.number,
+              onChanged: (_) => setState(() {}),
+              decoration: const InputDecoration(
+                labelText: 'Student Age *',
+                hintText: 'e.g. 8',
+                prefixIcon: Icon(Icons.cake, size: 20),
+              ),
+            ),
+            const SizedBox(height: 14),
+            if (currentHalaqahs.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: p.primary.withOpacity(0.08),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: p.primary.withOpacity(0.28)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.info_outline_rounded,
+                            size: 16, color: p.primary),
+                        const SizedBox(width: 6),
+                        Text(
+                          'No Study Circles Created Yet',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            color: p.primary,
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Please create a halaqah circle first before enrolling students.',
+                      style: TextStyle(fontSize: 11.5),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () => Navigator.pop(context, 'create_halaqah'),
+                      icon: const Icon(Icons.add_rounded, size: 15),
+                      label: const Text('Create Halaqah Circle',
+                          style: TextStyle(fontSize: 11.5)),
+                    ),
+                  ],
+                ),
+              )
+            else
+              DropdownButtonFormField<String>(
+                value: effectiveHalaqahId,
+                items: currentHalaqahs.map((h) {
+                  return DropdownMenuItem<String>(
+                    value: h.id,
+                    child: Text(
+                      '${h.name} (${h.teacherName})',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                  );
+                }).toList(),
+                onChanged: _isSubmitting
+                    ? null
+                    : (val) {
+                        setState(() {
+                          _selectedHalaqahId = val;
+                          final match =
+                              currentHalaqahs.where((h) => h.id == val);
+                          _selectedHalaqahName =
+                              match.isNotEmpty ? match.first.name : '';
+                        });
+                      },
+                decoration: const InputDecoration(
+                  labelText: 'Assigned Class (Halaqah) *',
+                  prefixIcon: Icon(Icons.school_rounded, size: 20),
+                ),
+              ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 10),
+            Row(
+              children: [
+                Icon(Icons.family_restroom_rounded, size: 16, color: p.gold),
+                const SizedBox(width: 6),
+                Text(
+                  'Link to Registered Parent *',
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12.5,
+                    color: p.gold,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            if (currentParents.isEmpty)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: p.gold.withOpacity(0.10),
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: p.gold.withOpacity(0.35)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Icon(Icons.warning_amber_rounded,
+                            size: 16, color: p.gold),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            'No Registered Parents Found',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                              color: p.gold,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Invite a parent first using a Parent Invitation Code so they can link their child.',
+                      style: TextStyle(fontSize: 11.5),
+                    ),
+                    const SizedBox(height: 8),
+                    ElevatedButton.icon(
+                      onPressed: () =>
+                          Navigator.pop(context, 'invite_parent'),
+                      icon: const Icon(Icons.vpn_key_rounded, size: 14),
+                      label: const Text('Generate Parent Invite Code',
+                          style: TextStyle(fontSize: 11.5)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: p.gold,
+                        foregroundColor: Colors.white,
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else
+              DropdownButtonFormField<String>(
+                value: effectiveParentId,
+                items: currentParents.map((parent) {
+                  return DropdownMenuItem<String>(
+                    value: parent['id'],
+                    child: Text(
+                      '${parent['name']} (${(parent['phone'] != null && (parent['phone'] as String).isNotEmpty) ? parent['phone'] : parent['email']})',
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 12.5),
+                    ),
+                  );
+                }).toList(),
+                onChanged: _isSubmitting
+                    ? null
+                    : (val) => setState(() => _selectedParentId = val),
+                decoration: const InputDecoration(
+                  labelText: 'Select Registered Parent *',
+                  prefixIcon: Icon(Icons.people_rounded, size: 20),
+                ),
+              ),
+            const SizedBox(height: 16),
+            const Divider(),
+            const SizedBox(height: 8),
+            Text(
+              'Initial Quran Milestone',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: p.inkSecondary,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextFormField(
+                    initialValue: '$_juz',
+                    enabled: !_isSubmitting,
+                    keyboardType: TextInputType.number,
+                    decoration: const InputDecoration(labelText: 'Juz (1-30)'),
+                    onChanged: (v) => _juz = int.tryParse(v) ?? 30,
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: TextFormField(
+                    initialValue: '$_surah',
+                    enabled: !_isSubmitting,
+                    keyboardType: TextInputType.number,
+                    decoration:
+                        const InputDecoration(labelText: 'Surah (1-114)'),
+                    onChanged: (v) => _surah = int.tryParse(v) ?? 1,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: canSubmit
+              ? () async {
+                  final foundParent = currentParents.firstWhere(
+                    (parent) => parent['id'] == effectiveParentId,
+                    orElse: () => currentParents.first,
+                  );
+                  final studentName = _nameCtrl.text.trim();
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await StudentService.instance.addStudent(
+                      fullName: studentName,
+                      age: parsedAge ?? 8,
+                      halaqahName: effectiveHalaqahName,
+                      halaqahId: effectiveHalaqahId,
+                      parentId: foundParent['id']!,
+                      parentName: foundParent['name']!,
+                      parentPhone: foundParent['phone'] ?? '',
+                      parentEmail: foundParent['email'],
+                      currentJuz: _juz,
+                      currentSurah: _surah,
+                      currentAyah: _ayah,
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(
+                      context,
+                      'enrolled:Enrolled $studentName under ${foundParent['name']}.',
+                    );
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to enroll student: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
+                }
+              : null,
+          child: Text(_isSubmitting ? 'Enrolling...' : 'Enroll Student'),
+        ),
+      ],
+    );
+  }
+}
+
+class _EditRemarksDialog extends StatefulWidget {
+  final Student student;
+  final AttendanceRecord attendance;
+  final AppPalette palette;
+
+  const _EditRemarksDialog({
+    required this.student,
+    required this.attendance,
+    required this.palette,
+  });
+
+  @override
+  State<_EditRemarksDialog> createState() => _EditRemarksDialogState();
+}
+
+class _EditRemarksDialogState extends State<_EditRemarksDialog> {
+  late final TextEditingController _remarksCtrl;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _remarksCtrl =
+        TextEditingController(text: widget.attendance.teacherRemarks);
+  }
+
+  @override
+  void dispose() {
+    _remarksCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Edit Remarks: ${widget.student.fullName}'),
+      content: TextField(
+        controller: _remarksCtrl,
+        enabled: !_isSaving,
+        decoration:
+            const InputDecoration(labelText: 'Teacher Remarks / Notes'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  setState(() => _isSaving = true);
+                  try {
+                    await StudentService.instance.recordDailyAttendance(
+                      studentId: widget.student.id,
+                      status: widget.attendance.status,
+                      remarks: _remarksCtrl.text.trim(),
+                      sessionDate: widget.attendance.date,
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSaving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to save note: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: widget.palette.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSaving ? 'Saving...' : 'Save Note'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MarkAttendanceDialog extends StatefulWidget {
+  final Student student;
+  final AppPalette palette;
+
+  const _MarkAttendanceDialog({
+    required this.student,
+    required this.palette,
+  });
+
+  @override
+  State<_MarkAttendanceDialog> createState() => _MarkAttendanceDialogState();
+}
+
+class _MarkAttendanceDialogState extends State<_MarkAttendanceDialog> {
+  String _selectedStatus = 'present';
+  final _remarksCtrl = TextEditingController(text: 'Attended circle on time.');
+  bool _isSaving = false;
+
+  @override
+  void dispose() {
+    _remarksCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Daily Attendance: ${widget.student.fullName}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          DropdownButtonFormField<String>(
+            value: _selectedStatus,
+            items: const [
+              DropdownMenuItem(value: 'present', child: Text('Present')),
+              DropdownMenuItem(value: 'late', child: Text('Late')),
+              DropdownMenuItem(value: 'absent', child: Text('Absent')),
+              DropdownMenuItem(value: 'excused', child: Text('Excused')),
+            ],
+            onChanged: _isSaving
+                ? null
+                : (val) {
+                    if (val != null) {
+                      setState(() => _selectedStatus = val);
+                    }
+                  },
+            decoration: const InputDecoration(labelText: 'Status'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _remarksCtrl,
+            enabled: !_isSaving,
+            decoration: const InputDecoration(labelText: 'Teacher Remarks'),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  setState(() => _isSaving = true);
+                  try {
+                    await StudentService.instance.recordDailyAttendance(
+                      studentId: widget.student.id,
+                      status: _selectedStatus,
+                      remarks: _remarksCtrl.text.trim(),
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSaving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to save attendance: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: widget.palette.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSaving ? 'Saving...' : 'Save & Notify'),
+        ),
+      ],
+    );
+  }
+}
+
+class _WeeklyReportDialog extends StatefulWidget {
+  final Student student;
+  final AppPalette palette;
+
+  const _WeeklyReportDialog({
+    required this.student,
+    required this.palette,
+  });
+
+  @override
+  State<_WeeklyReportDialog> createState() => _WeeklyReportDialogState();
+}
+
+class _WeeklyReportDialogState extends State<_WeeklyReportDialog> {
+  final _sabaqCtrl = TextEditingController(text: 'Surah Al-Mulk (1-15)');
+  final _sabqiCtrl = TextEditingController(text: 'Surah Al-Qalam (1-20)');
+  final _manzilCtrl = TextEditingController(text: 'Juz 29 Retention');
+  final _remarksCtrl =
+      TextEditingController(text: 'Consistent Tajweed articulation.');
+  String _rating = 'Excellent';
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _sabaqCtrl.dispose();
+    _sabqiCtrl.dispose();
+    _manzilCtrl.dispose();
+    _remarksCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text('Weekly Report: ${widget.student.fullName}'),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _sabaqCtrl,
+              enabled: !_isSubmitting,
+              decoration:
+                  const InputDecoration(labelText: 'Sabaq (New Lesson)'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _sabqiCtrl,
+              enabled: !_isSubmitting,
+              decoration:
+                  const InputDecoration(labelText: 'Sabqi (Recent Revision)'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _manzilCtrl,
+              enabled: !_isSubmitting,
+              decoration:
+                  const InputDecoration(labelText: 'Manzil (Retention)'),
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: _rating,
+              items: const [
+                DropdownMenuItem(value: 'Excellent', child: Text('Excellent')),
+                DropdownMenuItem(value: 'Very Good', child: Text('Very Good')),
+                DropdownMenuItem(value: 'Good', child: Text('Good')),
+                DropdownMenuItem(
+                    value: 'Needs Revision', child: Text('Needs Revision')),
+              ],
+              onChanged: _isSubmitting
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        setState(() => _rating = val);
+                      }
+                    },
+              decoration:
+                  const InputDecoration(labelText: 'Tajweed Evaluation'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: _remarksCtrl,
+              enabled: !_isSubmitting,
+              decoration:
+                  const InputDecoration(labelText: 'Ustaz Evaluation Notes'),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () async {
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await StudentService.instance.submitWeeklyReport(
+                      studentId: widget.student.id,
+                      sabaq: _sabaqCtrl.text.trim(),
+                      sabqi: _sabqiCtrl.text.trim(),
+                      manzil: _manzilCtrl.text.trim(),
+                      tajweedRating: _rating,
+                      remarks: _remarksCtrl.text.trim(),
+                      teacherName: AuthSessionService.instance.userName,
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(context, true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to submit report: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: widget.palette.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSubmitting ? 'Submitting...' : 'Submit & Notify'),
+        ),
+      ],
+    );
+  }
+}
+
+class _RequestAbsenceDialog extends StatefulWidget {
+  final Student student;
+  final AppPalette palette;
+
+  const _RequestAbsenceDialog({
+    required this.student,
+    required this.palette,
+  });
+
+  @override
+  State<_RequestAbsenceDialog> createState() => _RequestAbsenceDialogState();
+}
+
+class _RequestAbsenceDialogState extends State<_RequestAbsenceDialog> {
+  DateTime _selectedDate = DateTime.now();
+  String _selectedReason = 'illness';
+  final _notesCtrl =
+      TextEditingController(text: 'Feeling unwell and needs rest at home.');
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.edit_calendar_rounded, color: p.excused, size: 22),
+          const SizedBox(width: 8),
+          Expanded(
+            child: Text('Request Excuse: ${widget.student.fullName}'),
+          ),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Circle: ${widget.student.halaqahName}',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: p.primary,
+              ),
+            ),
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  'Date: ${_selectedDate.toIso8601String().substring(0, 10)}',
+                  style: const TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                TextButton.icon(
+                  onPressed: _isSubmitting
+                      ? null
+                      : () async {
+                          final picked = await showDatePicker(
+                            context: context,
+                            initialDate: _selectedDate,
+                            firstDate: DateTime.now()
+                                .subtract(const Duration(days: 2)),
+                            lastDate:
+                                DateTime.now().add(const Duration(days: 30)),
+                          );
+                          if (picked != null && mounted) {
+                            setState(() => _selectedDate = picked);
+                          }
+                        },
+                  icon: const Icon(Icons.calendar_month_rounded, size: 15),
+                  label: const Text('Change'),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            DropdownButtonFormField<String>(
+              value: _selectedReason,
+              items: const [
+                DropdownMenuItem(
+                    value: 'illness', child: Text('Medical / Illness')),
+                DropdownMenuItem(
+                    value: 'family_emergency', child: Text('Family Emergency')),
+                DropdownMenuItem(
+                    value: 'school_exam', child: Text('School Academic Exam')),
+                DropdownMenuItem(
+                    value: 'travel', child: Text('Travel / Out of Town')),
+                DropdownMenuItem(
+                    value: 'other', child: Text('Other Personal Reason')),
+              ],
+              onChanged: _isSubmitting
+                  ? null
+                  : (val) {
+                      if (val != null) {
+                        setState(() => _selectedReason = val);
+                      }
+                    },
+              decoration: const InputDecoration(
+                labelText: 'Reason for Absence',
+              ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _notesCtrl,
+              enabled: !_isSubmitting,
+              maxLines: 2,
+              decoration: const InputDecoration(
+                labelText: 'Parent Explanation',
+                hintText: 'Enter reason details for the teacher...',
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () async {
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await AbsenceService.instance.submitAbsenceRequest(
+                      studentId: widget.student.id,
+                      date: _selectedDate,
+                      reason: _selectedReason,
+                      notes: _notesCtrl.text.trim(),
+                    );
+                    if (!mounted) return;
+                    Navigator.of(context).pop(true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to submit excuse: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: p.excused,
+            foregroundColor: Colors.white,
+          ),
+          child: Text(_isSubmitting ? 'Submitting...' : 'Submit Excuse'),
+        ),
+      ],
+    );
   }
 }

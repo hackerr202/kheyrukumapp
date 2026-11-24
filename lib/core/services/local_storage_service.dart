@@ -83,4 +83,16 @@ class LocalStorageService {
       debugPrint('[LocalStorageService] Error removing $key: $e');
     }
   }
+
+  Future<void> removeByPrefix(String prefix) async {
+    try {
+      final prefs = await _getPrefs();
+      final keys = prefs.getKeys().where((k) => k.startsWith(prefix)).toList();
+      for (final key in keys) {
+        await prefs.remove(key);
+      }
+    } catch (e) {
+      debugPrint('[LocalStorageService] Error removing prefix $prefix: $e');
+    }
+  }
 }

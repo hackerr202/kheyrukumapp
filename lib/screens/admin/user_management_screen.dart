@@ -148,7 +148,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ),
     );
 
-    if (confirm != true) return;
+    if (!mounted || confirm != true) return;
 
     setState(() {
       user['is_suspended'] = newStatus;
@@ -240,7 +240,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ),
     );
 
-    if (confirm != true) return;
+    if (!mounted || confirm != true) return;
 
     setState(() {
       if (listType == 'teacher') {
@@ -426,7 +426,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
       ),
     );
 
-    if (confirm != true) return;
+    if (!mounted || confirm != true) return;
 
     try {
       final teacherId = teacher['id'].toString();
@@ -476,9 +476,10 @@ class _UserManagementScreenState extends State<UserManagementScreen>
         maxHeight: 600,
         imageQuality: 85,
       );
-      if (picked == null) return;
+      if (!mounted || picked == null) return;
 
       final bytes = await picked.readAsBytes();
+      if (!mounted) return;
       final ext = picked.name.split('.').last;
       final uploadedUrl = await StorageService.uploadAvatar(
         userIdOrName: user['id']?.toString() ?? 'user',
@@ -639,6 +640,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
               onPressed: selectedRole == currentRole
                   ? null
                   : () async {
+                      final messenger = ScaffoldMessenger.of(context);
                       Navigator.pop(ctx);
                       try {
                         final client = SupabaseService.instance.client;
@@ -651,7 +653,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         });
                         await _loadAllUserData();
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                   '${user['full_name']} promoted to $selectedRole successfully.'),
@@ -661,7 +663,7 @@ class _UserManagementScreenState extends State<UserManagementScreen>
                         }
                       } catch (e) {
                         if (mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
+                          messenger.showSnackBar(
                             SnackBar(
                               content: Text(
                                   'Failed to update role: ${SupabaseService.cleanErrorMessage(e)}'),

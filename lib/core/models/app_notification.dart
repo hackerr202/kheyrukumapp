@@ -1,8 +1,10 @@
+import '../utils/json_parsers.dart';
+
 class AppNotification {
   final String id;
   final String title;
   final String body;
-  final String type; // 'attendance', 'weekly_report', 'payment_reminder', 'payment_overdue', 'payment_approval', 'payment_rejection', 'chat'
+  final String type;
   final DateTime createdAt;
   final bool isRead;
   final Map<String, dynamic>? data;
@@ -19,15 +21,13 @@ class AppNotification {
 
   factory AppNotification.fromJson(Map<String, dynamic> json) {
     return AppNotification(
-      id: json['id']?.toString() ?? '',
-      title: json['title']?.toString() ?? 'Notification',
-      body: json['body']?.toString() ?? '',
-      type: json['type']?.toString() ?? 'general',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      isRead: json['is_read'] == true,
-      data: json['data'] as Map<String, dynamic>?,
+      id: JsonParsers.asString(json['id']),
+      title: JsonParsers.asNullableString(json['title']) ?? 'Notification',
+      body: JsonParsers.asString(json['body']),
+      type: JsonParsers.asNullableString(json['type']) ?? 'general',
+      createdAt: JsonParsers.asDateTime(json['created_at']),
+      isRead: JsonParsers.asBool(json['is_read']),
+      data: JsonParsers.asMap(json['data']),
     );
   }
 

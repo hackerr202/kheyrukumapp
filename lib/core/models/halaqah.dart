@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 /// Halaqah (Study Circle) model representing a memorization and Tajweed class.
 class Halaqah {
   final String id;
@@ -21,18 +23,19 @@ class Halaqah {
   });
 
   factory Halaqah.fromJson(Map<String, dynamic> json) {
+    final profileMap = JsonParsers.asMap(json['profiles']);
     return Halaqah(
-      id: json['id']?.toString() ?? '',
-      name: json['name']?.toString() ?? 'Study Circle',
-      teacherId: json['teacher_id']?.toString(),
-      teacherName: json['teacher_name']?.toString() ??
-          (json['profiles'] != null ? json['profiles']['full_name'] : 'Unassigned'),
-      schedule: json['schedule']?.toString() ?? 'Daily Recitation Session',
-      description: json['description']?.toString() ?? '',
-      studentCount: (json['student_count'] as num?)?.toInt() ?? 0,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      name: JsonParsers.asNullableString(json['name']) ?? 'Study Circle',
+      teacherId: JsonParsers.asNullableString(json['teacher_id']),
+      teacherName: JsonParsers.asNullableString(json['teacher_name']) ??
+          JsonParsers.asNullableString(profileMap?['full_name']) ??
+          'Unassigned',
+      schedule: JsonParsers.asNullableString(json['schedule']) ??
+          'Daily Recitation Session',
+      description: JsonParsers.asString(json['description']),
+      studentCount: JsonParsers.asInt(json['student_count'], 0),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

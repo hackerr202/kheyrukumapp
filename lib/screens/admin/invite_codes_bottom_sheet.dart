@@ -7,7 +7,7 @@ import '../../widgets/invite_code_dialog.dart';
 import '../../widgets/pro_ui_kit.dart';
 
 /// Bottom sheet to generate & view active Teacher and Parent invitation codes.
-class InviteCodesBottomSheet extends StatelessWidget {
+class InviteCodesBottomSheet extends StatefulWidget {
   const InviteCodesBottomSheet({super.key});
 
   static void show(BuildContext context) {
@@ -17,6 +17,19 @@ class InviteCodesBottomSheet extends StatelessWidget {
       backgroundColor: Colors.transparent,
       builder: (_) => const InviteCodesBottomSheet(),
     );
+  }
+
+  @override
+  State<InviteCodesBottomSheet> createState() => _InviteCodesBottomSheetState();
+}
+
+class _InviteCodesBottomSheetState extends State<InviteCodesBottomSheet> {
+  late final Stream<List<InvitationCode>> _codesStream;
+
+  @override
+  void initState() {
+    super.initState();
+    _codesStream = SupabaseService.instance.streamInviteCodes();
   }
 
   @override
@@ -46,8 +59,9 @@ class InviteCodesBottomSheet extends StatelessWidget {
                     height: 48,
                     child: ElevatedButton.icon(
                       onPressed: () {
+                        final hostContext = Navigator.of(context).context;
                         Navigator.pop(context);
-                        InviteCodeDialog.show(context, initialRole: 'teacher');
+                        InviteCodeDialog.show(hostContext, initialRole: 'teacher');
                       },
                       icon: const Icon(Icons.school_rounded, size: 17),
                       label: const Text('Teacher Code',
@@ -61,8 +75,9 @@ class InviteCodesBottomSheet extends StatelessWidget {
                     height: 48,
                     child: OutlinedButton.icon(
                       onPressed: () {
+                        final hostContext = Navigator.of(context).context;
                         Navigator.pop(context);
-                        InviteCodeDialog.show(context, initialRole: 'parent');
+                        InviteCodeDialog.show(hostContext, initialRole: 'parent');
                       },
                       icon: Icon(Icons.family_restroom_rounded,
                           size: 17, color: p.gold),
@@ -91,7 +106,7 @@ class InviteCodesBottomSheet extends StatelessWidget {
             const SizedBox(height: 10),
             Expanded(
               child: StreamBuilder<List<InvitationCode>>(
-                stream: SupabaseService.instance.streamInviteCodes(),
+                stream: _codesStream,
                 builder: (context, snapshot) {
                   final codes =
                       (snapshot.data ?? []).where((c) => !c.isUsed).toList();

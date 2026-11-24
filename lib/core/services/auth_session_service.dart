@@ -4,14 +4,8 @@ import 'storage_service.dart';
 import 'supabase_service.dart';
 
 /// Centralized session service managing user identity, role, and assigned class/halaqah.
-/// Supports 3 distinct roles:
-/// - 'admin': Center Director with full administrative controls
-/// - 'teacher': Assigned to a specific Halaqah/class, responsible for attendance and parent communication
-/// - 'parent': Linked to specific enrolled children, views attendance & communicates with Ustaz/Admin
 class AuthSessionService {
-  AuthSessionService._() {
-    _initSession();
-  }
+  AuthSessionService._();
 
   static final AuthSessionService instance = AuthSessionService._();
 
@@ -27,35 +21,31 @@ class AuthSessionService {
 
   String get currentRole => roleNotifier.value;
   String get userId => _userId;
-  String get userName => _userName.isNotEmpty ? _userName : (_userEmail.isNotEmpty ? _userEmail : 'User');
+  String get userName =>
+      _userName.isNotEmpty ? _userName : (_userEmail.isNotEmpty ? _userEmail : 'User');
   String get userEmail => _userEmail;
   String get userPhone => _userPhone;
   String? get avatarUrl => _avatarUrl;
   String get assignedHalaqahId => _assignedHalaqahId;
-  String get assignedHalaqahName => _assignedHalaqahName.isNotEmpty ? _assignedHalaqahName : 'Assigned Halaqah';
+  String get assignedHalaqahName =>
+      _assignedHalaqahName.isNotEmpty ? _assignedHalaqahName : 'Assigned Halaqah';
 
   bool get isSuperAdmin => currentRole == 'superadmin';
   bool get isAdmin => currentRole == 'admin' || currentRole == 'superadmin';
   bool get isTeacher => currentRole == 'teacher';
   bool get isParent => currentRole == 'parent';
   bool get canAccessPayments => isSuperAdmin || isParent;
-  bool get isAuthenticated => _userId.isNotEmpty || SupabaseService.instance.isAuthenticated;
+  bool get isAuthenticated =>
+      _userId.isNotEmpty || SupabaseService.instance.isAuthenticated;
 
-  void _initSession() {
-    final user = SupabaseService.instance.currentUser;
-    if (user != null) {
-      _userId = user.id;
-      _userEmail = user.email ?? '';
-      syncFromSupabaseProfile();
-    }
-  }
-
-  /// Synchronize identity and role strictly from Supabase public.profiles
-  Future<void> syncFromSupabaseProfile() async {
+  /// Synchronize identity and role strictly from Supabase `public.profiles`.
+  /// Returns `true` when an active (non-suspended) user session is ready, or
+  /// `false` if unauthenticated / suspended / profile missing.
+  Future<bool> syncFromSupabaseProfile() async {
     final user = SupabaseService.instance.currentUser;
     if (user == null) {
       clearSession();
-      return;
+      return false;
     }
 
     _userId = user.id;
@@ -63,69 +53,73 @@ class AuthSessionService {
 
     try {
       final profile = await SupabaseService.instance.getUserProfile();
-      if (profile != null) {
-        if (profile['is_suspended'] == true) {
-          clearSession();
-          await SupabaseService.instance.signOut();
-          return;
-        }
-        _userId = profile['id'] ?? _userId;
-        _userName = profile['full_name'] ?? _userName;
-        _userEmail = profile['email'] ?? _userEmail;
-        _userPhone = profile['phone'] ?? _userPhone;
-        _avatarUrl = profile['avatar_url']?.toString();
-        final role = (profile['role'] ?? 'parent').toString().toLowerCase();
-        if (['superadmin', 'admin', 'teacher', 'parent'].contains(role)) {
-          roleNotifier.value = role;
-        } else {
-          roleNotifier.value = 'parent';
-        }
-        if (profile['halaqah_id'] != null) {
-          _assignedHalaqahId = profile['halaqah_id'].toString();
-        }
-        if (profile['halaqah_name'] != null) {
-          _assignedHalaqahName = profile['halaqah_name'].toString();
-        }
-
-        // If teacher's halaqah isn't on profile (or name is missing), resolve from halaqahs
-        if (roleNotifier.value == 'teacher' &&
-            (_assignedHalaqahId.isEmpty || _assignedHalaqahName.isEmpty)) {
-          try {
-            final client = SupabaseService.instance.client;
-            final halaqah = _assignedHalaqahId.isNotEmpty
-                ? await client
-                    ?.from('halaqahs')
-                    .select('id, name')
-                    .eq('id', _assignedHalaqahId)
-                    .maybeSingle()
-                : await client
-                    ?.from('halaqahs')
-                    .select('id, name')
-                    .eq('teacher_id', _userId)
-                    .maybeSingle();
-            if (halaqah != null) {
-              _assignedHalaqahId = halaqah['id']?.toString() ?? '';
-              _assignedHalaqahName = halaqah['name']?.toString() ?? '';
-            }
-          } catch (e) {
-            debugPrint('[AuthSessionService] Error looking up teacher halaqah: $e');
-          }
-        }
-        roleNotifier.notifyListeners();
-      } else {
+      if (profile == null) {
         debugPrint('[AuthSessionService] No Supabase profile row found for $_userId');
+        return false;
       }
+
+      if (profile['is_suspended'] == true) {
+        clearSession();
+        await SupabaseService.instance.signOut();
+        return false;
+      }
+
+      _userId = profile['id']?.toString() ?? _userId;
+      _userName = profile['full_name']?.toString() ?? _userName;
+      _userEmail = profile['email']?.toString() ?? _userEmail;
+      _userPhone = profile['phone']?.toString() ?? _userPhone;
+      _avatarUrl = profile['avatar_url']?.toString();
+      final role = (profile['role'] ?? 'parent').toString().toLowerCase().trim();
+      roleNotifier.value =
+          ['superadmin', 'admin', 'teacher', 'parent'].contains(role)
+              ? role
+              : 'parent';
+
+      _assignedHalaqahId = profile['halaqah_id']?.toString() ?? '';
+      _assignedHalaqahName = profile['halaqah_name']?.toString() ?? '';
+
+      if (roleNotifier.value == 'teacher' &&
+          (_assignedHalaqahId.isEmpty || _assignedHalaqahName.isEmpty)) {
+        try {
+          final client = SupabaseService.instance.client;
+          final halaqah = _assignedHalaqahId.isNotEmpty
+              ? await client
+                  ?.from('halaqahs')
+                  .select('id, name')
+                  .eq('id', _assignedHalaqahId)
+                  .maybeSingle()
+              : await client
+                  ?.from('halaqahs')
+                  .select('id, name')
+                  .eq('teacher_id', _userId)
+                  .maybeSingle();
+          if (halaqah != null) {
+            _assignedHalaqahId = halaqah['id']?.toString() ?? '';
+            _assignedHalaqahName = halaqah['name']?.toString() ?? '';
+          }
+        } catch (e) {
+          debugPrint('[AuthSessionService] Error looking up teacher halaqah: $e');
+        }
+      }
+      // Always notify listeners even if the role string remained identical (e.g. account switch).
+      // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+      roleNotifier.notifyListeners();
+
       try {
         await PushNotificationService.instance.registerDeviceToken();
         await PushNotificationService.instance
             .syncRoleSubscription(roleNotifier.value);
-      } catch (_) {}
+      } catch (e) {
+        debugPrint('[AuthSessionService] Push registration note: $e');
+      }
+      return true;
     } catch (e) {
       debugPrint('[AuthSessionService] Error loading profile: $e');
+      return false;
     }
   }
 
-  /// Apply authenticated session credentials upon successful login/registration
+  /// Apply authenticated session credentials locally without duplicating cloud pushes.
   void setRole(
     String role, {
     String? userId,
@@ -148,15 +142,11 @@ class AuthSessionService {
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
 
     roleNotifier.value = cleanRole;
-
-    // Ensure the device token is registered and subscribed to the role topic
-    try {
-      PushNotificationService.instance.registerDeviceToken();
-      PushNotificationService.instance.syncRoleSubscription(cleanRole);
-    } catch (_) {}
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    roleNotifier.notifyListeners();
   }
 
-  /// Clear session completely upon user sign out
+  /// Clear session completely upon user sign out and always notify UI listeners.
   void clearSession() {
     _userId = '';
     _userName = '';
@@ -166,6 +156,8 @@ class AuthSessionService {
     _assignedHalaqahId = '';
     _assignedHalaqahName = '';
     roleNotifier.value = 'parent';
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
+    roleNotifier.notifyListeners();
     StorageService.clearSignedUrlCache();
   }
 
@@ -184,6 +176,7 @@ class AuthSessionService {
     if (avatarUrl != null) _avatarUrl = avatarUrl;
     if (halaqahId != null) _assignedHalaqahId = halaqahId;
     if (halaqahName != null) _assignedHalaqahName = halaqahName;
+    // ignore: invalid_use_of_visible_for_testing_member, invalid_use_of_protected_member
     roleNotifier.notifyListeners();
   }
 }

@@ -5,6 +5,7 @@ import '../../../core/models/student.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/homework_service.dart';
 import '../../../core/services/student_service.dart';
+import '../../../core/services/supabase_service.dart';
 import '../../../core/theme/app_colors.dart';
 import '../../../widgets/pro_ui_kit.dart';
 
@@ -513,284 +514,47 @@ class _HomeworkTabState extends State<HomeworkTab> {
     );
   }
 
-  void _showReviewDialog(BuildContext context, HomeworkSubmission submission,
-      VoidCallback onReviewed) {
+  Future<void> _showReviewDialog(BuildContext context,
+      HomeworkSubmission submission, VoidCallback onReviewed) async {
     final p = AppColors.of(context);
-    String selectedRating = 'Mumtaz (ممتاز)';
-    final feedbackCtrl = TextEditingController(
-        text: 'Masha\'Allah excellent recitation with clear Tajweed.');
-
-    showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dCtx, setDialogState) {
-            return AlertDialog(
-              title: Text('Grade ${submission.studentName}\'s Practice'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  DropdownButtonFormField<String>(
-                    value: selectedRating,
-                    items: const [
-                      DropdownMenuItem(
-                        value: 'Mumtaz (ممتاز)',
-                        child: Text('Mumtaz (ممتاز) — Excellent'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Jayyid Jiddan (جيد جداً)',
-                        child: Text('Jayyid Jiddan (جيد جداً) — Very Good'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Jayyid (جيد)',
-                        child: Text('Jayyid (جيد) — Good'),
-                      ),
-                      DropdownMenuItem(
-                        value: 'Needs Revision (يحتاج مراجعة)',
-                        child: Text('Needs Revision (يحتاج مراجعة)'),
-                      ),
-                    ],
-                    onChanged: (val) {
-                      if (val != null) {
-                        setDialogState(() => selectedRating = val);
-                      }
-                    },
-                    decoration:
-                        const InputDecoration(labelText: 'Recitation Rating'),
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: feedbackCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Ustaz Feedback / Advice',
-                      hintText: 'Enter guidance for parent and student...',
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    await HomeworkService.instance.reviewSubmissionByTeacher(
-                      submissionId: submission.id,
-                      teacherRating: selectedRating,
-                      teacherFeedback: feedbackCtrl.text.trim(),
-                    );
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                    onReviewed();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(
-                              'Submission endorsed for ${submission.studentName}.'),
-                          backgroundColor: p.excused,
-                        ),
-                      );
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: p.excused,
-                    foregroundColor: Colors.white,
-                  ),
-                  child: const Text('Submit Endorsement'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _ReviewSubmissionDialog(
+        submission: submission,
+        palette: p,
+      ),
     );
+    if (saved != true || !mounted) return;
+    onReviewed();
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Submission endorsed for ${submission.studentName}.'),
+          backgroundColor: p.excused,
+        ),
+      );
+    }
   }
 
-  void _showCreateAssignmentDialog(
-      BuildContext context, String assignedHalaqah) {
+  Future<void> _showCreateAssignmentDialog(
+      BuildContext context, String assignedHalaqah) async {
     final p = AppColors.of(context);
-    final titleCtrl =
-        TextEditingController(text: 'Surah Memorization & Tajweed');
-    final surahNameCtrl = TextEditingController(text: 'Al-Mulk (الملك)');
-    final surahNumCtrl = TextEditingController(text: '67');
-    final fromAyahCtrl = TextEditingController(text: '1');
-    final toAyahCtrl = TextEditingController(text: '10');
-    final tajweedCtrl = TextEditingController(text: 'Ghunnah & Ikhfa Rules');
-    final instructionsCtrl = TextEditingController(
-      text:
-          'Recite each verse at least 3 times focusing on correct elongation and nasalization.',
-    );
-    DateTime dueDate = DateTime.now().add(const Duration(days: 3));
-
-    showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dCtx, setDialogState) {
-            return AlertDialog(
-              title: Row(
-                children: [
-                  Icon(Icons.assignment_add, color: p.primary, size: 22),
-                  const SizedBox(width: 8),
-                  const Expanded(child: Text('Assign Quran Homework')),
-                ],
-              ),
-              content: SingleChildScrollView(
-                child: SizedBox(
-                  width: 380,
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      ProStatusPill(
-                        label: 'Circle: $assignedHalaqah',
-                        color: p.primary,
-                        icon: Icons.school_rounded,
-                      ),
-                      const SizedBox(height: 14),
-                      TextField(
-                        controller: titleCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Assignment Title',
-                          hintText: 'e.g. Surah Al-Mulk Practice',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            flex: 3,
-                            child: TextField(
-                              controller: surahNameCtrl,
-                              decoration: const InputDecoration(
-                                  labelText: 'Surah Name'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            flex: 1,
-                            child: TextField(
-                              controller: surahNumCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: '#'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: TextField(
-                              controller: fromAyahCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: 'From Ayah'),
-                            ),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: TextField(
-                              controller: toAyahCtrl,
-                              keyboardType: TextInputType.number,
-                              decoration:
-                                  const InputDecoration(labelText: 'To Ayah'),
-                            ),
-                          ),
-                        ],
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: tajweedCtrl,
-                        decoration: const InputDecoration(
-                          labelText: 'Tajweed Rule Focus',
-                          hintText: 'e.g. Qalqalah, Ghunnah, Madd',
-                        ),
-                      ),
-                      const SizedBox(height: 10),
-                      TextField(
-                        controller: instructionsCtrl,
-                        maxLines: 2,
-                        decoration: const InputDecoration(
-                          labelText: 'Instructions for Parents & Students',
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          Text(
-                            'Due: ${dueDate.toIso8601String().substring(0, 10)}',
-                            style: const TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w700,
-                            ),
-                          ),
-                          TextButton.icon(
-                            onPressed: () async {
-                              final picked = await showDatePicker(
-                                context: context,
-                                initialDate: dueDate,
-                                firstDate: DateTime.now(),
-                                lastDate:
-                                    DateTime.now().add(const Duration(days: 60)),
-                              );
-                              if (picked != null) {
-                                setDialogState(() => dueDate = picked);
-                              }
-                            },
-                            icon: const Icon(Icons.calendar_today_rounded,
-                                size: 14),
-                            label: const Text('Change Date'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    if (titleCtrl.text.trim().isEmpty) return;
-                    await HomeworkService.instance.createAssignment(
-                      halaqahId: AuthSessionService.instance.assignedHalaqahId,
-                      halaqahName: assignedHalaqah,
-                      teacherId: AuthSessionService.instance.userId,
-                      teacherName: AuthSessionService.instance.userName,
-                      title: titleCtrl.text.trim(),
-                      surahName: surahNameCtrl.text.trim(),
-                      surahNumber: int.tryParse(surahNumCtrl.text.trim()) ?? 1,
-                      fromAyah: int.tryParse(fromAyahCtrl.text.trim()) ?? 1,
-                      toAyah: int.tryParse(toAyahCtrl.text.trim()) ?? 7,
-                      tajweedFocus: tajweedCtrl.text.trim(),
-                      instructions: instructionsCtrl.text.trim(),
-                      dueDate: dueDate,
-                    );
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Homework assigned successfully.'),
-                        ),
-                      );
-                    }
-                  },
-                  child: const Text('Assign Task'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _CreateAssignmentDialog(
+        assignedHalaqah: assignedHalaqah,
+        palette: p,
+      ),
     );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text('Homework assigned successfully.'),
+        ),
+      );
+    }
   }
 
   // ===========================================================================
@@ -1125,113 +889,28 @@ class _HomeworkTabState extends State<HomeworkTab> {
     );
   }
 
-  void _showMarkPracticedDialog(
-      BuildContext context, HomeworkAssignment assignment, Student student) {
+  Future<void> _showMarkPracticedDialog(BuildContext context,
+      HomeworkAssignment assignment, Student student) async {
     final p = AppColors.of(context);
-    int repetitionCount = 3;
-    final notesCtrl =
-        TextEditingController(text: 'Recited smoothly with parent.');
-
-    showDialog<void>(
+    final saved = await showDialog<bool>(
       context: context,
-      builder: (ctx) {
-        return StatefulBuilder(
-          builder: (dCtx, setDialogState) {
-            return AlertDialog(
-              title: Text('Practice for ${student.fullName}'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    '${assignment.surahName} (Ayahs ${assignment.fromAyah}–${assignment.toAyah})',
-                    style: TextStyle(
-                      fontSize: 12.5,
-                      fontWeight: FontWeight.w700,
-                      color: p.primary,
-                    ),
-                  ),
-                  const SizedBox(height: 14),
-                  const Text(
-                    'How many times did your child recite at home?',
-                    style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
-                  ),
-                  const SizedBox(height: 10),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      IconButton(
-                        onPressed: repetitionCount > 1
-                            ? () => setDialogState(() => repetitionCount--)
-                            : null,
-                        icon: const Icon(Icons.remove_circle_outline),
-                      ),
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 18, vertical: 8),
-                        decoration: BoxDecoration(
-                          color: p.primarySoft,
-                          borderRadius: BorderRadius.circular(12),
-                        ),
-                        child: Text(
-                          '$repetitionCount Repetitions',
-                          style: TextStyle(
-                            fontSize: 13,
-                            fontWeight: FontWeight.w700,
-                            color: p.primary,
-                          ),
-                        ),
-                      ),
-                      IconButton(
-                        onPressed: () =>
-                            setDialogState(() => repetitionCount++),
-                        icon: const Icon(Icons.add_circle_outline),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 14),
-                  TextField(
-                    controller: notesCtrl,
-                    maxLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Parent Notes (Optional)',
-                      hintText: 'e.g. Read smoothly, struggled on Ayah 7...',
-                    ),
-                  ),
-                ],
-              ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: const Text('Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    await HomeworkService.instance.markCompletedByParent(
-                      assignmentId: assignment.id,
-                      studentId: student.id,
-                      repetitionCount: repetitionCount,
-                      notes: notesCtrl.text.trim(),
-                    );
-                    if (ctx.mounted) Navigator.of(ctx).pop();
-                    if (!mounted) return;
-                    setState(() {});
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(
-                        content: Text(
-                          'Marked practiced for ${student.fullName}. Ustaz notified.',
-                        ),
-                      ),
-                    );
-                  },
-                  child: const Text('Confirm Practice'),
-                ),
-              ],
-            );
-          },
-        );
-      },
+      builder: (_) => _MarkPracticedDialog(
+        assignment: assignment,
+        student: student,
+        palette: p,
+      ),
     );
+    if (saved != true || !mounted) return;
+    setState(() {});
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Marked practiced for ${student.fullName}. Ustaz notified.',
+          ),
+        ),
+      );
+    }
   }
 
   // ===========================================================================
@@ -1344,6 +1023,480 @@ class _HomeworkTabState extends State<HomeworkTab> {
           ),
         );
       },
+    );
+  }
+}
+
+class _ReviewSubmissionDialog extends StatefulWidget {
+  final HomeworkSubmission submission;
+  final AppPalette palette;
+
+  const _ReviewSubmissionDialog({
+    required this.submission,
+    required this.palette,
+  });
+
+  @override
+  State<_ReviewSubmissionDialog> createState() =>
+      _ReviewSubmissionDialogState();
+}
+
+class _ReviewSubmissionDialogState extends State<_ReviewSubmissionDialog> {
+  String _selectedRating = 'Mumtaz (ممتاز)';
+  final _feedbackCtrl = TextEditingController(
+      text: 'Masha\'Allah excellent recitation with clear Tajweed.');
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _feedbackCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return AlertDialog(
+      title: Text('Grade ${widget.submission.studentName}\'s Practice'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          DropdownButtonFormField<String>(
+            value: _selectedRating,
+            items: const [
+              DropdownMenuItem(
+                value: 'Mumtaz (ممتاز)',
+                child: Text('Mumtaz (ممتاز) — Excellent'),
+              ),
+              DropdownMenuItem(
+                value: 'Jayyid Jiddan (جيد جداً)',
+                child: Text('Jayyid Jiddan (جيد جداً) — Very Good'),
+              ),
+              DropdownMenuItem(
+                value: 'Jayyid (جيد)',
+                child: Text('Jayyid (جيد) — Good'),
+              ),
+              DropdownMenuItem(
+                value: 'Needs Revision (يحتاج مراجعة)',
+                child: Text('Needs Revision (يحتاج مراجعة)'),
+              ),
+            ],
+            onChanged: _isSubmitting
+                ? null
+                : (val) {
+                    if (val != null) {
+                      setState(() => _selectedRating = val);
+                    }
+                  },
+            decoration: const InputDecoration(labelText: 'Recitation Rating'),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: _feedbackCtrl,
+            enabled: !_isSubmitting,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Ustaz Feedback / Advice',
+              hintText: 'Enter guidance for parent and student...',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () async {
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await HomeworkService.instance.reviewSubmissionByTeacher(
+                      submissionId: widget.submission.id,
+                      teacherRating: _selectedRating,
+                      teacherFeedback: _feedbackCtrl.text.trim(),
+                    );
+                    if (!mounted) return;
+                    Navigator.of(context).pop(true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to submit endorsement: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: p.excused,
+            foregroundColor: Colors.white,
+          ),
+          child:
+              Text(_isSubmitting ? 'Submitting...' : 'Submit Endorsement'),
+        ),
+      ],
+    );
+  }
+}
+
+class _CreateAssignmentDialog extends StatefulWidget {
+  final String assignedHalaqah;
+  final AppPalette palette;
+
+  const _CreateAssignmentDialog({
+    required this.assignedHalaqah,
+    required this.palette,
+  });
+
+  @override
+  State<_CreateAssignmentDialog> createState() =>
+      _CreateAssignmentDialogState();
+}
+
+class _CreateAssignmentDialogState extends State<_CreateAssignmentDialog> {
+  final _titleCtrl =
+      TextEditingController(text: 'Surah Memorization & Tajweed');
+  final _surahNameCtrl = TextEditingController(text: 'Al-Mulk (الملك)');
+  final _surahNumCtrl = TextEditingController(text: '67');
+  final _fromAyahCtrl = TextEditingController(text: '1');
+  final _toAyahCtrl = TextEditingController(text: '10');
+  final _tajweedCtrl = TextEditingController(text: 'Ghunnah & Ikhfa Rules');
+  final _instructionsCtrl = TextEditingController(
+    text:
+        'Recite each verse at least 3 times focusing on correct elongation and nasalization.',
+  );
+  DateTime _dueDate = DateTime.now().add(const Duration(days: 3));
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _titleCtrl.dispose();
+    _surahNameCtrl.dispose();
+    _surahNumCtrl.dispose();
+    _fromAyahCtrl.dispose();
+    _toAyahCtrl.dispose();
+    _tajweedCtrl.dispose();
+    _instructionsCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.assignment_add, color: p.primary, size: 22),
+          const SizedBox(width: 8),
+          const Expanded(child: Text('Assign Quran Homework')),
+        ],
+      ),
+      content: SingleChildScrollView(
+        child: SizedBox(
+          width: 380,
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ProStatusPill(
+                label: 'Circle: ${widget.assignedHalaqah}',
+                color: p.primary,
+                icon: Icons.school_rounded,
+              ),
+              const SizedBox(height: 14),
+              TextField(
+                controller: _titleCtrl,
+                enabled: !_isSubmitting,
+                decoration: const InputDecoration(
+                  labelText: 'Assignment Title',
+                  hintText: 'e.g. Surah Al-Mulk Practice',
+                ),
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    flex: 3,
+                    child: TextField(
+                      controller: _surahNameCtrl,
+                      enabled: !_isSubmitting,
+                      decoration:
+                          const InputDecoration(labelText: 'Surah Name'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    flex: 1,
+                    child: TextField(
+                      controller: _surahNumCtrl,
+                      enabled: !_isSubmitting,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: '#'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _fromAyahCtrl,
+                      enabled: !_isSubmitting,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'From Ayah'),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: TextField(
+                      controller: _toAyahCtrl,
+                      enabled: !_isSubmitting,
+                      keyboardType: TextInputType.number,
+                      decoration: const InputDecoration(labelText: 'To Ayah'),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _tajweedCtrl,
+                enabled: !_isSubmitting,
+                decoration: const InputDecoration(
+                  labelText: 'Tajweed Rule Focus',
+                  hintText: 'e.g. Qalqalah, Ghunnah, Madd',
+                ),
+              ),
+              const SizedBox(height: 10),
+              TextField(
+                controller: _instructionsCtrl,
+                enabled: !_isSubmitting,
+                maxLines: 2,
+                decoration: const InputDecoration(
+                  labelText: 'Instructions for Parents & Students',
+                ),
+              ),
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Due: ${_dueDate.toIso8601String().substring(0, 10)}',
+                    style: const TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  TextButton.icon(
+                    onPressed: _isSubmitting
+                        ? null
+                        : () async {
+                            final picked = await showDatePicker(
+                              context: context,
+                              initialDate: _dueDate,
+                              firstDate: DateTime.now(),
+                              lastDate:
+                                  DateTime.now().add(const Duration(days: 60)),
+                            );
+                            if (picked != null && mounted) {
+                              setState(() => _dueDate = picked);
+                            }
+                          },
+                    icon: const Icon(Icons.calendar_today_rounded, size: 14),
+                    label: const Text('Change Date'),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () async {
+                  if (_titleCtrl.text.trim().isEmpty) return;
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await HomeworkService.instance.createAssignment(
+                      halaqahId: AuthSessionService.instance.assignedHalaqahId,
+                      halaqahName: widget.assignedHalaqah,
+                      teacherId: AuthSessionService.instance.userId,
+                      teacherName: AuthSessionService.instance.userName,
+                      title: _titleCtrl.text.trim(),
+                      surahName: _surahNameCtrl.text.trim(),
+                      surahNumber:
+                          int.tryParse(_surahNumCtrl.text.trim()) ?? 1,
+                      fromAyah: int.tryParse(_fromAyahCtrl.text.trim()) ?? 1,
+                      toAyah: int.tryParse(_toAyahCtrl.text.trim()) ?? 7,
+                      tajweedFocus: _tajweedCtrl.text.trim(),
+                      instructions: _instructionsCtrl.text.trim(),
+                      dueDate: _dueDate,
+                    );
+                    if (!mounted) return;
+                    Navigator.of(context).pop(true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to assign homework: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSubmitting ? 'Assigning...' : 'Assign Task'),
+        ),
+      ],
+    );
+  }
+}
+
+class _MarkPracticedDialog extends StatefulWidget {
+  final HomeworkAssignment assignment;
+  final Student student;
+  final AppPalette palette;
+
+  const _MarkPracticedDialog({
+    required this.assignment,
+    required this.student,
+    required this.palette,
+  });
+
+  @override
+  State<_MarkPracticedDialog> createState() => _MarkPracticedDialogState();
+}
+
+class _MarkPracticedDialogState extends State<_MarkPracticedDialog> {
+  int _repetitionCount = 3;
+  final _notesCtrl =
+      TextEditingController(text: 'Recited smoothly with parent.');
+  bool _isSubmitting = false;
+
+  @override
+  void dispose() {
+    _notesCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final p = widget.palette;
+    return AlertDialog(
+      title: Text('Practice for ${widget.student.fullName}'),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '${widget.assignment.surahName} (Ayahs ${widget.assignment.fromAyah}–${widget.assignment.toAyah})',
+            style: TextStyle(
+              fontSize: 12.5,
+              fontWeight: FontWeight.w700,
+              color: p.primary,
+            ),
+          ),
+          const SizedBox(height: 14),
+          const Text(
+            'How many times did your child recite at home?',
+            style: TextStyle(fontSize: 12.5, fontWeight: FontWeight.w600),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              IconButton(
+                onPressed: (!_isSubmitting && _repetitionCount > 1)
+                    ? () => setState(() => _repetitionCount--)
+                    : null,
+                icon: const Icon(Icons.remove_circle_outline),
+              ),
+              Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 18, vertical: 8),
+                decoration: BoxDecoration(
+                  color: p.primarySoft,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  '$_repetitionCount Repetitions',
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w700,
+                    color: p.primary,
+                  ),
+                ),
+              ),
+              IconButton(
+                onPressed: _isSubmitting
+                    ? null
+                    : () => setState(() => _repetitionCount++),
+                icon: const Icon(Icons.add_circle_outline),
+              ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          TextField(
+            controller: _notesCtrl,
+            enabled: !_isSubmitting,
+            maxLines: 2,
+            decoration: const InputDecoration(
+              labelText: 'Parent Notes (Optional)',
+              hintText: 'e.g. Read smoothly, struggled on Ayah 7...',
+            ),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSubmitting ? null : () => Navigator.of(context).pop(),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSubmitting
+              ? null
+              : () async {
+                  setState(() => _isSubmitting = true);
+                  try {
+                    await HomeworkService.instance.markCompletedByParent(
+                      assignmentId: widget.assignment.id,
+                      studentId: widget.student.id,
+                      repetitionCount: _repetitionCount,
+                      notes: _notesCtrl.text.trim(),
+                    );
+                    if (!mounted) return;
+                    Navigator.of(context).pop(true);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSubmitting = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to save practice: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: p.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSubmitting ? 'Saving...' : 'Confirm Practice'),
+        ),
+      ],
     );
   }
 }

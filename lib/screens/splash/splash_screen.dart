@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import '../../core/routes/app_routes.dart';
+import '../../core/services/auth_session_service.dart';
 import '../../core/services/supabase_service.dart';
 import '../../core/theme/app_colors.dart';
 import '../../widgets/islamic_pattern_painter.dart';
@@ -103,9 +104,19 @@ class _SplashScreenState extends State<SplashScreen>
     _controller.forward();
   }
 
-  void _navigateNext() {
+  Future<void> _navigateNext() async {
     if (!mounted) return;
-    final targetRoute = SupabaseService.instance.isAuthenticated
+    if (!SupabaseService.instance.isAuthenticated) {
+      Navigator.of(context).pushReplacementNamed(AppRoutes.auth);
+      return;
+    }
+
+    final activeSession = await AuthSessionService.instance
+        .syncFromSupabaseProfile()
+        .timeout(const Duration(seconds: 6), onTimeout: () => false);
+
+    if (!mounted) return;
+    final targetRoute = (activeSession && SupabaseService.instance.isAuthenticated)
         ? AppRoutes.dashboard
         : AppRoutes.auth;
     Navigator.of(context).pushReplacementNamed(targetRoute);

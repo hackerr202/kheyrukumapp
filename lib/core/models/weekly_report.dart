@@ -1,12 +1,14 @@
+import '../utils/json_parsers.dart';
+
 class WeeklyReport {
   final String id;
   final String studentId;
   final String studentName;
   final DateTime weekStartDate;
   final DateTime weekEndDate;
-  final String sabaq; // New lesson (e.g. "Surah Al-Mulk Ayahs 1-15")
-  final String sabqi; // Recent revision (e.g. "Surah Al-Mulk Ayahs 16-30")
-  final String manzil; // Cumulative retention (e.g. "Juz 29")
+  final String sabaq;
+  final String sabqi;
+  final String manzil;
   final int daysPresent;
   final int totalDays;
   final String tajweedRating; // 'Excellent', 'Very Good', 'Good', 'Needs Revision'
@@ -24,41 +26,39 @@ class WeeklyReport {
     required this.sabaq,
     required this.sabqi,
     required this.manzil,
-    this.daysPresent = 5,
+    this.daysPresent = 0,
     this.totalDays = 5,
-    this.tajweedRating = 'Excellent',
-    this.mistakesCount = 2,
-    this.teacherRemarks = 'Masha\'Allah, showing disciplined Tajweed articulation and smooth retention.',
+    this.tajweedRating = 'Good',
+    this.mistakesCount = 0,
+    this.teacherRemarks = '',
     this.teacherName = 'Assigned Teacher',
     required this.createdAt,
   });
 
   factory WeeklyReport.fromJson(Map<String, dynamic> json) {
+    final daysPresent = JsonParsers.asNullableInt(json['attendance_days']) ??
+        JsonParsers.asInt(json['days_present'], 0);
     return WeeklyReport(
-      id: json['id']?.toString() ?? '',
-      studentId: json['student_id']?.toString() ?? '',
-      studentName: json['student_name']?.toString() ?? 'Student',
-      weekStartDate: json['week_start_date'] != null
-          ? DateTime.tryParse(json['week_start_date'].toString()) ?? DateTime.now()
-          : DateTime.now().subtract(const Duration(days: 7)),
-      weekEndDate: json['week_end_date'] != null
-          ? DateTime.tryParse(json['week_end_date'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      sabaq: json['sabaq']?.toString() ?? 'Surah Al-Mulk (1-15)',
-      sabqi: json['sabqi']?.toString() ?? 'Surah Al-Qalam (1-20)',
-      manzil: json['manzil']?.toString() ?? 'Juz 29 Retention',
-      daysPresent: (json['attendance_days'] as num?)?.toInt() ??
-          (json['days_present'] as num?)?.toInt() ??
-          5,
-      totalDays: (json['total_days'] as num?)?.toInt() ?? 5,
-      tajweedRating: json['tajweed_rating']?.toString() ?? 'Excellent',
-      mistakesCount: (json['mistakes_count'] as num?)?.toInt() ?? 1,
-      teacherRemarks: json['teacher_remarks']?.toString() ??
-          'Consistent recitation with clear Makharij. Recommended for next Surah evaluation.',
-      teacherName: json['teacher_name']?.toString() ?? 'Assigned Teacher',
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      studentId: JsonParsers.asString(json['student_id']),
+      studentName: JsonParsers.asNullableString(json['student_name']) ?? 'Student',
+      weekStartDate: JsonParsers.asDateTime(
+        json['week_start_date'],
+        DateTime.now().subtract(const Duration(days: 7)),
+      ),
+      weekEndDate: JsonParsers.asDateTime(json['week_end_date']),
+      sabaq: JsonParsers.asString(json['sabaq']),
+      sabqi: JsonParsers.asString(json['sabqi']),
+      manzil: JsonParsers.asString(json['manzil']),
+      daysPresent: daysPresent,
+      totalDays: JsonParsers.asInt(json['total_days'], 5),
+      tajweedRating:
+          JsonParsers.asNullableString(json['tajweed_rating']) ?? 'Good',
+      mistakesCount: JsonParsers.asInt(json['mistakes_count'], 0),
+      teacherRemarks: JsonParsers.asString(json['teacher_remarks']),
+      teacherName: JsonParsers.asNullableString(json['teacher_name']) ??
+          'Assigned Teacher',
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

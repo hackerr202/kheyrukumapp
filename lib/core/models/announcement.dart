@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 /// Model representing an official Center Announcement
 class Announcement {
   final String id;
@@ -24,17 +26,17 @@ class Announcement {
 
   factory Announcement.fromJson(Map<String, dynamic> json) {
     return Announcement(
-      id: json['id'] as String? ?? '',
-      title: json['title'] as String? ?? 'Announcement',
-      content: json['content'] as String? ?? '',
-      targetAudience: json['target_audience'] as String? ?? 'all',
-      authorName: json['author_name'] as String? ?? 'Center Administration',
-      isPinned: json['is_pinned'] as bool? ?? false,
-      attachmentUrl: json['attachment_url'] as String?,
-      attachmentName: json['attachment_name'] as String?,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      title: JsonParsers.asNullableString(json['title']) ?? 'Announcement',
+      content: JsonParsers.asString(json['content']),
+      targetAudience:
+          JsonParsers.asNullableString(json['target_audience']) ?? 'all',
+      authorName: JsonParsers.asNullableString(json['author_name']) ??
+          'Center Administration',
+      isPinned: JsonParsers.asBool(json['is_pinned']),
+      attachmentUrl: JsonParsers.asNullableString(json['attachment_url']),
+      attachmentName: JsonParsers.asNullableString(json['attachment_name']),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

@@ -68,30 +68,15 @@ class _AuthScreenState extends State<AuthScreen> {
     setState(() => _isLoading = false);
 
     if (res['success'] == true) {
-      final profile = await SupabaseService.instance.getUserProfile();
-      if (profile != null) {
-        if (profile['is_suspended'] == true) {
-          await SupabaseService.instance.signOut();
-          AuthSessionService.instance.clearSession();
-          _showToast(
-            'Your account has been suspended by center administration. Please contact support.',
-          );
-          return;
-        }
-        AuthSessionService.instance.setRole(
-          profile['role'] ?? 'parent',
-          userId: profile['id'],
-          name: profile['full_name'],
-          email: profile['email'],
-          phone: profile['phone'],
-          halaqahId: profile['halaqah_id'],
-          halaqahName: profile['halaqah_name'],
+      final active = await AuthSessionService.instance.syncFromSupabaseProfile();
+      if (!mounted) return;
+      if (!active || !SupabaseService.instance.isAuthenticated) {
+        _showToast(
+          'Your account is suspended or inactive. Please contact center administration.',
         );
+        return;
       }
-      await AuthSessionService.instance.syncFromSupabaseProfile();
-      if (mounted) {
-        Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
-      }
+      Navigator.of(context).pushReplacementNamed(AppRoutes.dashboard);
     } else {
       final msg = res['message'] ?? 'Sign in failed.';
       _showToast(msg);
@@ -190,8 +175,8 @@ class _AuthScreenState extends State<AuthScreen> {
   }
 
   void _showToast(String message) {
-    setState(() => _errorMessage = message);
     if (!mounted) return;
+    setState(() => _errorMessage = message);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(message),
@@ -207,11 +192,13 @@ class _AuthScreenState extends State<AuthScreen> {
       final uri = Uri.parse(url);
       if (await canLaunchUrl(uri)) {
         await launchUrl(uri, mode: LaunchMode.externalApplication);
-      } else {
+      } else if (mounted) {
         _showContactSheet();
       }
     } catch (_) {
-      _showContactSheet();
+      if (mounted) {
+        _showContactSheet();
+      }
     }
   }
 

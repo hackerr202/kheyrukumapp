@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 class Student {
   final String id;
   final String fullName;
@@ -38,29 +40,28 @@ class Student {
   });
 
   factory Student.fromJson(Map<String, dynamic> json) {
+    final halaqahMap = JsonParsers.asMap(json['halaqahs']);
     return Student(
-      id: json['id']?.toString() ?? '',
-      fullName: json['full_name']?.toString() ?? 'Student',
-      age: (json['age'] as num?)?.toInt() ?? 8,
-      avatarUrl: json['avatar_url']?.toString(),
-      halaqahId: json['halaqah_id']?.toString(),
-      halaqahName: json['halaqah_name']?.toString() ??
-          (json['halaqahs'] != null ? json['halaqahs']['name'] : 'Study Circle'),
-      parentId: json['parent_id']?.toString(),
-      parentName: json['parent_name']?.toString() ?? 'Parent',
-      parentPhone: json['parent_phone']?.toString() ?? '',
-      parentEmail: json['parent_email']?.toString(),
-      dateOfBirth: json['date_of_birth'] != null
-          ? DateTime.tryParse(json['date_of_birth'].toString())
-          : null,
-      currentJuz: (json['current_juz'] as num?)?.toInt() ?? 30,
-      currentSurah: (json['current_surah'] as num?)?.toInt() ?? 67,
-      currentAyah: (json['current_ayah'] as num?)?.toInt() ?? 1,
-      monthlyFeeStatus: json['monthly_fee_status']?.toString() ?? 'pending',
-      monthlyFeeAmount: (json['monthly_fee_amount'] as num?)?.toDouble() ?? 50.0,
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      id: JsonParsers.asString(json['id']),
+      fullName: JsonParsers.asNullableString(json['full_name']) ?? 'Student',
+      age: JsonParsers.asInt(json['age'], 8),
+      avatarUrl: JsonParsers.asNullableString(json['avatar_url']),
+      halaqahId: JsonParsers.asNullableString(json['halaqah_id']),
+      halaqahName: JsonParsers.asNullableString(json['halaqah_name']) ??
+          JsonParsers.asNullableString(halaqahMap?['name']) ??
+          'Study Circle',
+      parentId: JsonParsers.asNullableString(json['parent_id']),
+      parentName: JsonParsers.asNullableString(json['parent_name']) ?? 'Parent',
+      parentPhone: JsonParsers.asString(json['parent_phone']),
+      parentEmail: JsonParsers.asNullableString(json['parent_email']),
+      dateOfBirth: JsonParsers.asNullableDateTime(json['date_of_birth']),
+      currentJuz: JsonParsers.asInt(json['current_juz'], 30),
+      currentSurah: JsonParsers.asInt(json['current_surah'], 67),
+      currentAyah: JsonParsers.asInt(json['current_ayah'], 1),
+      monthlyFeeStatus:
+          JsonParsers.asNullableString(json['monthly_fee_status']) ?? 'pending',
+      monthlyFeeAmount: JsonParsers.asDouble(json['monthly_fee_amount'], 50.0),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 

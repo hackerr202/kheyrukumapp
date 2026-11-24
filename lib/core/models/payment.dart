@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 class MonthlyPayment {
   final String id;
   final String parentId;
@@ -5,13 +7,13 @@ class MonthlyPayment {
   final String parentEmail;
   final String studentId;
   final String studentName;
-  final String month; // e.g. "October 2026"
-  final double amount; // e.g. 50.0
+  final String month;
+  final double amount;
   final DateTime dueDate;
   final DateTime feeStartDate;
   final String status; // 'pending', 'submitted', 'approved', 'rejected', 'overdue'
   final String? receiptUrl;
-  final String? receiptLocalMock; // Base64 or sample receipt identifier
+  final String? receiptLocalMock;
   final String? rejectionReason;
   final DateTime? submittedAt;
   final DateTime? reviewedAt;
@@ -40,35 +42,27 @@ class MonthlyPayment {
   });
 
   factory MonthlyPayment.fromJson(Map<String, dynamic> json) {
+    final due = JsonParsers.asDateTime(json['due_date']);
     return MonthlyPayment(
-      id: json['id']?.toString() ?? '',
-      parentId: json['parent_id']?.toString() ?? '',
-      parentName: json['parent_name']?.toString() ?? 'Parent',
-      parentEmail: json['parent_email']?.toString() ?? 'parent@kheyrukum.com',
-      studentId: json['student_id']?.toString() ?? '',
-      studentName: json['student_name']?.toString() ?? 'Student',
-      month: json['month']?.toString() ?? 'Current Month',
-      amount: (json['amount'] as num?)?.toDouble() ?? 50.0,
-      dueDate: json['due_date'] != null
-          ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
-          : DateTime.now(),
-      feeStartDate: json['fee_start_date'] != null
-          ? DateTime.tryParse(json['fee_start_date'].toString()) ?? DateTime.now()
-          : (json['due_date'] != null
-              ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now()
-              : DateTime.now()),
-      status: json['status']?.toString() ?? 'pending',
-      receiptUrl: json['receipt_url']?.toString(),
-      receiptLocalMock: json['receipt_local_mock']?.toString(),
-      rejectionReason: json['rejection_reason']?.toString(),
-      submittedAt: json['submitted_at'] != null
-          ? DateTime.tryParse(json['submitted_at'].toString())
-          : null,
-      reviewedAt: json['reviewed_at'] != null
-          ? DateTime.tryParse(json['reviewed_at'].toString())
-          : null,
-      reviewedBy: json['reviewed_by']?.toString(),
-      notes: json['notes']?.toString(),
+      id: JsonParsers.asString(json['id']),
+      parentId: JsonParsers.asString(json['parent_id']),
+      parentName: JsonParsers.asNullableString(json['parent_name']) ?? 'Parent',
+      parentEmail: JsonParsers.asString(json['parent_email']),
+      studentId: JsonParsers.asString(json['student_id']),
+      studentName: JsonParsers.asNullableString(json['student_name']) ?? 'Student',
+      month: JsonParsers.asNullableString(json['month'] ?? json['month_year']) ??
+          'Current Month',
+      amount: JsonParsers.asDouble(json['amount'], 0.0),
+      dueDate: due,
+      feeStartDate: JsonParsers.asDateTime(json['fee_start_date'], due),
+      status: JsonParsers.asNullableString(json['status']) ?? 'pending',
+      receiptUrl: JsonParsers.asNullableString(json['receipt_url']),
+      receiptLocalMock: JsonParsers.asNullableString(json['receipt_local_mock']),
+      rejectionReason: JsonParsers.asNullableString(json['rejection_reason']),
+      submittedAt: JsonParsers.asNullableDateTime(json['submitted_at']),
+      reviewedAt: JsonParsers.asNullableDateTime(json['reviewed_at']),
+      reviewedBy: JsonParsers.asNullableString(json['reviewed_by']),
+      notes: JsonParsers.asNullableString(json['notes']),
     );
   }
 

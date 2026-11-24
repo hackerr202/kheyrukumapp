@@ -72,4 +72,11 @@ class NotificationCenterService {
       _controller.add(List.from(_notifications));
     }
   }
+
+  Future<void> clearOnLogout() async {
+    _notifications.clear();
+    if (!_controller.isClosed) {
+      _controller.add([]);
+    }
+  }
 }

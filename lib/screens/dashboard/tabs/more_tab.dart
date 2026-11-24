@@ -127,28 +127,45 @@ class MoreTab extends StatelessWidget {
                         style: TextStyle(fontSize: 12, color: p.inkSecondary),
                       )
                     else
-                      ...classStudents.map(
-                        (s) => Padding(
-                          padding: const EdgeInsets.only(bottom: 5),
-                          child: Row(
-                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                            children: [
-                              Text(
-                                '• ${s.fullName}',
-                                style: TextStyle(
-                                  fontSize: 12.5,
-                                  fontWeight: FontWeight.w600,
-                                  color: p.ink,
-                                ),
-                              ),
-                              Text(
-                                'Juz ${s.currentJuz}',
-                                style: TextStyle(
-                                  fontSize: 11.5,
-                                  color: p.inkSecondary,
-                                ),
-                              ),
-                            ],
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(ctx).size.height * 0.35,
+                        ),
+                        child: SingleChildScrollView(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: classStudents
+                                .map(
+                                  (s) => Padding(
+                                    padding: const EdgeInsets.only(bottom: 5),
+                                    child: Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.spaceBetween,
+                                      children: [
+                                        Flexible(
+                                          child: Text(
+                                            '• ${s.fullName}',
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: p.ink,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Text(
+                                          'Juz ${s.currentJuz}',
+                                          style: TextStyle(
+                                            fontSize: 11.5,
+                                            color: p.inkSecondary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                )
+                                .toList(),
                           ),
                         ),
                       ),

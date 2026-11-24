@@ -4,10 +4,13 @@ import '../../../core/localization/app_localizations.dart';
 import '../../../core/localization/locale_notifier.dart';
 import '../../../core/routes/app_routes.dart';
 import '../../../core/services/absence_service.dart';
+import '../../../core/services/announcement_service.dart';
 import '../../../core/services/auth_session_service.dart';
 import '../../../core/services/halaqah_service.dart';
 import '../../../core/services/homework_service.dart';
 import '../../../core/services/messaging_service.dart';
+import '../../../core/services/notification_center_service.dart';
+import '../../../core/services/payment_service.dart';
 import '../../../core/services/push_notification_service.dart';
 import '../../../core/services/storage_service.dart';
 import '../../../core/services/student_service.dart';
@@ -40,7 +43,7 @@ class _SettingsTabState extends State<SettingsTab> {
         maxHeight: 600,
         imageQuality: 85,
       );
-      if (picked == null) return;
+      if (!mounted || picked == null) return;
 
       setState(() => _isUploadingAvatar = true);
       final bytes = await picked.readAsBytes();
@@ -94,19 +97,30 @@ class _SettingsTabState extends State<SettingsTab> {
   }
 
   Future<void> _handleSignOut() async {
-    await PushNotificationService.instance.unregisterOnLogout();
-    AuthSessionService.instance.clearSession();
-    await Future.wait([
-      StudentService.instance.clearOnLogout(),
-      HalaqahService.instance.clearOnLogout(),
-      HomeworkService.instance.clearOnLogout(),
-      AbsenceService.instance.clearOnLogout(),
-      MessagingService.instance.clearOnLogout(),
-    ]);
-    await SupabaseService.instance.signOut();
-    if (mounted) {
-      Navigator.of(context, rootNavigator: true)
-          .pushNamedAndRemoveUntil(AppRoutes.auth, (_) => false);
+    try {
+      await PushNotificationService.instance.unregisterOnLogout();
+    } catch (_) {}
+
+    try {
+      AuthSessionService.instance.clearSession();
+      await Future.wait([
+        PaymentService.instance.clearOnLogout(),
+        AnnouncementService.instance.clearOnLogout(),
+        NotificationCenterService.instance.clearOnLogout(),
+        StudentService.instance.clearOnLogout(),
+        HalaqahService.instance.clearOnLogout(),
+        HomeworkService.instance.clearOnLogout(),
+        AbsenceService.instance.clearOnLogout(),
+        MessagingService.instance.clearOnLogout(),
+      ]);
+    } catch (_) {} finally {
+      try {
+        await SupabaseService.instance.signOut();
+      } catch (_) {}
+      if (mounted) {
+        Navigator.of(context, rootNavigator: true)
+            .pushNamedAndRemoveUntil(AppRoutes.auth, (_) => false);
+      }
     }
   }
 

@@ -184,6 +184,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
 
   @override
   void dispose() {
+    PrayerReminderService.instance.stop();
     _alertDismissTimer?.cancel();
     _alertSub?.cancel();
     _announcementsSub?.cancel();

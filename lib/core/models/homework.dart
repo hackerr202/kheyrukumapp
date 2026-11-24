@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 /// Homework Assignment model for Quran Madrasah Halaqah classes.
 class HomeworkAssignment {
   final String id;
@@ -54,34 +56,38 @@ class HomeworkAssignment {
   }
 
   factory HomeworkAssignment.fromJson(Map<String, dynamic> json) {
-    final halaqahObj = json['halaqahs'];
-    final profileObj = json['profiles'];
-    final resolvedHalaqahName = json['halaqah_name']?.toString() ??
-        (halaqahObj is Map ? halaqahObj['name']?.toString() : null) ??
-        'Halaqah Circle';
-    final resolvedTeacherName = json['teacher_name']?.toString() ??
-        (profileObj is Map ? profileObj['full_name']?.toString() : null) ??
-        'Ustaz';
+    final halaqahObj = JsonParsers.asMap(json['halaqahs']);
+    final profileObj = JsonParsers.asMap(json['profiles']);
+    final resolvedHalaqahName =
+        JsonParsers.asNullableString(json['halaqah_name']) ??
+            JsonParsers.asNullableString(halaqahObj?['name']) ??
+            'Halaqah Circle';
+    final resolvedTeacherName =
+        JsonParsers.asNullableString(json['teacher_name']) ??
+            JsonParsers.asNullableString(profileObj?['full_name']) ??
+            'Ustaz';
+    final surahNum = JsonParsers.asInt(json['surah_number'], 1);
 
     return HomeworkAssignment(
-      id: json['id']?.toString() ?? '',
-      halaqahId: json['halaqah_id']?.toString() ?? '',
+      id: JsonParsers.asString(json['id']),
+      halaqahId: JsonParsers.asString(json['halaqah_id']),
       halaqahName: resolvedHalaqahName,
-      teacherId: json['teacher_id']?.toString() ?? '',
+      teacherId: JsonParsers.asString(json['teacher_id']),
       teacherName: resolvedTeacherName,
-      title: json['title']?.toString() ?? 'Quran Homework',
-      surahName: json['surah_name']?.toString() ?? 'Surah #${json['surah_number'] ?? 1}',
-      surahNumber: (json['surah_number'] as num?)?.toInt() ?? 1,
-      fromAyah: ((json['from_ayah'] ?? json['ayah_start']) as num?)?.toInt() ?? 1,
-      toAyah: ((json['to_ayah'] ?? json['ayah_end']) as num?)?.toInt() ?? 7,
-      tajweedFocus: json['tajweed_focus']?.toString() ?? 'General Recitation',
-      instructions: json['instructions']?.toString() ?? '',
-      dueDate: json['due_date'] != null
-          ? DateTime.tryParse(json['due_date'].toString()) ?? DateTime.now().add(const Duration(days: 3))
-          : DateTime.now().add(const Duration(days: 3)),
-      createdAt: json['created_at'] != null
-          ? DateTime.tryParse(json['created_at'].toString()) ?? DateTime.now()
-          : DateTime.now(),
+      title: JsonParsers.asNullableString(json['title']) ?? 'Quran Homework',
+      surahName:
+          JsonParsers.asNullableString(json['surah_name']) ?? 'Surah #$surahNum',
+      surahNumber: surahNum,
+      fromAyah: JsonParsers.asInt(json['from_ayah'] ?? json['ayah_start'], 1),
+      toAyah: JsonParsers.asInt(json['to_ayah'] ?? json['ayah_end'], 7),
+      tajweedFocus: JsonParsers.asNullableString(json['tajweed_focus']) ??
+          'General Recitation',
+      instructions: JsonParsers.asString(json['instructions']),
+      dueDate: JsonParsers.asDateTime(
+        json['due_date'],
+        DateTime.now().add(const Duration(days: 3)),
+      ),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
     );
   }
 }
@@ -97,7 +103,7 @@ class HomeworkSubmission {
   final int repetitionCount;
   final String? parentNote;
   final DateTime? practicedAt;
-  final String? teacherRating; // e.g. 'Mumtaz (ممتاز)', 'Jayyid Jiddan (جيد جداً)', 'Jayyid (جيد)'
+  final String? teacherRating;
   final String? teacherFeedback;
   final DateTime? reviewedAt;
 
@@ -120,6 +126,7 @@ class HomeworkSubmission {
   bool get isReviewed => status == 'reviewed';
 
   HomeworkSubmission copyWith({
+    String? id,
     String? status,
     int? repetitionCount,
     String? parentNote,
@@ -129,7 +136,7 @@ class HomeworkSubmission {
     DateTime? reviewedAt,
   }) {
     return HomeworkSubmission(
-      id: id,
+      id: id ?? this.id,
       assignmentId: assignmentId,
       studentId: studentId,
       studentName: studentName,
@@ -162,28 +169,29 @@ class HomeworkSubmission {
   }
 
   factory HomeworkSubmission.fromJson(Map<String, dynamic> json) {
-    final studentObj = json['students'];
-    final resolvedStudentName = json['student_name']?.toString() ??
-        (studentObj is Map ? studentObj['full_name']?.toString() : null) ??
-        'Student';
+    final studentObj = JsonParsers.asMap(json['students']);
+    final resolvedStudentName =
+        JsonParsers.asNullableString(json['student_name']) ??
+            JsonParsers.asNullableString(studentObj?['full_name']) ??
+            'Student';
 
     return HomeworkSubmission(
-      id: json['id']?.toString() ?? '',
-      assignmentId: json['assignment_id']?.toString() ?? '',
-      studentId: json['student_id']?.toString() ?? '',
+      id: JsonParsers.asString(json['id']),
+      assignmentId: JsonParsers.asString(json['assignment_id']),
+      studentId: JsonParsers.asString(json['student_id']),
       studentName: resolvedStudentName,
-      parentId: json['parent_id']?.toString() ?? '',
-      status: json['status']?.toString() ?? 'pending',
-      repetitionCount: (json['repetition_count'] as num?)?.toInt() ?? 1,
-      parentNote: json['parent_note']?.toString(),
-      practicedAt: json['practiced_at'] != null
-          ? DateTime.tryParse(json['practiced_at'].toString())
-          : null,
-      teacherRating: json['teacher_rating']?.toString(),
-      teacherFeedback: json['teacher_feedback']?.toString(),
-      reviewedAt: json['reviewed_at'] != null
-          ? DateTime.tryParse(json['reviewed_at'].toString())
-          : null,
+      parentId: JsonParsers.asString(json['parent_id']),
+      status: JsonParsers.asNullableString(json['status']) ?? 'pending',
+      repetitionCount: JsonParsers.asInt(json['repetition_count'], 1),
+      parentNote: JsonParsers.asNullableString(json['parent_note']),
+      practicedAt: JsonParsers.asNullableDateTime(
+        json['practiced_at'] ?? json['submitted_at'],
+      ),
+      teacherRating: JsonParsers.asNullableString(json['teacher_rating']),
+      teacherFeedback: JsonParsers.asNullableString(
+        json['teacher_feedback'] ?? json['teacher_feedback_text'],
+      ),
+      reviewedAt: JsonParsers.asNullableDateTime(json['reviewed_at']),
     );
   }
 }

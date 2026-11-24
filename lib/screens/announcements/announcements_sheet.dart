@@ -7,6 +7,7 @@ import '../../core/services/auth_session_service.dart';
 import '../../core/services/notification_center_service.dart';
 import '../../core/services/storage_service.dart';
 import '../../core/theme/app_colors.dart';
+import '../../core/utils/json_parsers.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../payments/payments_screen.dart';
 import 'post_announcement_dialog.dart';
@@ -35,11 +36,15 @@ class AnnouncementsSheet extends StatefulWidget {
 class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
   late int _activeTab; // 0: Alerts, 1: Notices
   String _selectedFilter = 'all';
+  late final Stream<List<AppNotification>> _notificationsStream;
+  late final Stream<List<Announcement>> _announcementsStream;
 
   @override
   void initState() {
     super.initState();
     _activeTab = widget.initialTab;
+    _notificationsStream = NotificationCenterService.instance.stream;
+    _announcementsStream = AnnouncementService.instance.streamAnnouncements();
     if (_activeTab == 1) {
       AnnouncementService.instance.markAllAsRead();
     }
@@ -93,7 +98,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
           if (_activeTab == 0)
             Expanded(
               child: StreamBuilder<List<AppNotification>>(
-                stream: NotificationCenterService.instance.stream,
+                stream: _notificationsStream,
                 initialData:
                     NotificationCenterService.instance.currentNotifications,
                 builder: (context, snapshot) {
@@ -176,7 +181,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
             Divider(height: 8, color: p.border),
             Expanded(
               child: StreamBuilder<List<Announcement>>(
-                stream: AnnouncementService.instance.streamAnnouncements(),
+                stream: _announcementsStream,
                 builder: (context, snapshot) {
                   if (snapshot.connectionState == ConnectionState.waiting &&
                       !snapshot.hasData) {
@@ -329,9 +334,9 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   const SizedBox(height: 8),
                   InkWell(
                     onTap: () {
+                      final navigator = Navigator.of(context);
                       Navigator.pop(context);
-                      Navigator.push(
-                        context,
+                      navigator.push(
                         MaterialPageRoute(
                           builder: (_) => const PaymentsScreen(),
                         ),
@@ -545,7 +550,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 ),
               ),
           ],
-          if (item.authorName.isNotEmpty) ...[
+          if (item.authorName.trim().isNotEmpty) ...[
             const SizedBox(height: 12),
             Row(
               children: [
@@ -558,7 +563,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   ),
                   child: Center(
                     child: Text(
-                      item.authorName.trim()[0].toUpperCase(),
+                      JsonParsers.safeInitial(item.authorName),
                       style: TextStyle(
                         fontSize: 9.5,
                         fontWeight: FontWeight.w700,

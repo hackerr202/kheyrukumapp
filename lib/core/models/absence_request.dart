@@ -1,3 +1,5 @@
+import '../utils/json_parsers.dart';
+
 /// Model representing an Excused Absence Request submitted by a parent for their child.
 class AbsenceRequest {
   final String id;
@@ -99,27 +101,22 @@ class AbsenceRequest {
 
   factory AbsenceRequest.fromJson(Map<String, dynamic> json) {
     return AbsenceRequest(
-      id: json['id'] as String,
-      studentId: json['student_id'] as String,
-      studentName: json['student_name'] as String? ?? 'Student',
-      halaqahId: json['halaqah_id'] as String? ?? 'halaqah-001',
-      halaqahName: json['halaqah_name'] as String? ?? 'Halaqah Circle',
-      parentId: json['parent_id'] as String? ?? '',
-      parentName: json['parent_name'] as String? ?? 'Parent',
-      parentPhone: json['parent_phone'] as String? ?? '',
-      date: json['date'] != null
-          ? DateTime.parse(json['date'] as String)
-          : DateTime.now(),
-      reason: json['reason'] as String? ?? 'illness',
-      notes: json['notes'] as String? ?? '',
-      status: json['status'] as String? ?? 'pending',
-      reviewedBy: json['reviewed_by'] as String?,
-      createdAt: json['created_at'] != null
-          ? DateTime.parse(json['created_at'] as String)
-          : DateTime.now(),
-      reviewedAt: json['reviewed_at'] != null
-          ? DateTime.parse(json['reviewed_at'] as String)
-          : null,
+      id: JsonParsers.asString(json['id']),
+      studentId: JsonParsers.asString(json['student_id']),
+      studentName: JsonParsers.asNullableString(json['student_name']) ?? 'Student',
+      halaqahId: JsonParsers.asString(json['halaqah_id']),
+      halaqahName:
+          JsonParsers.asNullableString(json['halaqah_name']) ?? 'Halaqah Circle',
+      parentId: JsonParsers.asString(json['parent_id']),
+      parentName: JsonParsers.asNullableString(json['parent_name']) ?? 'Parent',
+      parentPhone: JsonParsers.asString(json['parent_phone']),
+      date: JsonParsers.asDateTime(json['date']),
+      reason: JsonParsers.asNullableString(json['reason']) ?? 'illness',
+      notes: JsonParsers.asString(json['notes']),
+      status: JsonParsers.asNullableString(json['status']) ?? 'pending',
+      reviewedBy: JsonParsers.asNullableString(json['reviewed_by']),
+      createdAt: JsonParsers.asDateTime(json['created_at']),
+      reviewedAt: JsonParsers.asNullableDateTime(json['reviewed_at']),
     );
   }
 }

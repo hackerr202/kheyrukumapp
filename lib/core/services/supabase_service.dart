@@ -414,10 +414,19 @@ class SupabaseService {
     }
   }
 
-  /// 4. Sign Out
+  /// 4. Sign Out (cancels active Realtime channels before closing auth session)
   Future<void> signOut() async {
     if (_isInitialized) {
-      await client?.auth.signOut();
+      try {
+        await client?.removeAllChannels();
+      } catch (e) {
+        debugPrint('[SupabaseService] Channel cleanup on signOut note: $e');
+      }
+      try {
+        await client?.auth.signOut();
+      } catch (e) {
+        debugPrint('[SupabaseService] signOut note: $e');
+      }
     }
   }
 

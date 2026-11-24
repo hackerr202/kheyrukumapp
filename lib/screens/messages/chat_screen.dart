@@ -42,6 +42,8 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen>
     with SingleTickerProviderStateMixin {
+  static const int _maxAttachmentBytes = 25 * 1024 * 1024;
+
   final TextEditingController _msgCtrl = TextEditingController();
   final ScrollController _scrollCtrl = ScrollController();
   final ImagePicker _imagePicker = ImagePicker();
@@ -49,9 +51,12 @@ class _ChatScreenState extends State<ChatScreen>
   // Voice recording engine
   late final AudioRecorder _audioRecorder;
   String? _currentRecordingPath;
+  bool _isStartingRecording = false;
   bool _isRecordingVoice = false;
   int _recordingSeconds = 0;
   Timer? _recordingTimer;
+  String? _failedRecordingPath;
+  int _failedRecordingDuration = 0;
 
   // Voice playback engine
   late final AudioPlayer _audioPlayer;
@@ -64,6 +69,7 @@ class _ChatScreenState extends State<ChatScreen>
   StreamSubscription<Duration>? _playerPositionSub;
   StreamSubscription<Duration>? _playerDurationSub;
   StreamSubscription<void>? _playerCompleteSub;
+  late Stream<List<ChatMessage>> _messagesStream;
 
   bool _isUploadingAttachment = false;
 
@@ -74,6 +80,8 @@ class _ChatScreenState extends State<ChatScreen>
   @override
   void initState() {
     super.initState();
+    _messagesStream =
+        MessagingService.instance.streamMessages(widget.conversationId);
     _audioRecorder = AudioRecorder();
     _audioPlayer = AudioPlayer();
 
@@ -108,6 +116,27 @@ class _ChatScreenState extends State<ChatScreen>
   }
 
   @override
+  void didUpdateWidget(covariant ChatScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.conversationId != widget.conversationId) {
+      _messagesStream =
+          MessagingService.instance.streamMessages(widget.conversationId);
+    }
+  }
+
+  void _deleteTempFileSync(String? path) {
+    if (path == null || path.isEmpty) return;
+    try {
+      final f = File(path);
+      if (f.existsSync()) {
+        f.deleteSync();
+      }
+    } catch (e) {
+      debugPrint('[ChatScreen] Failed deleting temp file: $e');
+    }
+  }
+
+  @override
   void dispose() {
     _recordingTimer?.cancel();
     _playerStateSub?.cancel();
@@ -117,6 +146,9 @@ class _ChatScreenState extends State<ChatScreen>
 
     _audioPlayer.dispose();
     _audioRecorder.dispose();
+
+    _deleteTempFileSync(_currentRecordingPath);
+    _deleteTempFileSync(_failedRecordingPath);
 
     _msgCtrl.dispose();
     _scrollCtrl.dispose();
@@ -133,35 +165,57 @@ class _ChatScreenState extends State<ChatScreen>
     }
   }
 
-  Future<void> _sendMessage({
+  Future<bool> _sendMessage({
     String type = 'text',
     String? contentOverride,
     String? attachmentUrl,
     String? attachmentName,
     int? audioDurationSeconds,
+    bool showErrorSnackBar = true,
   }) async {
     final text = contentOverride ?? _msgCtrl.text.trim();
-    if (text.isEmpty && attachmentUrl == null) return;
+    if (text.isEmpty && attachmentUrl == null) return false;
     if (contentOverride == null) _msgCtrl.clear();
 
-    await MessagingService.instance.sendMessage(
-      conversationId: widget.conversationId,
-      senderId: _currentUserId,
-      senderName: _currentUserName,
-      senderRole: _currentUserRole,
-      content: text,
-      messageType: type,
-      attachmentUrl: attachmentUrl,
-      attachmentName: attachmentName,
-      audioDurationSeconds: audioDurationSeconds,
-    );
+    try {
+      await MessagingService.instance.sendMessage(
+        conversationId: widget.conversationId,
+        senderId: _currentUserId,
+        senderName: _currentUserName,
+        senderRole: _currentUserRole,
+        content: text,
+        messageType: type,
+        attachmentUrl: attachmentUrl,
+        attachmentName: attachmentName,
+        audioDurationSeconds: audioDurationSeconds,
+      );
 
-    Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+      Future.delayed(const Duration(milliseconds: 100), _scrollToBottom);
+      return true;
+    } catch (e) {
+      if (contentOverride == null && _msgCtrl.text.isEmpty) {
+        _msgCtrl.text = text;
+      }
+      if (showErrorSnackBar && mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to send message: ${SupabaseService.cleanErrorMessage(e)}',
+            ),
+          ),
+        );
+      }
+      return false;
+    }
   }
 
   // --- Voice Recording ---
 
   Future<void> _startVoiceRecording() async {
+    if (_isStartingRecording || _isRecordingVoice || _isUploadingAttachment) {
+      return;
+    }
+    _isStartingRecording = true;
     try {
       final hasPermission = await _audioRecorder.hasPermission();
       if (!hasPermission) {
@@ -176,8 +230,20 @@ class _ChatScreenState extends State<ChatScreen>
         }
         return;
       }
+      if (!mounted) return;
+
+      // Stop playback before opening the microphone recorder.
+      await _audioPlayer.stop();
+      if (!mounted) return;
+
+      if (_failedRecordingPath != null) {
+        _deleteTempFileSync(_failedRecordingPath);
+        _failedRecordingPath = null;
+        _failedRecordingDuration = 0;
+      }
 
       final tempDir = await getTemporaryDirectory();
+      if (!mounted) return;
       final timestamp = DateTime.now().millisecondsSinceEpoch;
       final filePath =
           '${tempDir.path}/voice_${widget.conversationId}_$timestamp.m4a';
@@ -192,6 +258,17 @@ class _ChatScreenState extends State<ChatScreen>
         path: filePath,
       );
 
+      if (!mounted) {
+        try {
+          if (await _audioRecorder.isRecording()) {
+            await _audioRecorder.stop();
+          }
+        } catch (_) {}
+        _deleteTempFileSync(filePath);
+        _currentRecordingPath = null;
+        return;
+      }
+
       setState(() {
         _isRecordingVoice = true;
         _recordingSeconds = 0;
@@ -199,11 +276,16 @@ class _ChatScreenState extends State<ChatScreen>
 
       _recordingTimer?.cancel();
       _recordingTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
-        if (!mounted) return;
+        if (!mounted) {
+          timer.cancel();
+          return;
+        }
         setState(() => _recordingSeconds++);
       });
     } catch (e) {
       debugPrint('[ChatScreen] Error starting voice record: $e');
+      _deleteTempFileSync(_currentRecordingPath);
+      _currentRecordingPath = null;
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
@@ -213,6 +295,8 @@ class _ChatScreenState extends State<ChatScreen>
           ),
         );
       }
+    } finally {
+      _isStartingRecording = false;
     }
   }
 
@@ -230,11 +314,120 @@ class _ChatScreenState extends State<ChatScreen>
       debugPrint('[ChatScreen] Error cancelling record: $e');
     }
 
-    setState(() {
-      _isRecordingVoice = false;
-      _recordingSeconds = 0;
+    if (mounted) {
+      setState(() {
+        _isRecordingVoice = false;
+        _recordingSeconds = 0;
+        _currentRecordingPath = null;
+      });
+    } else {
       _currentRecordingPath = null;
-    });
+    }
+  }
+
+  void _retainFailedVoiceRecording(
+      String filePath, int duration, String message) {
+    _failedRecordingPath = filePath;
+    _failedRecordingDuration = duration;
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(message),
+        duration: const Duration(seconds: 6),
+        action: SnackBarAction(
+          label: 'Retry',
+          onPressed: _retryFailedVoiceUpload,
+        ),
+      ),
+    );
+  }
+
+  Future<void> _retryFailedVoiceUpload() async {
+    final path = _failedRecordingPath;
+    if (path == null || _isUploadingAttachment || _isRecordingVoice) return;
+    final duration =
+        _failedRecordingDuration > 0 ? _failedRecordingDuration : 1;
+    if (mounted) {
+      setState(() => _isUploadingAttachment = true);
+    }
+    await _uploadAndSendVoiceFile(path, duration);
+  }
+
+  Future<void> _uploadAndSendVoiceFile(String filePath, int duration) async {
+    var uploadAndSendSucceeded = false;
+    try {
+      final file = File(filePath);
+      if (!await file.exists()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Voice recording file is no longer available.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final fileSize = await file.length();
+      if (fileSize > _maxAttachmentBytes) {
+        uploadAndSendSucceeded = true;
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text('Voice recording exceeds the 25 MB limit.'),
+            ),
+          );
+        }
+        return;
+      }
+
+      final bytes = await file.readAsBytes();
+      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
+
+      final audioUrl = await StorageService.uploadVoiceNote(
+        fileName: fileName,
+        bytes: bytes,
+        conversationId: widget.conversationId,
+      );
+
+      if (audioUrl != null) {
+        final sent = await _sendMessage(
+          type: 'voice',
+          contentOverride: 'Voice message (${_formatDuration(duration)})',
+          attachmentUrl: audioUrl,
+          attachmentName: fileName,
+          audioDurationSeconds: duration,
+          showErrorSnackBar: false,
+        );
+        if (sent) {
+          uploadAndSendSucceeded = true;
+          _failedRecordingPath = null;
+          _failedRecordingDuration = 0;
+          return;
+        }
+      }
+
+      _retainFailedVoiceRecording(
+        filePath,
+        duration,
+        'Failed to upload voice recording to cloud storage.',
+      );
+    } catch (e) {
+      debugPrint('[ChatScreen] Error sending voice note: $e');
+      _retainFailedVoiceRecording(
+        filePath,
+        duration,
+        'Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}',
+      );
+    } finally {
+      if (uploadAndSendSucceeded) {
+        _deleteTempFileSync(filePath);
+      }
+      if (mounted) {
+        setState(() => _isUploadingAttachment = false);
+      }
+      _currentRecordingPath = null;
+    }
   }
 
   Future<void> _finishAndSendVoiceRecording() async {
@@ -247,53 +440,36 @@ class _ChatScreenState extends State<ChatScreen>
       _isUploadingAttachment = true;
     });
 
+    String? resolvedPath;
     try {
       final path = await _audioRecorder.stop();
-      final resolvedPath = path ?? _currentRecordingPath;
-      if (resolvedPath == null) return;
-
-      final file = File(resolvedPath);
-      if (!await file.exists()) return;
-
-      final bytes = await file.readAsBytes();
-      final fileName = 'voice_${DateTime.now().millisecondsSinceEpoch}.m4a';
-
-      final audioUrl = await StorageService.uploadVoiceNote(
-        fileName: fileName,
-        bytes: bytes,
-        conversationId: widget.conversationId,
-      );
-
-      if (audioUrl != null) {
-        await _sendMessage(
-          type: 'voice',
-          contentOverride: 'Voice message (${_formatDuration(duration)})',
-          attachmentUrl: audioUrl,
-          attachmentName: fileName,
-          audioDurationSeconds: duration,
-        );
-      } else {
+      resolvedPath = path ?? _currentRecordingPath;
+      if (resolvedPath == null) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content:
-                  Text('Failed to upload voice recording to cloud storage.'),
-            ),
-          );
+          setState(() => _isUploadingAttachment = false);
         }
+        _currentRecordingPath = null;
+        return;
       }
+      await _uploadAndSendVoiceFile(resolvedPath, duration);
     } catch (e) {
       debugPrint('[ChatScreen] Error sending voice note: $e');
-      if (mounted) {
+      final fallbackPath = resolvedPath ?? _currentRecordingPath;
+      if (fallbackPath != null) {
+        _retainFailedVoiceRecording(
+          fallbackPath,
+          duration,
+          'Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}',
+        );
+      } else if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text(
-              'Failed to send voice recording: ${SupabaseService.cleanErrorMessage(e)}',
+              'Failed to stop recording: ${SupabaseService.cleanErrorMessage(e)}',
             ),
           ),
         );
       }
-    } finally {
       if (mounted) {
         setState(() => _isUploadingAttachment = false);
       }
@@ -314,12 +490,11 @@ class _ChatScreenState extends State<ChatScreen>
 
     try {
       final resolvedUrl = await StorageService.resolveSignedUrl(url);
+      if (!mounted) return;
       if (resolvedUrl == null || resolvedUrl.isEmpty) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Could not access voice note audio.')),
-          );
-        }
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not access voice note audio.')),
+        );
         return;
       }
 
@@ -346,9 +521,16 @@ class _ChatScreenState extends State<ChatScreen>
     } catch (e) {
       debugPrint('[ChatScreen] Error playing voice note: $e');
       if (mounted) {
+        setState(() {
+          _currentlyPlayingId = null;
+          _playbackPosition = Duration.zero;
+        });
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error playing audio: $e')),
         );
+      } else {
+        _currentlyPlayingId = null;
+        _playbackPosition = Duration.zero;
       }
     }
   }
@@ -369,6 +551,20 @@ class _ChatScreenState extends State<ChatScreen>
       );
       if (picked == null) return;
 
+      final size = await picked.length();
+      if (size > _maxAttachmentBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Image exceeds the 25 MB limit. Please select a smaller file.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       setState(() => _isUploadingAttachment = true);
 
       final bytes = await picked.readAsBytes();
@@ -415,6 +611,20 @@ class _ChatScreenState extends State<ChatScreen>
       final picked = await _imagePicker.pickVideo(source: ImageSource.gallery);
       if (picked == null) return;
 
+      final size = await picked.length();
+      if (size > _maxAttachmentBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Video exceeds the 25 MB limit. Please select a shorter clip.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+      if (!mounted) return;
       setState(() => _isUploadingAttachment = true);
 
       final bytes = await picked.readAsBytes();
@@ -461,16 +671,48 @@ class _ChatScreenState extends State<ChatScreen>
       final result = await FilePicker.platform.pickFiles(
         type: FileType.custom,
         allowedExtensions: ['pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip'],
-        withData: true,
+        withData: false,
       );
       if (result == null || result.files.isEmpty) return;
 
       final file = result.files.first;
+      if (file.size > _maxAttachmentBytes) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Document exceeds the 25 MB limit. Please select a smaller file.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
+
+      if (!mounted) return;
+      setState(() => _isUploadingAttachment = true);
+
       final bytes = file.bytes ??
           (file.path != null ? await File(file.path!).readAsBytes() : null);
-      if (bytes == null) return;
-
-      setState(() => _isUploadingAttachment = true);
+      if (bytes == null) {
+        if (mounted) {
+          setState(() => _isUploadingAttachment = false);
+        }
+        return;
+      }
+      if (bytes.length > _maxAttachmentBytes) {
+        if (mounted) {
+          setState(() => _isUploadingAttachment = false);
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Document exceeds the 25 MB limit. Please select a smaller file.',
+              ),
+            ),
+          );
+        }
+        return;
+      }
 
       final publicUrl = await StorageService.uploadChatAttachment(
         fileName: file.name,
@@ -795,10 +1037,23 @@ class _ChatScreenState extends State<ChatScreen>
                       ),
                     );
                     if (confirm == true) {
-                      await MessagingService.instance.deleteMessage(
-                        conversationId: widget.conversationId,
-                        messageId: msg.id,
-                      );
+                      try {
+                        await MessagingService.instance.deleteMessage(
+                          conversationId: widget.conversationId,
+                          messageId: msg.id,
+                        );
+                      } catch (e) {
+                        if (mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                'Failed to delete message: ${SupabaseService.cleanErrorMessage(e)}',
+                              ),
+                              backgroundColor: p.danger,
+                            ),
+                          );
+                        }
+                      }
                     }
                   },
                 ),
@@ -809,39 +1064,14 @@ class _ChatScreenState extends State<ChatScreen>
     );
   }
 
-  void _showEditMessageDialog(ChatMessage msg) {
-    final editCtrl = TextEditingController(text: msg.content);
-    showDialog(
+  Future<void> _showEditMessageDialog(ChatMessage msg) async {
+    final p = AppColors.of(context);
+    await showDialog<void>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('Edit Message'),
-        content: TextField(
-          controller: editCtrl,
-          autofocus: true,
-          maxLines: 4,
-          minLines: 1,
-          decoration: const InputDecoration(hintText: 'Enter updated message...'),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(ctx),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final newText = editCtrl.text.trim();
-              if (newText.isNotEmpty && newText != msg.content) {
-                Navigator.pop(ctx);
-                await MessagingService.instance.editMessage(
-                  conversationId: widget.conversationId,
-                  messageId: msg.id,
-                  newContent: newText,
-                );
-              }
-            },
-            child: const Text('Save'),
-          ),
-        ],
+      builder: (_) => _EditMessageDialog(
+        conversationId: widget.conversationId,
+        message: msg,
+        palette: p,
       ),
     );
   }
@@ -928,8 +1158,7 @@ class _ChatScreenState extends State<ChatScreen>
             children: [
               Expanded(
                 child: StreamBuilder<List<ChatMessage>>(
-                  stream: MessagingService.instance
-                      .streamMessages(widget.conversationId),
+                  stream: _messagesStream,
                   initialData: MessagingService.instance
                       .getMessages(widget.conversationId),
                   builder: (context, snapshot) {
@@ -1621,6 +1850,94 @@ class _ChatScreenState extends State<ChatScreen>
           ],
         ),
       ),
+    );
+  }
+}
+
+class _EditMessageDialog extends StatefulWidget {
+  final String conversationId;
+  final ChatMessage message;
+  final AppPalette palette;
+
+  const _EditMessageDialog({
+    required this.conversationId,
+    required this.message,
+    required this.palette,
+  });
+
+  @override
+  State<_EditMessageDialog> createState() => _EditMessageDialogState();
+}
+
+class _EditMessageDialogState extends State<_EditMessageDialog> {
+  late final TextEditingController _editCtrl;
+  bool _isSaving = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _editCtrl = TextEditingController(text: widget.message.content);
+  }
+
+  @override
+  void dispose() {
+    _editCtrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('Edit Message'),
+      content: TextField(
+        controller: _editCtrl,
+        enabled: !_isSaving,
+        autofocus: true,
+        maxLines: 4,
+        minLines: 1,
+        decoration: const InputDecoration(hintText: 'Enter updated message...'),
+      ),
+      actions: [
+        TextButton(
+          onPressed: _isSaving ? null : () => Navigator.pop(context),
+          child: const Text('Cancel'),
+        ),
+        ElevatedButton(
+          onPressed: _isSaving
+              ? null
+              : () async {
+                  final newText = _editCtrl.text.trim();
+                  if (newText.isEmpty || newText == widget.message.content) {
+                    if (newText == widget.message.content) {
+                      Navigator.pop(context);
+                    }
+                    return;
+                  }
+                  setState(() => _isSaving = true);
+                  try {
+                    await MessagingService.instance.editMessage(
+                      conversationId: widget.conversationId,
+                      messageId: widget.message.id,
+                      newContent: newText,
+                    );
+                    if (!mounted) return;
+                    Navigator.pop(context);
+                  } catch (e) {
+                    if (!mounted) return;
+                    setState(() => _isSaving = false);
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(
+                          'Failed to edit message: ${SupabaseService.cleanErrorMessage(e)}',
+                        ),
+                        backgroundColor: widget.palette.danger,
+                      ),
+                    );
+                  }
+                },
+          child: Text(_isSaving ? 'Saving...' : 'Save'),
+        ),
+      ],
     );
   }
 }
