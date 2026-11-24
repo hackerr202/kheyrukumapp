@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../../core/localization/app_localizations.dart';
+import '../../core/localization/notification_templates.dart';
 import '../../core/models/announcement.dart';
 import '../../core/models/app_notification.dart';
 import '../../core/services/announcement_service.dart';
@@ -248,6 +249,12 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
 
   Widget _buildNotificationCard(AppNotification item, AppPalette p) {
     final loc = AppLocalizations.of(context);
+    final localized = NotificationTemplates.resolveFromData(
+      item.data,
+      languageCode: loc.locale.languageCode,
+      fallbackTitle: item.title,
+      fallbackBody: item.body,
+    );
     Color iconColor = p.primary;
     IconData iconData = Icons.notifications_rounded;
 
@@ -296,7 +303,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        item.title,
+                        localized.title,
                         style: TextStyle(
                           fontWeight:
                               item.isRead ? FontWeight.w600 : FontWeight.w700,
@@ -328,7 +335,7 @@ class _AnnouncementsSheetState extends State<AnnouncementsSheet> {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  item.body,
+                  localized.body,
                   style: TextStyle(
                     fontSize: 12,
                     color: p.inkSecondary,

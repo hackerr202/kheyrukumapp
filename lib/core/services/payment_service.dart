@@ -1,6 +1,8 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../localization/locale_notifier.dart';
+import '../localization/notification_templates.dart';
 import '../models/payment.dart';
 import '../utils/json_parsers.dart';
 import 'auth_session_service.dart';
@@ -563,6 +565,14 @@ class PaymentService {
           'student_id': studentId,
           'month': month,
           'fee_start_date': feeStartDate.toIso8601String().substring(0, 10),
+          'template_key': 'monthly_tuition_due',
+          'params': {
+            'student_name': studentName,
+            'month': month,
+            'amount': amount.toStringAsFixed(0),
+            'fee_start_date':
+                feeStartDate.toLocal().toString().substring(0, 10),
+          },
         },
       });
     } catch (e) {
@@ -769,7 +779,14 @@ class PaymentService {
                 ? '${existing.parentName} uploaded a tuition receipt for ${existing.month}.'
                 : 'A parent uploaded a tuition receipt for verification.',
             type: 'payment_approval',
-            data: {'payment_id': paymentId},
+            data: {
+              'payment_id': paymentId,
+              'template_key': 'payment_receipt_submitted',
+              'params': {
+                'parent_name': existing?.parentName ?? '',
+                'month': existing?.month ?? '',
+              },
+            },
           );
         }
       }
@@ -840,7 +857,14 @@ class PaymentService {
         body:
             'Your tuition payment for ${existing.month} (${existing.studentName}) has been approved.',
         type: 'payment_approval',
-        data: {'payment_id': paymentId},
+        data: {
+          'payment_id': paymentId,
+          'template_key': 'payment_approved',
+          'params': {
+            'student_name': existing.studentName,
+            'month': existing.month,
+          },
+        },
       );
     }
   }
@@ -881,7 +905,14 @@ class PaymentService {
         body:
             'Your tuition receipt for ${existing.month} was rejected: $reason',
         type: 'payment_overdue',
-        data: {'payment_id': paymentId},
+        data: {
+          'payment_id': paymentId,
+          'template_key': 'payment_rejected',
+          'params': {
+            'month': existing.month,
+            'reason': reason,
+          },
+        },
       );
     }
   }
@@ -897,14 +928,30 @@ class PaymentService {
     if (client == null) {
       throw Exception('Unable to connect to server.');
     }
+    final params = <String, dynamic>{'month': month};
+    final rendered = NotificationTemplates.render(
+      templateKey: 'monthly_tuition_reminder',
+      params: params,
+      languageCode: LocaleNotifier.instance.currentLanguageCode,
+    );
     await client.from('announcements').insert({
-      'title': 'Monthly Tuition Fee Reminder 💳',
-      'content':
-          'Monthly Quran memorization fee for $month is now due. Please submit your payment and upload the receipt in the Payments section.',
+      'title': rendered.title,
+      'content': rendered.body,
       'target_audience': 'parents',
       'author_name': AuthSessionService.instance.userName,
       'is_pinned': false,
     });
+    await PushNotificationService.instance.dispatchPushNotificationToAll(
+      title: rendered.title,
+      body: rendered.body,
+      targetAudience: 'parents',
+      type: 'payment_reminder',
+      showLocally: false,
+      data: {
+        'template_key': 'monthly_tuition_reminder',
+        'params': params,
+      },
+    );
   }
 
   /// Superadmin marks an overdue payment and records an in-app alert (online-only).
@@ -922,12 +969,26 @@ class PaymentService {
           .eq('id', payment.id);
       await refresh();
     }
+    final params = <String, dynamic>{
+      'student_name': payment.studentName,
+      'parent_name': payment.parentName,
+      'month': payment.month,
+    };
+    final rendered = NotificationTemplates.render(
+      templateKey: 'overdue_tuition_admin_alert',
+      params: params,
+      languageCode: LocaleNotifier.instance.currentLanguageCode,
+    );
     NotificationCenterService.instance.addNotification(
-      title: 'Overdue Tuition Alert ⚠️',
-      body:
-          'Payment for student ${payment.studentName} (Parent: ${payment.parentName}) is past due date for ${payment.month}.',
+      title: rendered.title,
+      body: rendered.body,
       type: 'payment_overdue',
-      data: {'payment_id': payment.id, 'parent_id': payment.parentId},
+      data: {
+        'payment_id': payment.id,
+        'parent_id': payment.parentId,
+        'template_key': 'overdue_tuition_admin_alert',
+        'params': params,
+      },
     );
   }
 

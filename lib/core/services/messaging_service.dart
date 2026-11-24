@@ -873,12 +873,27 @@ class MessagingService {
             .where((id) => _isValidUuid(id) && id != effectiveSenderId)
             .toList();
         if (recipientIds.isNotEmpty) {
+          final templateKey = switch (messageType) {
+            'voice' => 'chat_voice',
+            'image' => 'chat_photo',
+            'document' => 'chat_document',
+            _ => 'chat_message',
+          };
           PushNotificationService.instance.dispatchPushToUsers(
             userIds: recipientIds,
             title: senderName,
             body: displayPreview,
             type: 'message',
-            data: {'conversation_id': conversationId},
+            data: {
+              'conversation_id': conversationId,
+              'template_key': templateKey,
+              'params': {
+                'sender_name': senderName,
+                'body': trimmedContent,
+                'duration': '${audioDurationSeconds ?? 0}',
+                'file_name': attachmentName ?? '',
+              },
+            },
           );
         }
       }

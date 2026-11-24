@@ -376,7 +376,15 @@ class AbsenceService {
           body:
               '${request.parentName} submitted an excuse for ${request.studentName}.',
           type: 'absence_request',
-          data: {'student_id': studentId, 'request_id': finalId},
+          data: {
+            'student_id': studentId,
+            'request_id': finalId,
+            'template_key': 'absence_submitted',
+            'params': {
+              'parent_name': request.parentName,
+              'student_name': request.studentName,
+            },
+          },
         );
       }
       return request;
@@ -473,7 +481,14 @@ class AbsenceService {
           title: 'Absence Excuse Approved',
           body: 'Absence excuse for ${existing.studentName} has been approved.',
           type: 'absence_approved',
-          data: {'request_id': requestId, 'student_id': existing.studentId},
+          data: {
+            'request_id': requestId,
+            'student_id': existing.studentId,
+            'template_key': 'absence_approved',
+            'params': {
+              'student_name': existing.studentName,
+            },
+          },
         );
       }
     } catch (e) {
@@ -554,7 +569,14 @@ class AbsenceService {
           title: 'Absence Request Update',
           body: 'Absence excuse for ${existing.studentName} was declined.',
           type: 'absence_declined',
-          data: {'request_id': requestId, 'student_id': existing.studentId},
+          data: {
+            'request_id': requestId,
+            'student_id': existing.studentId,
+            'template_key': 'absence_declined',
+            'params': {
+              'student_name': existing.studentName,
+            },
+          },
         );
       }
     } catch (e) {

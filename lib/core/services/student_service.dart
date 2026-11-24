@@ -830,6 +830,11 @@ class StudentService {
           data: {
             'student_id': syncedStudent.id,
             if (halaqahId != null) 'halaqah_id': halaqahId,
+            'template_key': 'student_enrolled',
+            'params': {
+              'student_name': syncedStudent.fullName,
+              'halaqah_name': halaqahName,
+            },
           },
         );
       }
@@ -1104,6 +1109,12 @@ class StudentService {
             'student_id': student.id,
             'status': status,
             'date': dateStr,
+            'template_key': 'attendance_marked',
+            'params': {
+              'student_name': student.fullName,
+              'status': status,
+              'date': dateStr,
+            },
           },
         );
       }
@@ -1288,6 +1299,12 @@ class StudentService {
           data: {
             'student_id': student.id,
             if (finalId.isNotEmpty) 'report_id': finalId,
+            'template_key': 'weekly_report',
+            'params': {
+              'student_name': student.fullName,
+              'sabaq': sabaq,
+              'rating': tajweedRating,
+            },
           },
         );
       }

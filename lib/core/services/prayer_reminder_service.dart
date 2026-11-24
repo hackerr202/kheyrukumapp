@@ -1,5 +1,7 @@
 import 'dart:async';
 import 'package:flutter/foundation.dart';
+import '../localization/locale_notifier.dart';
+import '../localization/notification_templates.dart';
 import 'push_notification_service.dart';
 
 /// Service managing daily prayer reminders for users:
@@ -27,14 +29,20 @@ class PrayerReminderService {
 
   /// Trigger a prayer reminder manually or for immediate testing
   void triggerPrayerReminderNow() {
+    final rendered = NotificationTemplates.render(
+      templateKey: 'prayer_reminder',
+      languageCode: LocaleNotifier.instance.currentLanguageCode,
+    );
     PushNotificationService.instance.showNotification(
-      title: dailyPrayerTitle,
-      body: dailyPrayerBody,
+      title: rendered.title,
+      body: rendered.body,
+      type: 'prayer',
+      data: const {'template_key': 'prayer_reminder'},
     );
 
     _prayerAlertController.add({
-      'title': dailyPrayerTitle,
-      'body': dailyPrayerBody,
+      'title': rendered.title,
+      'body': rendered.body,
     });
 
     debugPrint('[PrayerReminderService] Dispatched daily prayer reminder.');

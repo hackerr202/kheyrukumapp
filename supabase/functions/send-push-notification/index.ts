@@ -35,6 +35,7 @@ interface TokenRow {
   user_id: string;
   device_token: string;
   device_type?: string;
+  preferred_language?: string;
 }
 
 // Module-scoped OAuth2 token cache reused across warm Edge Function invocations
@@ -163,6 +164,532 @@ async function getGoogleAccessToken(sa: ServiceAccount): Promise<string> {
   cachedTokenExpiryMs = Date.now() + expiresInSec * 1000;
   cachedTokenProjectId = sa.project_id;
   return accessToken;
+}
+
+const MONTH_FORMS: Array<[string, string, string]> = [
+  ["January", "يناير", "ጃንዋሪ"],
+  ["February", "فبراير", "ፌብሩዋሪ"],
+  ["March", "مارس", "ማርች"],
+  ["April", "أبريل", "ኤፕሪል"],
+  ["May", "مايو", "ሜይ"],
+  ["June", "يونيو", "ጁን"],
+  ["July", "يوليو", "ጁላይ"],
+  ["August", "أغسطس", "ኦገስት"],
+  ["September", "سبتمبر", "ሴፕቴምበር"],
+  ["October", "أكتوبر", "ኦክቶበር"],
+  ["November", "نوفمبر", "ኖቬምበር"],
+  ["December", "ديسمبر", "ዲሴምበር"],
+];
+
+function normLang(lang: string | undefined): "en" | "ar" | "am" {
+  const lower = String(lang ?? "").trim().toLowerCase();
+  if (lower === "ar" || lower === "am") return lower;
+  return "en";
+}
+
+function localizeMonthLabel(raw: string, lang: "en" | "ar" | "am"): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return trimmed;
+  const idx = lang === "ar" ? 1 : lang === "am" ? 2 : 0;
+  for (const forms of MONTH_FORMS) {
+    for (const f of forms) {
+      if (trimmed.toLowerCase().includes(f.toLowerCase())) {
+        const escaped = f.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        return trimmed.replace(new RegExp(escaped, "gi"), forms[idx]);
+      }
+    }
+  }
+  return trimmed;
+}
+
+function localizeAttendanceStatus(
+  status: string,
+  lang: "en" | "ar" | "am",
+): string {
+  const s = status.trim().toLowerCase();
+  if (lang === "ar") {
+    if (s === "present") return "حاضر";
+    if (s === "late") return "متأخر";
+    if (s === "absent") return "غائب";
+    if (s === "excused") return "بعذر";
+    return status;
+  }
+  if (lang === "am") {
+    if (s === "present") return "ተገኝቷል";
+    if (s === "late") return "ዘግይቷል";
+    if (s === "absent") return "ቀርቷል";
+    if (s === "excused") return "በፈቃድ";
+    return status;
+  }
+  if (s === "present") return "Present";
+  if (s === "late") return "Late";
+  if (s === "absent") return "Absent";
+  if (s === "excused") return "Excused";
+  return status;
+}
+
+function localizeRating(rating: string, lang: "en" | "ar" | "am"): string {
+  const r = rating.trim().toLowerCase();
+  if (lang === "ar") {
+    if (r.includes("mumtaz") || r.includes("excellent")) return "ممتاز";
+    if (r.includes("jiddan") || r.includes("very good")) return "جيد جداً";
+    if (r.includes("jayyid") || r.includes("good")) return "جيد";
+    if (r.includes("needs") || r.includes("revision")) return "يحتاج مراجعة";
+    return rating;
+  }
+  if (lang === "am") {
+    if (r.includes("mumtaz") || r.includes("excellent")) {
+      return "ሙምታዝ (በጣም ጥሩ)";
+    }
+    if (r.includes("jiddan") || r.includes("very good")) {
+      return "ጀይድ ጂዳን (በጣም መልካም)";
+    }
+    if (r.includes("jayyid") || r.includes("good")) return "ጀይድ (ጥሩ)";
+    if (r.includes("needs") || r.includes("revision")) return "ክለሳ ያስፈልጋል";
+    return rating;
+  }
+  if (r.includes("mumtaz") || r.includes("excellent")) return "Excellent";
+  if (r.includes("jiddan") || r.includes("very good")) return "Very Good";
+  if (r.includes("jayyid") || r.includes("good")) return "Good";
+  if (r.includes("needs") || r.includes("revision")) return "Needs Revision";
+  return rating;
+}
+
+function extractTemplateMeta(
+  dataObj: Record<string, unknown> | undefined,
+): { templateKey: string; templateParams: Record<string, string> } {
+  if (!dataObj) return { templateKey: "", templateParams: {} };
+  const nestedMeta =
+    dataObj.metadata && typeof dataObj.metadata === "object"
+      ? (dataObj.metadata as Record<string, unknown>)
+      : undefined;
+  const rawKey = dataObj.template_key ?? nestedMeta?.template_key ?? "";
+  const templateKey = String(rawKey).trim();
+  if (!templateKey) return { templateKey: "", templateParams: {} };
+
+  const rawParams = dataObj.params ?? nestedMeta?.params;
+  let parsedObj: Record<string, unknown> = dataObj;
+  if (rawParams && typeof rawParams === "object") {
+    parsedObj = rawParams as Record<string, unknown>;
+  } else if (typeof rawParams === "string" && rawParams.trim().startsWith("{")) {
+    try {
+      const dec = JSON.parse(rawParams);
+      if (dec && typeof dec === "object") {
+        parsedObj = dec as Record<string, unknown>;
+      }
+    } catch {
+      // Ignore malformed JSON string
+    }
+  }
+
+  const templateParams: Record<string, string> = {};
+  for (const [k, v] of Object.entries(parsedObj)) {
+    if (v !== undefined && v !== null) {
+      templateParams[k] = typeof v === "string" ? v : String(v);
+    }
+  }
+  return { templateKey, templateParams };
+}
+
+function renderLocalizedNotification(
+  templateKey: string,
+  params: Record<string, string>,
+  rawLang: string | undefined,
+  fallbackTitle: string,
+  fallbackBody: string,
+): { title: string; body: string } {
+  const lang = normLang(rawLang);
+  const p = (k: string, def = "") => {
+    const val = (params[k] ?? "").trim();
+    return val.length > 0 ? val : def;
+  };
+
+  const month = localizeMonthLabel(p("month"), lang);
+  const student = p(
+    "student_name",
+    lang === "ar" ? "الطالب" : lang === "am" ? "ተማሪው" : "Student",
+  );
+  const parent = p(
+    "parent_name",
+    lang === "ar" ? "ولي الأمر" : lang === "am" ? "ወላጅ" : "A parent",
+  );
+  const amount = p("amount");
+  const start = p("fee_start_date");
+  const reason = p("reason");
+  const hwTitle = p("title");
+  const surah = p("surah");
+  const fromAyah = p("from_ayah", "1");
+  const toAyah = p("to_ayah", "1");
+  const rating = localizeRating(p("rating"), lang);
+  const status = localizeAttendanceStatus(p("status"), lang);
+  const date = p("date");
+  const sabaq = p("sabaq");
+  const halaqah = p("halaqah_name");
+  const sender = p(
+    "sender_name",
+    lang === "ar" ? "رسالة جديدة" : lang === "am" ? "አዲስ መልእክት" : "New Message",
+  );
+  const msgBody = p("body");
+  const duration = p("duration", "0");
+  const fileName = p(
+    "file_name",
+    lang === "ar" ? "مستند" : lang === "am" ? "ሰነድ" : "Document",
+  );
+  const actor = p(
+    "actor_name",
+    lang === "ar" ? "مستخدم" : lang === "am" ? "ተጠቃሚ" : "A user",
+  );
+
+  switch (templateKey) {
+    case "monthly_tuition_due":
+      if (lang === "ar") {
+        return {
+          title: "رسوم دراسية جديدة مستحقة 💳",
+          body: start
+            ? `تم إصدار رسوم شهر ${month} للطالب ${student} بمبلغ ${amount} بر (تاريخ البدء: ${start}).`
+            : `تم إصدار رسوم شهر ${month} للطالب ${student} بمبلغ ${amount} بر.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "አዲስ ወርሃዊ ክፍያ ተልኳል 💳",
+          body: start
+            ? `ለ${student} የ${month} ወር ክፍያ (${amount} ብር) ከ${start} ጀምሮ ተልኳል።`
+            : `ለ${student} የ${month} ወር ክፍያ (${amount} ብር) ተልኳል።`,
+        };
+      }
+      return {
+        title: "Monthly Tuition Fee Due 💳",
+        body: start
+          ? `Tuition for ${month} (${amount} ETB) starting on ${start} has been issued for ${student}.`
+          : `Tuition for ${month} (${amount} ETB) has been issued for ${student}.`,
+      };
+
+    case "monthly_tuition_reminder": {
+      const hasStudent = p("student_name").length > 0;
+      const hasAmount = amount.length > 0;
+      if (lang === "ar") {
+        return {
+          title: "تذكير بالرسوم الشهرية 💳",
+          body: hasStudent && hasAmount
+            ? `تستحق رسوم الطالب ${student} لشهر ${month} بمبلغ ${amount} بر. يرجى السداد ورفع إيصال التحويل.`
+            : `تستحق الرسوم الشهرية لحفظ القرآن لشهر ${month}. يرجى السداد ورفع الإيصال في قسم المدفوعات.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "ወርሃዊ የትምህርት ክፍያ ማስታወሻ 💳",
+          body: hasStudent && hasAmount
+            ? `የ${student} የ${month} ወርሃዊ ክፍያ (${amount} ብር) ደርሷል። እባክዎ ከፍለው ደረሰኙን ይስቀሉ።`
+            : `የ${month} የቁርኣን ትምህርት ክፍያ ደርሷል። እባክዎ ክፍያዎን ፈጽመው በክፍያ ክፍል ደረሰኙን ይስቀሉ።`,
+        };
+      }
+      return {
+        title: "Monthly Tuition Reminder 💳",
+        body: hasStudent && hasAmount
+          ? `Tuition for ${student} (${month} — ${amount} ETB) is due. Please submit your payment and upload your receipt.`
+          : `Monthly Quran memorization fee for ${month} is now due. Please submit your payment and upload the receipt in Payments.`,
+      };
+    }
+
+    case "payment_receipt_submitted":
+      if (lang === "ar") {
+        return {
+          title: "تم استلام إيصال دفع 📥",
+          body: `رفع ${parent} إيصال رسوم شهر ${month} للمراجعة والاعتماد.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የክፍያ ደረሰኝ ቀርቧል 📥",
+          body: `${parent} የ${month} የትምህርት ክፍያ ደረሰኝ ለማረጋገጫ ሰቅለዋል።`,
+        };
+      }
+      return {
+        title: "Payment Receipt Submitted 📥",
+        body: `${parent} uploaded a tuition receipt for ${month}.`,
+      };
+
+    case "payment_approved":
+      if (lang === "ar") {
+        return {
+          title: "تم اعتماد الدفع ✅",
+          body: `تم التحقق من دفعة الطالب ${student} لشهر ${month} واعتمادها.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "ክፍያው ጸድቋል ✅",
+          body: `የ${student} የ${month} ወር የትምህርት ክፍያ ተረጋግጦ ጸድቋል።`,
+        };
+      }
+      return {
+        title: "Payment Approved ✅",
+        body: `Your tuition payment for ${month} (${student}) has been approved.`,
+      };
+
+    case "payment_rejected":
+      if (lang === "ar") {
+        return {
+          title: "إيصال الدفع يحتاج مراجعة ❌",
+          body: `تعذر اعتماد إيصال شهر ${month}: ${reason}`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የክፍያ ደረሰኙ ውድቅ ተደርጓል ❌",
+          body: `የ${month} ወር የክፍያ ደረሰኝ ውድቅ ተደርጓል፦ ${reason}`,
+        };
+      }
+      return {
+        title: "Payment Rejected ❌",
+        body: `Your tuition receipt for ${month} was rejected: ${reason}`,
+      };
+
+    case "homework_assigned":
+      if (lang === "ar") {
+        return {
+          title: "تم تعيين واجب جديد 📖",
+          body: `${hwTitle} (${surah}، آية ${fromAyah}-${toAyah})`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "አዲስ የቤት ሥራ ተሰጥቷል 📖",
+          body: `${hwTitle} (${surah}፣ አንቀጽ ${fromAyah}-${toAyah})`,
+        };
+      }
+      return {
+        title: "New Homework Assigned 📖",
+        body: `${hwTitle} (${surah}, Ayah ${fromAyah}-${toAyah})`,
+      };
+
+    case "homework_submitted": {
+      const titleSuffix = hwTitle ? ` (${hwTitle})` : "";
+      if (lang === "ar") {
+        return {
+          title: "تم إرسال تدريب الواجب 🎙️",
+          body: `أكمل الطالب ${student} الواجب المنزلي${titleSuffix} وأرسله للمراجعة.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የቤት ሥራ ቀርቧል 🎙️",
+          body: `${student} የቤት ሥራውን${titleSuffix} አጠናቆ ለግምገማ ልኳል።`,
+        };
+      }
+      return {
+        title: "Homework Practiced at Home 🎙️",
+        body: `${student} completed home practice${titleSuffix} for review.`,
+      };
+    }
+
+    case "homework_reviewed":
+      if (lang === "ar") {
+        return {
+          title: "قام الأستاذ بتقييم الواجب ⭐",
+          body: `${student}: ${rating}`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "ኡስታዝ የቤት ሥራውን ገምግመዋል ⭐",
+          body: `${student}፦ ${rating}`,
+        };
+      }
+      return {
+        title: "Homework Reviewed by Ustaz ⭐",
+        body: `${student}: ${rating}`,
+      };
+
+    case "hifz_logged":
+      if (lang === "ar") {
+        return {
+          title: "تحديث الحفظ اليومي 📖",
+          body: `تسميع ${student} (${surah}): ${rating}`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የዕለት ሒፍዝ ተመዝግቧል 📖",
+          body: `የ${student} ንባብ (${surah})፦ ${rating}`,
+        };
+      }
+      return {
+        title: "Daily Hifz Logged 📖",
+        body: `${student} recited ${surah} (${rating}).`,
+      };
+
+    case "attendance_marked":
+      if (lang === "ar") {
+        return {
+          title: "تحديث الحضور اليومي ✓",
+          body: `تم تسجيل ${student}: ${status} (${date}).`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የዕለት ክትትል ተዘምኗል ✓",
+          body: `${student} ${status} ተብሎ ተመዝግቧል (${date})።`,
+        };
+      }
+      return {
+        title: "Daily Attendance Update ✓",
+        body: `${student} was marked ${status} (${date}).`,
+      };
+
+    case "weekly_report":
+      if (lang === "ar") {
+        return {
+          title: "تقرير التقدم الأسبوعي 📊",
+          body: `التقرير الأسبوعي للطالب ${student}: ${sabaq} (${rating}).`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "ሳምንታዊ የቁርኣን እድገት ሪፖርት 📊",
+          body: `የ${student} ሳምንታዊ ሪፖርት፦ ${sabaq} (${rating})።`,
+        };
+      }
+      return {
+        title: "Weekly Quran Progress Report 📊",
+        body: `Weekly report for ${student}: ${sabaq} (${rating}).`,
+      };
+
+    case "absence_submitted":
+      if (lang === "ar") {
+        return {
+          title: "طلب إذن غياب جديد 📝",
+          body: `قدّم ${parent} طلب عذر غياب للطالب ${student}.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "አዲስ የፈቃድ ጥያቄ ቀርቧል 📝",
+          body: `${parent} ለ${student} የመቅረት ፈቃድ አቅርበዋል።`,
+        };
+      }
+      return {
+        title: "Absence Excuse Request 📝",
+        body: `${parent} submitted an excuse for ${student}.`,
+      };
+
+    case "absence_approved":
+      if (lang === "ar") {
+        return {
+          title: "تمت الموافقة على عذر الغياب ✅",
+          body: `تمت الموافقة على عذر الغياب للطالب ${student}.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የመቅረት ፈቃድ ጸድቋል ✅",
+          body: `ለ${student} የቀረበው የመቅረት ፈቃድ ጸድቋል።`,
+        };
+      }
+      return {
+        title: "Absence Excuse Approved ✅",
+        body: `Absence excuse for ${student} has been approved.`,
+      };
+
+    case "absence_declined":
+      if (lang === "ar") {
+        return {
+          title: "تحديث طلب الغياب",
+          body: `تم رفض طلب عذر الغياب للطالب ${student}.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "የመቅረት ጥያቄ ማሻሻያ",
+          body: `ለ${student} የቀረበው የመቅረት ፈቃድ ተቀባይነት አላገኘም።`,
+        };
+      }
+      return {
+        title: "Absence Request Update",
+        body: `Absence excuse for ${student} was declined.`,
+      };
+
+    case "student_enrolled":
+      if (lang === "ar") {
+        return {
+          title: "تم تسجيل طالب جديد 🎓",
+          body: `تم تسجيل ${student} في حلقة ${halaqah} وربطه بحسابك.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "አዲስ ተማሪ ተመዝግቧል 🎓",
+          body: `${student} በ${halaqah} ሐለቃ ተመዝግቦ ከመለያዎ ጋር ተገናኝቷል።`,
+        };
+      }
+      return {
+        title: "New Student Enrolled 🎓",
+        body: `${student} has been enrolled in ${halaqah} and linked to your account.`,
+      };
+
+    case "chat_voice":
+      return {
+        title: sender,
+        body: lang === "ar"
+          ? `رسالة صوتية (${duration}ث)`
+          : lang === "am"
+          ? `የድምጽ መልእክት (${duration}ሴ)`
+          : `Voice message (${duration}s)`,
+      };
+
+    case "chat_photo":
+      return {
+        title: sender,
+        body: lang === "ar"
+          ? "مرفق صورة"
+          : lang === "am"
+          ? "የፎቶ አባሪ"
+          : "Photo attachment",
+      };
+
+    case "chat_document":
+      return {
+        title: sender,
+        body: lang === "ar"
+          ? `مستند: ${fileName}`
+          : lang === "am"
+          ? `ሰነድ፦ ${fileName}`
+          : `Document: ${fileName}`,
+      };
+
+    case "chat_message":
+      return {
+        title: sender,
+        body: msgBody ||
+          (lang === "ar"
+            ? "لديك رسالة جديدة"
+            : lang === "am"
+            ? "አዲስ መልእክት ደርሶዎታል"
+            : "New message received"),
+      };
+
+    case "security_alert":
+      if (lang === "ar") {
+        return {
+          title: "تنبيه أمني عاجل",
+          body: `حاول ${actor} الوصول إلى سجل المالية المقيد.`,
+        };
+      }
+      if (lang === "am") {
+        return {
+          title: "አስቸኳይ የደህንነት ማንቂያ",
+          body: `${actor} የተገደበውን የፋይናንስ መዝገብ ለማግኘት ሞክሯል።`,
+        };
+      }
+      return {
+        title: "Security Alert",
+        body: `${actor} attempted to access restricted financial ledger.`,
+      };
+
+    default:
+      return { title: fallbackTitle, body: fallbackBody };
+  }
 }
 
 function stringifyDataMap(
@@ -467,21 +994,37 @@ Deno.serve(async (req: Request) => {
     }
 
     // -------------------------------------------------------------------------
-    // 5. Fetch active FCM tokens via POST RPC (chunked to prevent URL overflow)
+    // 5. Fetch active FCM tokens + preferred_language via POST RPC (chunked)
     // -------------------------------------------------------------------------
     const idList = Array.from(recipientIds);
-    const uniqueTokensSet = new Set<string>();
+    const tokenLangMap = new Map<string, string>();
 
     for (let i = 0; i < idList.length; i += RPC_BATCH_SIZE) {
       const batch = idList.slice(i, i + RPC_BATCH_SIZE);
-      const rpcResp = await fetch(
-        `${supabaseUrl}/rest/v1/rpc/get_fcm_tokens_for_users`,
+      let rpcResp = await fetch(
+        `${supabaseUrl}/rest/v1/rpc/get_fcm_tokens_with_lang`,
         {
           method: "POST",
           headers: sbHeaders,
           body: JSON.stringify({ p_user_ids: batch }),
         },
       );
+      if (!rpcResp.ok && (rpcResp.status === 404 || rpcResp.status === 400)) {
+        const errTxt = await rpcResp.clone().text();
+        if (
+          errTxt.includes("PGRST202") ||
+          errTxt.includes("get_fcm_tokens_with_lang")
+        ) {
+          rpcResp = await fetch(
+            `${supabaseUrl}/rest/v1/rpc/get_fcm_tokens_for_users`,
+            {
+              method: "POST",
+              headers: sbHeaders,
+              body: JSON.stringify({ p_user_ids: batch }),
+            },
+          );
+        }
+      }
       if (!rpcResp.ok) {
         const txt = await rpcResp.text();
         throw new Error(`Failed to fetch device tokens via RPC: ${txt}`);
@@ -490,12 +1033,12 @@ Deno.serve(async (req: Request) => {
       for (const row of rows) {
         const token = row.device_token?.trim();
         if (token && !token.startsWith("dev_")) {
-          uniqueTokensSet.add(token);
+          tokenLangMap.set(token, normLang(row.preferred_language));
         }
       }
     }
 
-    const uniqueTokens = Array.from(uniqueTokensSet);
+    const uniqueTokens = Array.from(tokenLangMap.keys());
     if (uniqueTokens.length === 0) {
       return jsonResponse({
         success: true,
@@ -505,12 +1048,12 @@ Deno.serve(async (req: Request) => {
     }
 
     // -------------------------------------------------------------------------
-    // 6. Dispatch via FCM HTTP v1 in bounded parallel batches + prune stale tokens
+    // 6. Dispatch via FCM HTTP v1 per recipient language + prune stale tokens
     // -------------------------------------------------------------------------
     const serviceAccount = parseServiceAccount(saRaw);
     const accessToken = await getGoogleAccessToken(serviceAccount);
     const fcmEndpoint = `https://fcm.googleapis.com/v1/projects/${serviceAccount.project_id}/messages:send`;
-    const stringData = stringifyDataMap(dataObj, title, body, type);
+    const { templateKey, templateParams } = extractTemplateMeta(dataObj);
 
     let sentCount = 0;
     const staleTokens = new Set<string>();
@@ -520,12 +1063,28 @@ Deno.serve(async (req: Request) => {
       const batch = uniqueTokens.slice(i, i + FCM_CONCURRENCY);
       const results = await Promise.allSettled(
         batch.map(async (token) => {
+          const lang = tokenLangMap.get(token) ?? "en";
+          const rendered = templateKey
+            ? renderLocalizedNotification(
+                templateKey,
+                templateParams,
+                lang,
+                title,
+                body,
+              )
+            : { title, body };
+          const stringData = stringifyDataMap(
+            dataObj,
+            rendered.title,
+            rendered.body,
+            type,
+          );
           const messageBody = {
             message: {
               token,
               notification: {
-                title,
-                body,
+                title: rendered.title,
+                body: rendered.body,
               },
               data: stringData,
               android: {

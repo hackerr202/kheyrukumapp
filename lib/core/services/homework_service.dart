@@ -564,6 +564,13 @@ class HomeworkService {
           data: {
             'assignment_id': assignment.id,
             'halaqah_id': resolvedHalaqahId,
+            'template_key': 'homework_assigned',
+            'params': {
+              'title': assignment.title,
+              'surah': assignment.surahName,
+              'from_ayah': '${assignment.fromAyah}',
+              'to_ayah': '${assignment.toAyah}',
+            },
           },
         );
       }
@@ -788,7 +795,15 @@ class HomeworkService {
           body:
               '${student?.fullName ?? "A student"} completed $repetitionCount repetition(s) at home.',
           type: 'homework',
-          data: {'assignment_id': assignmentId, 'student_id': studentId},
+          data: {
+            'assignment_id': assignmentId,
+            'student_id': studentId,
+            'template_key': 'homework_submitted',
+            'params': {
+              'student_name': student?.fullName ?? '',
+              'title': assignMatches.isNotEmpty ? assignMatches.first.title : '',
+            },
+          },
         );
       }
     } catch (e) {
@@ -885,6 +900,11 @@ class HomeworkService {
           data: {
             'assignment_id': existing.assignmentId,
             'student_id': existing.studentId,
+            'template_key': 'homework_reviewed',
+            'params': {
+              'student_name': existing.studentName,
+              'rating': teacherRating,
+            },
           },
         );
       }

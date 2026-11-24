@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../services/connectivity_service.dart';
 import '../services/local_storage_service.dart';
+import '../services/push_notification_service.dart';
 import '../services/supabase_service.dart';
 
 /// Centralized ValueNotifier for application language and directionality.
@@ -34,6 +35,7 @@ class LocaleNotifier extends ValueNotifier<Locale> {
       await LocalStorageService.instance.saveString(prefKey, clean);
     } catch (_) {}
     unawaited(syncPreferredLanguageToProfile(clean));
+    unawaited(PushNotificationService.instance.rescheduleForCurrentLocale());
   }
 
   /// Syncs the selected language to `public.profiles.preferred_language`

@@ -9,6 +9,8 @@ import 'package:flutter/widgets.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:timezone/data/latest_all.dart' as tz;
 import 'package:timezone/timezone.dart' as tz;
+import '../localization/locale_notifier.dart';
+import '../localization/notification_templates.dart';
 import 'local_storage_service.dart';
 import 'notification_center_service.dart';
 import 'supabase_service.dart';
@@ -626,15 +628,30 @@ class PushNotificationService {
     await LocalStorageService.instance.remove(_cachedRoleKey);
   }
 
+  /// Re-schedules local recurring notifications immediately when app language changes.
+  Future<void> rescheduleForCurrentLocale() async {
+    if (!_isInitialized) return;
+    final cachedRole =
+        await LocalStorageService.instance.getString(_cachedRoleKey);
+    await scheduleMajorBackgroundNotifications(role: cachedRole);
+  }
+
   /// Schedule background recurring notifications (Daily Prayer for all, Monthly Fee for parents only).
   Future<void> scheduleMajorBackgroundNotifications({String? role}) async {
     try {
-      const prayerTitle = 'Daily Prayer Reminder 🕌';
-      const prayerBody =
-          'Don\'t forget to pray. Take a peaceful moment to remember Allah (حَيَّ عَلَى الصَّلَاةِ).';
-      const feeTitle = 'Monthly Tuition Fee Reminder 💳';
-      const feeBody =
-          'Monthly Quran memorization fee is due. Please submit payment and upload receipt proof.';
+      final lang = LocaleNotifier.instance.currentLanguageCode;
+      final prayerRendered = NotificationTemplates.render(
+        templateKey: 'prayer_reminder',
+        languageCode: lang,
+      );
+      final feeRendered = NotificationTemplates.render(
+        templateKey: 'monthly_tuition_local_reminder',
+        languageCode: lang,
+      );
+      final prayerTitle = prayerRendered.title;
+      final prayerBody = prayerRendered.body;
+      final feeTitle = feeRendered.title;
+      final feeBody = feeRendered.body;
 
       const DarwinNotificationDetails iosDetails = DarwinNotificationDetails(
         presentAlert: true,
@@ -737,8 +754,17 @@ class PushNotificationService {
     Map<String, dynamic>? data,
   }) async {
     try {
+      final resolved = NotificationTemplates.resolveFromData(
+        data,
+        languageCode: LocaleNotifier.instance.currentLanguageCode,
+        fallbackTitle: title,
+        fallbackBody: body,
+      );
+      final finalTitle = resolved.title;
+      final finalBody = resolved.body;
+
       final dedupKey =
-          '${type.toLowerCase().trim()}|${title.trim()}|${body.trim()}';
+          '${type.toLowerCase().trim()}|${finalTitle.trim()}|${finalBody.trim()}';
       final now = DateTime.now();
       _recentShownNotifications.removeWhere(
         (_, shownAt) => now.difference(shownAt).inSeconds >= 30,
@@ -767,7 +793,7 @@ class PushNotificationService {
           enableLights: true,
           channelShowBadge: true,
           icon: _androidSmallIcon,
-          styleInformation: BigTextStyleInformation(body),
+          styleInformation: BigTextStyleInformation(finalBody),
         ),
         iOS: const DarwinNotificationDetails(
           presentAlert: true,
@@ -778,15 +804,15 @@ class PushNotificationService {
 
       await _notificationsPlugin.show(
         notifId,
-        title,
-        body,
+        finalTitle,
+        finalBody,
         platformDetails,
         payload: payload ?? jsonEncode({'type': type}),
       );
 
       NotificationCenterService.instance.addNotification(
-        title: title,
-        body: body,
+        title: finalTitle,
+        body: finalBody,
         type: type,
         data: data,
       );
