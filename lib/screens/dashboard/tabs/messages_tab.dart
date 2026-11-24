@@ -1199,7 +1199,7 @@ class _ContactPickerSheetState extends State<_ContactPickerSheet> {
                         children: [
                           ProAvatar(
                             name: displayName,
-                            avatarUrl: avatarUrl,
+                            imageUrl: avatarUrl,
                             radius: 20,
                             color: roleMeta.$2,
                           ),
