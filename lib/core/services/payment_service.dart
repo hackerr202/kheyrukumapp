@@ -229,10 +229,9 @@ class PaymentService {
     }
   }
 
-  Future<void> savePaymentChannels({
-    required String cbeNumber,
-    required String telebirrNumber,
-  }) async {
+  Future<void> savePaymentChannelList(
+    List<CenterPaymentChannel> channels,
+  ) async {
     _requireSuperAdmin();
     if (!ConnectivityService.instance.isOnline &&
         !await ConnectivityService.instance.checkNow()) {
@@ -241,6 +240,78 @@ class PaymentService {
     final client = SupabaseService.instance.client;
     if (client == null) throw Exception('Not connected to the server.');
 
+    final existingById = <String, CenterPaymentChannel>{
+      for (final ch in paymentChannelsNotifier.value) ch.id: ch,
+    };
+
+    final sanitized = <CenterPaymentChannel>[];
+    for (var i = 0; i < channels.length; i++) {
+      final ch = channels[i];
+      final cleanId = ch.id.trim();
+      final cleanLabel = ch.labelKey.trim();
+      final cleanNum = ch.accountNumber.trim();
+      if (cleanId.isEmpty || cleanLabel.isEmpty || cleanNum.isEmpty) {
+        continue;
+      }
+      final cleanAccName = ch.accountName.trim().isNotEmpty
+          ? ch.accountName.trim()
+          : (existingById[cleanId]?.accountName ?? 'Kheyrukum Islamic Center');
+      sanitized.add(
+        CenterPaymentChannel(
+          id: cleanId,
+          labelKey: cleanLabel,
+          accountName: cleanAccName,
+          accountNumber: cleanNum,
+          displayOrder: i + 1,
+        ),
+      );
+    }
+
+    if (sanitized.isEmpty) {
+      throw Exception('At least one bank account is required.');
+    }
+
+    final nowIso = DateTime.now().toUtc().toIso8601String();
+    final uid = AuthSessionService.instance.userId;
+    final rows = sanitized
+        .map(
+          (ch) => {
+            'id': ch.id,
+            'label_key': ch.labelKey,
+            'account_name': ch.accountName,
+            'account_number': ch.accountNumber,
+            'display_order': ch.displayOrder,
+            'updated_at': nowIso,
+            if (uid.isNotEmpty) 'updated_by': uid,
+          },
+        )
+        .toList();
+
+    await client
+        .from('center_payment_channels')
+        .upsert(rows, onConflict: 'id');
+
+    final keptIds = sanitized.map((c) => c.id).toSet();
+    final removedIds =
+        existingById.keys.where((id) => !keptIds.contains(id)).toList();
+    for (final oldId in removedIds) {
+      await client.from('center_payment_channels').delete().eq('id', oldId);
+    }
+
+    paymentChannelsNotifier.value = sanitized;
+    if (_uid.isNotEmpty) {
+      await LocalStorageService.instance.saveUserJsonList(
+        _uid,
+        'payment_channels',
+        sanitized.map((c) => c.toJson()).toList(),
+      );
+    }
+  }
+
+  Future<void> savePaymentChannels({
+    required String cbeNumber,
+    required String telebirrNumber,
+  }) async {
     final cleanCbe = cbeNumber.trim();
     final cleanTelebirr = telebirrNumber.trim();
     if (cleanCbe.isEmpty || cleanTelebirr.isEmpty) {
@@ -255,36 +326,7 @@ class PaymentService {
       return null;
     }
 
-    final nowIso = DateTime.now().toUtc().toIso8601String();
-    final uid = AuthSessionService.instance.userId;
-    final rows = [
-      {
-        'id': 'cbe',
-        'label_key': 'cbeBankName',
-        'account_name':
-            findExisting('cbe')?.accountName ?? 'Kheyrukum Islamic Center',
-        'account_number': cleanCbe,
-        'display_order': 1,
-        'updated_at': nowIso,
-        if (uid.isNotEmpty) 'updated_by': uid,
-      },
-      {
-        'id': 'telebirr',
-        'label_key': 'telebirrAccountLabel',
-        'account_name':
-            findExisting('telebirr')?.accountName ?? 'Kheyrukum Islamic Center',
-        'account_number': cleanTelebirr,
-        'display_order': 2,
-        'updated_at': nowIso,
-        if (uid.isNotEmpty) 'updated_by': uid,
-      },
-    ];
-
-    await client
-        .from('center_payment_channels')
-        .upsert(rows, onConflict: 'id');
-
-    final updated = [
+    await savePaymentChannelList([
       CenterPaymentChannel(
         id: 'cbe',
         labelKey: 'cbeBankName',
@@ -301,15 +343,7 @@ class PaymentService {
         accountNumber: cleanTelebirr,
         displayOrder: 2,
       ),
-    ];
-    paymentChannelsNotifier.value = updated;
-    if (_uid.isNotEmpty) {
-      await LocalStorageService.instance.saveUserJsonList(
-        _uid,
-        'payment_channels',
-        updated.map((c) => c.toJson()).toList(),
-      );
-    }
+    ]);
   }
 
   /// Reload all payments visible to the current user (preserving pending offline receipts).

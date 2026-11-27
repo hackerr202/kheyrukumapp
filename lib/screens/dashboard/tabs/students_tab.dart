@@ -1669,47 +1669,102 @@ class _StudentsTabState extends State<StudentsTab> {
         ),
         padding: const EdgeInsets.fromLTRB(20, 8, 20, 124),
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
+          ProHeroCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
                   children: [
-                    Text(
-                      loc.studentRoster,
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w800,
-                        color: p.ink,
-                        letterSpacing: -0.2,
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            loc.academyOverview,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
+                              color: Color(0xFFF6CE6B),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            loc.studentRoster,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                    const SizedBox(height: 2),
-                    Text(
-                      loc.tr('rosterSummaryMetrics', {
-                        'students': '${allStudents.length}',
-                        'circles': '$circleCount',
-                        'present': '$presentTodayCount',
-                      }),
-                      style: TextStyle(fontSize: 12, color: p.inkSecondary),
+                    const SizedBox(width: 8),
+                    ElevatedButton.icon(
+                      onPressed: () {
+                        HapticFeedback.selectionClick();
+                        AddStudentDialog.show(context);
+                      },
+                      icon: const Icon(Icons.person_add_rounded, size: 15),
+                      label: Text(
+                        loc.addStudent,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppColors.goldWarm,
+                        foregroundColor: const Color(0xFF102322),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 9,
+                        ),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              ElevatedButton.icon(
-                onPressed: () => AddStudentDialog.show(context),
-                icon: const Icon(Icons.person_add_rounded, size: 16),
-                label: Text(loc.addStudent,
-                    style: const TextStyle(fontSize: 12.5)),
-                style: ElevatedButton.styleFrom(
+                const SizedBox(height: 18),
+                Container(
                   padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 10,
+                    horizontal: 6,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildAdminHeroStat(
+                        label: loc.studentsCount,
+                        value: '${allStudents.length}',
+                      ),
+                      _buildAdminHeroDivider(),
+                      _buildAdminHeroStat(
+                        label: loc.circlesCount,
+                        value: '$circleCount',
+                      ),
+                      _buildAdminHeroDivider(),
+                      _buildAdminHeroStat(
+                        label: loc.present,
+                        value: '$presentTodayCount',
+                      ),
+                    ],
                   ),
                 ),
-              ),
-            ],
+              ],
+            ),
           ),
           const SizedBox(height: 14),
 
@@ -1797,6 +1852,52 @@ class _StudentsTabState extends State<StudentsTab> {
             ),
         ],
       ),
+    );
+  }
+
+  Widget _buildAdminHeroStat({
+    required String label,
+    required String value,
+  }) {
+    return Expanded(
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 4),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 26,
+                fontWeight: FontWeight.w800,
+                color: Colors.white,
+                letterSpacing: -0.6,
+                height: 1.05,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            const SizedBox(height: 3),
+            Text(
+              label,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: TextStyle(
+                fontSize: 11.5,
+                color: Colors.white.withOpacity(0.80),
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildAdminHeroDivider() {
+    return Container(
+      width: 1,
+      height: 32,
+      color: Colors.white.withOpacity(0.18),
     );
   }
 

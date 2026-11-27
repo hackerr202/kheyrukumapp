@@ -451,94 +451,152 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           widget.embedded ? 132 : 40,
         ),
         children: [
-          if (widget.embedded) ...[
-            Row(
+          ProHeroCard(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Expanded(
-                  child: ElevatedButton.icon(
-                    onPressed: () => _showIssueInvoiceDialog(context),
-                    icon: const Icon(Icons.add_circle_outline_rounded, size: 17),
-                    label: Text(
-                      loc.issueFee,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: p.primary,
-                      foregroundColor: p.onPrimary,
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 11),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            loc.translate('tuitionOverviewHeader'),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 10.5,
+                              fontWeight: FontWeight.w700,
+                              letterSpacing: 1.0,
+                              color: Color(0xFFF6CE6B),
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            loc.tuitionAndFees,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w700,
+                              color: Colors.white,
+                              letterSpacing: -0.2,
+                            ),
+                          ),
+                        ],
                       ),
                     ),
-                  ),
+                    const SizedBox(width: 8),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.14),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          const Icon(
+                            Icons.calendar_today_rounded,
+                            size: 11,
+                            color: Color(0xFFF6CE6B),
+                          ),
+                          const SizedBox(width: 5),
+                          Text(
+                            loc.formatTodayDateBanner(),
+                            style: const TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w600,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: OutlinedButton.icon(
-                    onPressed: () {
-                      PaymentService.instance.sendMonthlyTuitionReminder(
-                        loc.formatMonthYear(DateTime.now()),
-                      );
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(
-                          content: Text(loc.monthlyFeeReminder),
-                        ),
-                      );
-                    },
-                    icon: Icon(Icons.notifications_active_outlined,
-                        size: 17, color: p.gold),
-                    label: Text(
-                      loc.sendMonthlyReminders,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: TextStyle(
-                        color: p.gold,
-                        fontWeight: FontWeight.w700,
+                const SizedBox(height: 18),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 12,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.black.withOpacity(0.16),
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  child: Row(
+                    children: [
+                      _buildHeroStatItem(
+                        label: loc.translate('toReviewTab'),
+                        value: '${pendingReview.length}',
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _selectedFilter = 'submitted');
+                        },
                       ),
-                    ),
-                    style: OutlinedButton.styleFrom(
-                      side: BorderSide(color: p.gold.withOpacity(0.5)),
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 12, vertical: 11),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(14),
+                      _buildHeroStatDivider(),
+                      _buildHeroStatItem(
+                        label: loc.overdue,
+                        value: '${overdueList.length}',
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _selectedFilter = 'overdue');
+                        },
                       ),
-                    ),
+                      _buildHeroStatDivider(),
+                      _buildHeroStatItem(
+                        label: loc.approved,
+                        value: '${approvedList.length}',
+                        onTap: () {
+                          HapticFeedback.selectionClick();
+                          setState(() => _selectedFilter = 'approved');
+                        },
+                      ),
+                    ],
                   ),
                 ),
               ],
             ),
-            const SizedBox(height: 14),
-          ],
-          Row(
-            children: [
-              _buildAdminStatCard(
-                p: p,
-                title: loc.translate('toReviewTab'),
-                value: '${pendingReview.length}',
-                icon: Icons.pending_actions_rounded,
-                color: p.info,
-              ),
-              const SizedBox(width: 10),
-              _buildAdminStatCard(
-                p: p,
-                title: loc.overdue,
-                value: '${overdueList.length}',
-                icon: Icons.warning_amber_rounded,
-                color: p.danger,
-              ),
-              const SizedBox(width: 10),
-              _buildAdminStatCard(
-                p: p,
-                title: loc.approved,
-                value: '${approvedList.length}',
-                icon: Icons.check_circle_rounded,
-                color: p.success,
-              ),
-            ],
           ),
+          if (widget.embedded) ...[
+            const SizedBox(height: 14),
+            Row(
+              children: [
+                _buildQuickActionCard(
+                  p: p,
+                  icon: Icons.add_circle_outline_rounded,
+                  label: loc.issueFee,
+                  subtitle: loc.translate('issueFeeSubtitle'),
+                  accent: p.primary,
+                  onTap: () => _showIssueInvoiceDialog(context),
+                ),
+                const SizedBox(width: 10),
+                _buildQuickActionCard(
+                  p: p,
+                  icon: Icons.notifications_active_outlined,
+                  label: loc.translate('sendRemindersShort'),
+                  subtitle: loc.translate('sendRemindersSubtitle'),
+                  accent: p.gold,
+                  onTap: () {
+                    PaymentService.instance.sendMonthlyTuitionReminder(
+                      loc.formatMonthYear(DateTime.now()),
+                    );
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text(loc.monthlyFeeReminder),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
+          ],
           const SizedBox(height: 18),
           _buildPaymentChannelsCard(
             context: context,
@@ -578,10 +636,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
             title: loc.tr('tuitionRecordsTitle', {
               'count': '${payments.length}',
             }),
-            trailing: TextButton(
-              onPressed: () => _showIssueInvoiceDialog(context),
-              child: Text(loc.translate('plusIssueTuition')),
-            ),
+            trailing: widget.embedded
+                ? null
+                : TextButton(
+                    onPressed: () => _showIssueInvoiceDialog(context),
+                    child: Text(loc.translate('plusIssueTuition')),
+                  ),
           ),
           const SizedBox(height: 10),
 
@@ -986,7 +1046,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: Text(
-                      loc.schoolPaymentDetails,
+                      loc.translate('bankAccountsTitle'),
                       overflow: TextOverflow.ellipsis,
                       style: TextStyle(
                         fontWeight: FontWeight.w700,
@@ -1126,40 +1186,118 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
     );
   }
 
-  Widget _buildAdminStatCard({
-    required AppPalette p,
-    required String title,
+  Widget _buildHeroStatItem({
+    required String label,
     required String value,
+    required VoidCallback onTap,
+  }) {
+    return Expanded(
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(12),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 4),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: -0.6,
+                  height: 1.05,
+                  fontFeatures: [FontFeature.tabularFigures()],
+                ),
+              ),
+              const SizedBox(height: 3),
+              Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  color: Colors.white.withOpacity(0.80),
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeroStatDivider() {
+    return Container(
+      width: 1,
+      height: 32,
+      color: Colors.white.withOpacity(0.18),
+    );
+  }
+
+  Widget _buildQuickActionCard({
+    required AppPalette p,
     required IconData icon,
-    required Color color,
+    required String label,
+    required String subtitle,
+    required Color accent,
+    required VoidCallback onTap,
   }) {
     return Expanded(
       child: ProCard(
-        padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 10),
-        child: Column(
-          children: [
-            Icon(icon, size: 22, color: color),
-            const SizedBox(height: 6),
-            Text(
-              value,
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.w800,
-                color: p.ink,
-                fontFeatures: const [FontFeature.tabularFigures()],
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap();
+        },
+        borderRadius: 18,
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(minHeight: 46),
+          child: Row(
+            children: [
+              Container(
+                width: 38,
+                height: 38,
+                decoration: BoxDecoration(
+                  color: accent.withOpacity(0.12),
+                  borderRadius: BorderRadius.circular(11),
+                ),
+                child: Icon(icon, size: 19, color: accent),
               ),
-            ),
-            const SizedBox(height: 2),
-            Text(
-              title,
-              textAlign: TextAlign.center,
-              style: TextStyle(
-                fontSize: 11,
-                color: p.inkSecondary,
-                fontWeight: FontWeight.w600,
+              const SizedBox(width: 10),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      label,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.w700,
+                        color: p.ink,
+                        letterSpacing: -0.1,
+                      ),
+                    ),
+                    const SizedBox(height: 1),
+                    Text(
+                      subtitle,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 11,
+                        color: p.inkSecondary,
+                      ),
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
@@ -2098,6 +2236,30 @@ class _RejectReceiptDialogState extends State<_RejectReceiptDialog> {
   }
 }
 
+class _EditableBankEntry {
+  final String id;
+  final String originalLabelKey;
+  final String originalTranslatedLabel;
+  final String accountName;
+  final TextEditingController nameCtrl;
+  final TextEditingController numberCtrl;
+
+  _EditableBankEntry({
+    required this.id,
+    required this.originalLabelKey,
+    required this.originalTranslatedLabel,
+    required this.accountName,
+    required String initialName,
+    required String initialNumber,
+  })  : nameCtrl = TextEditingController(text: initialName),
+        numberCtrl = TextEditingController(text: initialNumber);
+
+  void dispose() {
+    nameCtrl.dispose();
+    numberCtrl.dispose();
+  }
+}
+
 class _EditPaymentChannelsDialog extends StatefulWidget {
   final List<CenterPaymentChannel> channels;
   final ScaffoldMessengerState hostMessenger;
@@ -2114,51 +2276,120 @@ class _EditPaymentChannelsDialog extends StatefulWidget {
 
 class _EditPaymentChannelsDialogState
     extends State<_EditPaymentChannelsDialog> {
-  late final TextEditingController _cbeCtrl;
-  late final TextEditingController _telebirrCtrl;
+  final List<_EditableBankEntry> _entries = [];
+  bool _initialized = false;
   bool _isSaving = false;
+  String? _error;
+  int _nextId = 0;
 
   @override
-  void initState() {
-    super.initState();
-    String findAccount(String id, String fallback) {
-      for (final ch in widget.channels) {
-        if (ch.id == id && ch.accountNumber.trim().isNotEmpty) {
-          return ch.accountNumber.trim();
-        }
-      }
-      return fallback;
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final loc = AppLocalizations.of(context);
+    for (final ch in widget.channels) {
+      final translated = loc.translate(ch.labelKey);
+      _entries.add(
+        _EditableBankEntry(
+          id: ch.id,
+          originalLabelKey: ch.labelKey,
+          originalTranslatedLabel: translated,
+          accountName: ch.accountName,
+          initialName: translated,
+          initialNumber: ch.accountNumber.trim(),
+        ),
+      );
     }
-
-    _cbeCtrl = TextEditingController(
-      text: findAccount('cbe', '1000123456789'),
-    );
-    _telebirrCtrl = TextEditingController(
-      text: findAccount('telebirr', '+251 91 123 4567'),
-    );
+    if (_entries.isEmpty) {
+      _entries.add(
+        _EditableBankEntry(
+          id: 'bank_${DateTime.now().millisecondsSinceEpoch}_${_nextId++}',
+          originalLabelKey: '',
+          originalTranslatedLabel: '',
+          accountName: 'Kheyrukum Islamic Center',
+          initialName: '',
+          initialNumber: '',
+        ),
+      );
+    }
   }
 
   @override
   void dispose() {
-    _cbeCtrl.dispose();
-    _telebirrCtrl.dispose();
+    for (final entry in _entries) {
+      entry.dispose();
+    }
     super.dispose();
+  }
+
+  void _addBankEntry() {
+    setState(() {
+      _error = null;
+      _entries.add(
+        _EditableBankEntry(
+          id: 'bank_${DateTime.now().millisecondsSinceEpoch}_${_nextId++}',
+          originalLabelKey: '',
+          originalTranslatedLabel: '',
+          accountName: 'Kheyrukum Islamic Center',
+          initialName: '',
+          initialNumber: '',
+        ),
+      );
+    });
+  }
+
+  void _removeBankEntry(int index) {
+    if (_entries.length <= 1) return;
+    final removed = _entries[index];
+    setState(() {
+      _error = null;
+      _entries.removeAt(index);
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) => removed.dispose());
   }
 
   Future<void> _save() async {
     if (_isSaving) return;
-    final cbe = _cbeCtrl.text.trim();
-    final telebirr = _telebirrCtrl.text.trim();
-    if (cbe.isEmpty || telebirr.isEmpty) return;
+    final loc = AppLocalizations.of(context);
+    final updatedChannels = <CenterPaymentChannel>[];
+
+    for (var i = 0; i < _entries.length; i++) {
+      final entry = _entries[i];
+      final name = entry.nameCtrl.text.trim();
+      final number = entry.numberCtrl.text.trim();
+      if (name.isEmpty && number.isEmpty) continue;
+      if (name.isEmpty || number.isEmpty) {
+        setState(() => _error = loc.translate('atLeastOneBankRequiredMsg'));
+        return;
+      }
+      final resolvedLabelKey = (entry.originalLabelKey.isNotEmpty &&
+              name == entry.originalTranslatedLabel)
+          ? entry.originalLabelKey
+          : name;
+      updatedChannels.add(
+        CenterPaymentChannel(
+          id: entry.id,
+          labelKey: resolvedLabelKey,
+          accountName: entry.accountName,
+          accountNumber: number,
+          displayOrder: updatedChannels.length + 1,
+        ),
+      );
+    }
+
+    if (updatedChannels.isEmpty) {
+      setState(() => _error = loc.translate('atLeastOneBankRequiredMsg'));
+      return;
+    }
 
     final p = AppColors.of(context);
-    final loc = AppLocalizations.of(context);
-    setState(() => _isSaving = true);
+    setState(() {
+      _isSaving = true;
+      _error = null;
+    });
     try {
-      await PaymentService.instance.savePaymentChannels(
-        cbeNumber: cbe,
-        telebirrNumber: telebirr,
-      );
+      await PaymentService.instance.savePaymentChannelList(updatedChannels);
       if (!mounted) return;
       Navigator.pop(context);
       widget.hostMessenger.showSnackBar(
@@ -2169,13 +2400,10 @@ class _EditPaymentChannelsDialogState
       );
     } catch (e) {
       if (!mounted) return;
-      setState(() => _isSaving = false);
-      widget.hostMessenger.showSnackBar(
-        SnackBar(
-          content: Text(SupabaseService.cleanErrorMessage(e)),
-          backgroundColor: p.danger,
-        ),
-      );
+      setState(() {
+        _isSaving = false;
+        _error = SupabaseService.cleanErrorMessage(e);
+      });
     }
   }
 
@@ -2183,52 +2411,202 @@ class _EditPaymentChannelsDialogState
   Widget build(BuildContext context) {
     final p = AppColors.of(context);
     final loc = AppLocalizations.of(context);
-    return AlertDialog(
-      title: Text(loc.translate('editPaymentChannelsTitle')),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: _cbeCtrl,
-              enabled: !_isSaving,
-              keyboardType: TextInputType.text,
-              decoration: InputDecoration(
-                labelText: loc.translate('cbeBankName'),
-                prefixIcon: const Icon(Icons.account_balance_rounded, size: 18),
+
+    return Dialog(
+      backgroundColor: p.surface,
+      shape: RoundedRectangleBorder(
+        borderRadius: BorderRadius.circular(24),
+        side: BorderSide(color: p.border),
+      ),
+      insetPadding: const EdgeInsets.symmetric(horizontal: 18, vertical: 24),
+      child: ConstrainedBox(
+        constraints: BoxConstraints(
+          maxWidth: 460,
+          maxHeight: MediaQuery.of(context).size.height * 0.82,
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Row(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.all(9),
+                    decoration: BoxDecoration(
+                      color: p.primary.withOpacity(0.12),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.account_balance_rounded,
+                        color: p.primary, size: 20),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      loc.translate('editPaymentChannelsTitle'),
+                      style: TextStyle(
+                        fontSize: 16.5,
+                        fontWeight: FontWeight.w700,
+                        color: p.ink,
+                      ),
+                    ),
+                  ),
+                  IconButton(
+                    onPressed: _isSaving ? null : () => Navigator.pop(context),
+                    icon: Icon(Icons.close_rounded,
+                        size: 20, color: p.inkSecondary),
+                  ),
+                ],
               ),
-            ),
-            const SizedBox(height: 12),
-            TextField(
-              controller: _telebirrCtrl,
-              enabled: !_isSaving,
-              keyboardType: TextInputType.phone,
-              decoration: InputDecoration(
-                labelText: loc.translate('telebirrAccountLabel'),
-                prefixIcon: const Icon(Icons.phone_android_rounded, size: 18),
+              const SizedBox(height: 12),
+              Flexible(
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      for (var i = 0; i < _entries.length; i++) ...[
+                        if (i > 0) const SizedBox(height: 10),
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: p.surfaceSubtle,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: p.border),
+                          ),
+                          child: Column(
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: TextField(
+                                      controller: _entries[i].nameCtrl,
+                                      enabled: !_isSaving,
+                                      textCapitalization:
+                                          TextCapitalization.words,
+                                      style: TextStyle(
+                                        fontSize: 13.5,
+                                        fontWeight: FontWeight.w600,
+                                        color: p.ink,
+                                      ),
+                                      decoration: InputDecoration(
+                                        labelText:
+                                            loc.translate('bankNameLabel'),
+                                        hintText: loc.translate('bankNameHint'),
+                                        prefixIcon: const Icon(
+                                            Icons.account_balance_rounded,
+                                            size: 17),
+                                        isDense: true,
+                                      ),
+                                    ),
+                                  ),
+                                  if (_entries.length > 1) ...[
+                                    const SizedBox(width: 4),
+                                    IconButton(
+                                      onPressed: _isSaving
+                                          ? null
+                                          : () => _removeBankEntry(i),
+                                      tooltip:
+                                          loc.translate('removeBankTooltip'),
+                                      icon: Icon(Icons.delete_outline_rounded,
+                                          size: 20, color: p.danger),
+                                    ),
+                                  ],
+                                ],
+                              ),
+                              const SizedBox(height: 10),
+                              TextField(
+                                controller: _entries[i].numberCtrl,
+                                enabled: !_isSaving,
+                                keyboardType: TextInputType.text,
+                                style: TextStyle(
+                                  fontSize: 13.5,
+                                  fontWeight: FontWeight.w600,
+                                  color: p.ink,
+                                ),
+                                decoration: InputDecoration(
+                                  labelText:
+                                      loc.translate('accountNumberLabel'),
+                                  hintText:
+                                      loc.translate('accountNumberHint'),
+                                  prefixIcon:
+                                      const Icon(Icons.tag_rounded, size: 17),
+                                  isDense: true,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                      const SizedBox(height: 12),
+                      SizedBox(
+                        width: double.infinity,
+                        child: OutlinedButton.icon(
+                          onPressed: _isSaving ? null : _addBankEntry,
+                          icon: const Icon(Icons.add_rounded, size: 18),
+                          label: Text(loc.translate('addBankAccountAction')),
+                          style: OutlinedButton.styleFrom(
+                            foregroundColor: p.primary,
+                            side: BorderSide(
+                                color: p.primary.withOpacity(0.45)),
+                            padding: const EdgeInsets.symmetric(vertical: 11),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
-            ),
-          ],
+              if (_error != null) ...[
+                const SizedBox(height: 10),
+                Text(
+                  _error!,
+                  style: TextStyle(
+                    color: p.danger,
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ],
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextButton(
+                      onPressed:
+                          _isSaving ? null : () => Navigator.pop(context),
+                      child: Text(loc.cancel),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    flex: 2,
+                    child: ElevatedButton(
+                      onPressed: _isSaving ? null : _save,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: p.primary,
+                        foregroundColor: p.onPrimary,
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        _isSaving
+                            ? loc.savingProgress
+                            : loc.translate('saveAccountsAction'),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
         ),
       ),
-      actions: [
-        TextButton(
-          onPressed: _isSaving ? null : () => Navigator.pop(context),
-          child: Text(loc.cancel),
-        ),
-        ElevatedButton(
-          onPressed: _isSaving ? null : _save,
-          style: ElevatedButton.styleFrom(
-            backgroundColor: p.primary,
-            foregroundColor: p.onPrimary,
-          ),
-          child: Text(
-            _isSaving
-                ? loc.savingProgress
-                : loc.translate('saveAccountsAction'),
-          ),
-        ),
-      ],
     );
   }
 }
