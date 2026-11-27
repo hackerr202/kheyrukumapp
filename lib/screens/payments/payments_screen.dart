@@ -20,7 +20,9 @@ import '../messages/chat_screen.dart';
 /// - Parents: View active monthly due, copy configured center bank/mobile accounts, upload real receipt screenshots, track status.
 /// - Admins: Issue invoices, inspect actual uploaded receipt images, approve/reject with reason, message overdue parents.
 class PaymentsScreen extends StatefulWidget {
-  const PaymentsScreen({super.key});
+  final bool embedded;
+
+  const PaymentsScreen({super.key, this.embedded = false});
 
   @override
   State<PaymentsScreen> createState() => _PaymentsScreenState();
@@ -42,6 +44,19 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
 
     // Fail-closed: only Superadmins and Parents can access payment data or fee registration
     if (!AuthSessionService.instance.canAccessPayments) {
+      final restrictedView = Center(
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: ProEmptyState(
+            icon: Icons.lock_outline_rounded,
+            title: loc.tuitionAndFees,
+            message: loc.accessRestrictedFees,
+            accentColor: p.gold,
+          ),
+        ),
+      );
+      if (widget.embedded) return restrictedView;
+
       return Scaffold(
         backgroundColor: p.canvas,
         appBar: AppBar(
@@ -53,19 +68,34 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           ),
           title: Text(loc.tuitionAndFees),
         ),
-        body: Center(
-          child: Padding(
-            padding: const EdgeInsets.all(28),
-            child: ProEmptyState(
-              icon: Icons.lock_outline_rounded,
-              title: loc.tuitionAndFees,
-              message: loc.accessRestrictedFees,
-              accentColor: p.gold,
-            ),
-          ),
-        ),
+        body: restrictedView,
       );
     }
+
+    final body = StreamBuilder<List<MonthlyPayment>>(
+      stream: PaymentService.instance.paymentsStream,
+      initialData: PaymentService.instance.allPayments,
+      builder: (context, snapshot) {
+        final payments = snapshot.data ?? [];
+        if (snapshot.connectionState == ConnectionState.waiting &&
+            payments.isEmpty) {
+          return const ProCardListSkeleton();
+        }
+
+        if (!_isSuperAdmin) {
+          final user = SupabaseService.instance.currentUser;
+          final parentPayments = PaymentService.instance.getPaymentsForParent(
+            user?.id ?? AuthSessionService.instance.userId,
+            parentEmail: user?.email ?? AuthSessionService.instance.userEmail,
+          );
+          return _buildParentView(context, parentPayments, p);
+        }
+
+        return _buildAdminView(context, payments, p);
+      },
+    );
+
+    if (widget.embedded) return body;
 
     return Scaffold(
       backgroundColor: p.canvas,
@@ -114,29 +144,7 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
           ],
         ],
       ),
-      body: StreamBuilder<List<MonthlyPayment>>(
-        stream: PaymentService.instance.paymentsStream,
-        initialData: PaymentService.instance.allPayments,
-        builder: (context, snapshot) {
-          final payments = snapshot.data ?? [];
-          if (snapshot.connectionState == ConnectionState.waiting &&
-              payments.isEmpty) {
-            return const ProCardListSkeleton();
-          }
-
-          if (!_isSuperAdmin) {
-            final user = SupabaseService.instance.currentUser;
-            final parentPayments = PaymentService.instance.getPaymentsForParent(
-              user?.id ?? AuthSessionService.instance.userId,
-              parentEmail:
-                  user?.email ?? AuthSessionService.instance.userEmail,
-            );
-            return _buildParentView(context, parentPayments, p);
-          }
-
-          return _buildAdminView(context, payments, p);
-        },
-      ),
+      body: body,
     );
   }
 
@@ -169,7 +177,12 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          widget.embedded ? 8 : 16,
+          20,
+          widget.embedded ? 132 : 40,
+        ),
         children: [
           if (rejectedPayment != null &&
               rejectedPayment.rejectionReason != null) ...[
@@ -431,8 +444,74 @@ class _PaymentsScreenState extends State<PaymentsScreen> {
         physics: const AlwaysScrollableScrollPhysics(
           parent: BouncingScrollPhysics(),
         ),
-        padding: const EdgeInsets.fromLTRB(20, 16, 20, 40),
+        padding: EdgeInsets.fromLTRB(
+          20,
+          widget.embedded ? 8 : 16,
+          20,
+          widget.embedded ? 132 : 40,
+        ),
         children: [
+          if (widget.embedded) ...[
+            Row(
+              children: [
+                Expanded(
+                  child: ElevatedButton.icon(
+                    onPressed: () => _showIssueInvoiceDialog(context),
+                    icon: const Icon(Icons.add_circle_outline_rounded, size: 17),
+                    label: Text(
+                      loc.issueFee,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: p.primary,
+                      foregroundColor: p.onPrimary,
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: OutlinedButton.icon(
+                    onPressed: () {
+                      PaymentService.instance.sendMonthlyTuitionReminder(
+                        loc.formatMonthYear(DateTime.now()),
+                      );
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(loc.monthlyFeeReminder),
+                        ),
+                      );
+                    },
+                    icon: Icon(Icons.notifications_active_outlined,
+                        size: 17, color: p.gold),
+                    label: Text(
+                      loc.sendMonthlyReminders,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        color: p.gold,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      side: BorderSide(color: p.gold.withOpacity(0.5)),
+                      padding: const EdgeInsets.symmetric(
+                          horizontal: 12, vertical: 11),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 14),
+          ],
           Row(
             children: [
               _buildAdminStatCard(

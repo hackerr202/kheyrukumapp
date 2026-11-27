@@ -924,6 +924,8 @@ class AppLocalizations {
       'offlineActionRequiredMsg':
           'Internet connection is required for this action.',
       'actionFailedMsg': 'Action failed. Please try again.',
+      'navPayments': 'Payments',
+      'homeworkOversightSubtitle': 'Review assignments & student submissions',
     },
 
     // =========================================================================
@@ -1823,6 +1825,8 @@ class AppLocalizations {
       'saveChanges': 'حفظ التغييرات',
       'offlineActionRequiredMsg': 'يلزم الاتصال بالإنترنت لتنفيذ هذا الإجراء.',
       'actionFailedMsg': 'فشل الإجراء. يرجى المحاولة مرة أخرى.',
+      'navPayments': 'المدفوعات',
+      'homeworkOversightSubtitle': 'مراجعة الواجبات وتسليمات الطلاب',
     },
 
     // =========================================================================
@@ -2720,6 +2724,8 @@ class AppLocalizations {
       'saveChanges': 'ለውጦችን አስቀምጥ',
       'offlineActionRequiredMsg': 'ለዚህ እርምጃ የኢንተርኔት ግንኙነት ያስፈልጋል።',
       'actionFailedMsg': 'እርምጃው አልተሳካም። እባክዎ እንደገና ይሞክሩ።',
+      'navPayments': 'ክፍያዎች',
+      'homeworkOversightSubtitle': 'የቤት ሥራዎችን እና የተማሪ ማስረከቢያዎችን ይገምግሙ',
     },
   };
 
@@ -2767,6 +2773,7 @@ class AppLocalizations {
   String get navMessages => translate('navMessages');
   String get navResources => translate('navResources');
   String get navHomework => translate('navHomework');
+  String get navPayments => translate('navPayments');
   String get navMore => translate('navMore');
 
   // Roles

@@ -28,6 +28,7 @@ import '../../widgets/kheyrukum_nav_bar.dart';
 import '../../widgets/offline_status_banner.dart';
 import '../../widgets/pro_ui_kit.dart';
 import '../announcements/announcements_sheet.dart';
+import '../payments/payments_screen.dart';
 import '../settings/settings_sheet.dart';
 import 'tabs/home_tab.dart';
 import 'tabs/homework_tab.dart';
@@ -240,14 +241,15 @@ class _DashboardScreenState extends State<DashboardScreen> {
     final hasConversation =
         data['conversation_id']?.toString().isNotEmpty == true;
     int targetTab = _currentTabIndex;
+    final isSuperAdmin = AuthSessionService.instance.isSuperAdmin;
     if (type == 'message' || hasConversation) {
       targetTab = 2;
     } else if (type.startsWith('homework')) {
-      targetTab = 3;
+      targetTab = isSuperAdmin ? 4 : 3;
     } else if (type == 'attendance' || type.startsWith('absence')) {
       targetTab = 1;
     } else if (type.startsWith('payment')) {
-      targetTab = 4;
+      targetTab = isSuperAdmin ? 3 : 4;
     } else if (type == 'announcement' || type == 'broadcast') {
       targetTab = 0;
     }
@@ -279,19 +281,19 @@ class _DashboardScreenState extends State<DashboardScreen> {
     super.dispose();
   }
 
-  late final List<Widget> _pages = [
-    HomeTab(
-      onNavigateToTab: (index) {
-        setState(() {
-          _currentTabIndex = index;
-        });
-      },
-    ),
-    const StudentsTab(),
-    MessagesTab(newChatTrigger: _messagesNewChatTrigger),
-    const HomeworkTab(),
-    const MoreTab(),
-  ];
+  late final Widget _homeTab = HomeTab(
+    onNavigateToTab: (index) {
+      setState(() {
+        _currentTabIndex = index;
+      });
+    },
+  );
+  final Widget _studentsTab = const StudentsTab();
+  late final Widget _messagesTab =
+      MessagesTab(newChatTrigger: _messagesNewChatTrigger);
+  final Widget _homeworkTab = const HomeworkTab();
+  final Widget _paymentsTab = const PaymentsScreen(embedded: true);
+  final Widget _moreTab = const MoreTab();
 
   @override
   Widget build(BuildContext context) {
@@ -301,54 +303,50 @@ class _DashboardScreenState extends State<DashboardScreen> {
         final p = AppColors.of(context);
         final loc = AppLocalizations.of(context);
 
-        return Scaffold(
-          backgroundColor: p.canvas,
-          body: Stack(
-            children: [
-              SafeArea(
-                bottom: false,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.stretch,
-                  children: [
-                    // Context-Aware Editorial App Header
-                    ValueListenableBuilder<String>(
-                      valueListenable:
-                          AuthSessionService.instance.roleNotifier,
-                      builder: (context, currentRole, _) {
-                        final userName = AuthSessionService.instance.userName;
-                        final avatarUrl = AuthSessionService.instance.avatarUrl;
-                        final displayName = userName.isNotEmpty
-                            ? userName
-                            : loc.administratorTitle;
-                        final isSuperAdmin = currentRole == 'superadmin';
-                        final isAdmin = currentRole == 'admin' || isSuperAdmin;
-                        final roleLabel = isSuperAdmin
-                            ? loc.roleSuperadmin
-                            : (isAdmin
-                                ? loc.roleAdmin
-                                : (currentRole == 'teacher'
-                                    ? loc.roleTeacher
-                                    : loc.roleParent));
-                        final roleColor = isSuperAdmin
-                            ? p.gold
-                            : (isAdmin
-                                ? p.gold
-                                : (currentRole == 'teacher'
-                                    ? p.primary
-                                    : p.info));
+        return ValueListenableBuilder<String>(
+          valueListenable: AuthSessionService.instance.roleNotifier,
+          builder: (context, currentRole, _) {
+            final userName = AuthSessionService.instance.userName;
+            final avatarUrl = AuthSessionService.instance.avatarUrl;
+            final displayName =
+                userName.isNotEmpty ? userName : loc.administratorTitle;
+            final isSuperAdmin = currentRole == 'superadmin';
+            final isAdmin = currentRole == 'admin' || isSuperAdmin;
+            final roleLabel = isSuperAdmin
+                ? loc.roleSuperadmin
+                : (isAdmin
+                    ? loc.roleAdmin
+                    : (currentRole == 'teacher'
+                        ? loc.roleTeacher
+                        : loc.roleParent));
+            final roleColor = isSuperAdmin
+                ? p.gold
+                : (isAdmin
+                    ? p.gold
+                    : (currentRole == 'teacher' ? p.primary : p.info));
 
-                        String? pageTitle;
-                        if (_currentTabIndex == 1) {
-                          pageTitle = loc.studentRoster;
-                        } else if (_currentTabIndex == 2) {
-                          pageTitle = loc.navMessages;
-                        } else if (_currentTabIndex == 3) {
-                          pageTitle = loc.navHomework;
-                        } else if (_currentTabIndex == 4) {
-                          pageTitle = loc.navMore;
-                        }
+            String? pageTitle;
+            if (_currentTabIndex == 1) {
+              pageTitle = loc.studentRoster;
+            } else if (_currentTabIndex == 2) {
+              pageTitle = loc.navMessages;
+            } else if (_currentTabIndex == 3) {
+              pageTitle = isSuperAdmin ? loc.navPayments : loc.navHomework;
+            } else if (_currentTabIndex == 4) {
+              pageTitle = loc.navMore;
+            }
 
-                        return Padding(
+            return Scaffold(
+              backgroundColor: p.canvas,
+              body: Stack(
+                children: [
+                  SafeArea(
+                    bottom: false,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        // Context-Aware Editorial App Header
+                        Padding(
                           padding: const EdgeInsets.fromLTRB(20, 10, 20, 10),
                           child: Column(
                             mainAxisSize: MainAxisSize.min,
@@ -571,9 +569,7 @@ class _DashboardScreenState extends State<DashboardScreen> {
                               ],
                             ],
                           ),
-                        );
-                      },
-                    ),
+                        ),
 
                     const OfflineStatusBanner(),
 
@@ -581,7 +577,13 @@ class _DashboardScreenState extends State<DashboardScreen> {
                     Expanded(
                       child: IndexedStack(
                         index: _currentTabIndex,
-                        children: _pages,
+                        children: [
+                          _homeTab,
+                          _studentsTab,
+                          _messagesTab,
+                          isSuperAdmin ? _paymentsTab : _homeworkTab,
+                          _moreTab,
+                        ],
                       ),
                     ),
                   ],
@@ -662,11 +664,18 @@ class _DashboardScreenState extends State<DashboardScreen> {
                                 label: loc.navMessages,
                                 badgeCount: unreadMessages,
                               ),
-                              KheyrukumNavItem(
-                                icon: Icons.assignment_turned_in_outlined,
-                                activeIcon: Icons.assignment_turned_in_rounded,
-                                label: loc.navHomework,
-                              ),
+                              isSuperAdmin
+                                  ? KheyrukumNavItem(
+                                      icon: Icons.payments_outlined,
+                                      activeIcon: Icons.payments_rounded,
+                                      label: loc.navPayments,
+                                    )
+                                  : KheyrukumNavItem(
+                                      icon: Icons.assignment_turned_in_outlined,
+                                      activeIcon:
+                                          Icons.assignment_turned_in_rounded,
+                                      label: loc.navHomework,
+                                    ),
                               KheyrukumNavItem(
                                 icon: Icons.grid_view_outlined,
                                 activeIcon: Icons.grid_view_rounded,
@@ -691,6 +700,8 @@ class _DashboardScreenState extends State<DashboardScreen> {
               ),
             ],
           ),
+        );
+          },
         );
       },
     );

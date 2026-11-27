@@ -11,6 +11,7 @@ import '../../announcements/announcements_sheet.dart';
 import '../../announcements/post_announcement_dialog.dart';
 import '../../payments/payments_screen.dart';
 import '../../settings/settings_sheet.dart';
+import 'homework_tab.dart';
 
 /// Flagship "More" Hub:
 /// - Profile summary hero card
@@ -402,21 +403,64 @@ class MoreTab extends StatelessWidget {
                           )
                         : null,
                   ),
-                  if (isSuperAdmin || isParent) ...[
+                  if (isParent) ...[
                     _buildDivider(p),
                     _buildMenuTile(
                       p: p,
                       icon: Icons.payments_rounded,
                       iconColor: p.primary,
                       title: loc.tuitionAndFees,
-                      subtitle: isParent
-                          ? loc.translate('parentFeesSubtitle')
-                          : loc.translate('adminFeesSubtitle'),
+                      subtitle: loc.translate('parentFeesSubtitle'),
                       onTap: () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(
                             builder: (_) => const PaymentsScreen(),
+                          ),
+                        );
+                      },
+                    ),
+                  ],
+                  if (isSuperAdmin) ...[
+                    _buildDivider(p),
+                    _buildMenuTile(
+                      p: p,
+                      icon: Icons.assignment_turned_in_rounded,
+                      iconColor: p.primary,
+                      title: loc.navHomework,
+                      subtitle: loc.translate('homeworkOversightSubtitle'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(
+                            builder: (ctx) {
+                              final routePalette = AppColors.of(ctx);
+                              final routeLoc = AppLocalizations.of(ctx);
+                              return Scaffold(
+                                backgroundColor: routePalette.canvas,
+                                appBar: AppBar(
+                                  backgroundColor: routePalette.surface,
+                                  elevation: 0,
+                                  leading: IconButton(
+                                    icon: Icon(
+                                      Icons.arrow_back_ios_new_rounded,
+                                      size: 19,
+                                      color: routePalette.ink,
+                                    ),
+                                    onPressed: () => Navigator.pop(ctx),
+                                  ),
+                                  title: Text(routeLoc.navHomework),
+                                  bottom: PreferredSize(
+                                    preferredSize: const Size.fromHeight(1),
+                                    child: Divider(
+                                      height: 1,
+                                      color: routePalette.border,
+                                    ),
+                                  ),
+                                ),
+                                body: const HomeworkTab(),
+                              );
+                            },
                           ),
                         );
                       },
